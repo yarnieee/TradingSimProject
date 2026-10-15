@@ -2,10 +2,10 @@
 
 //////////////////////////////////////////////////////////////////////////////////
 //  FILL IN THE FOLLOWING INFORMATION:
-//  STUDENT A NAME: 
-//  STUDENT B NAME:
-//  STUDENT C NAME: 
-//  STUDENT D NAME:  
+//  STUDENT A NAME: Li Yi An
+//  STUDENT B NAME: Douglas
+//  STUDENT C NAME: Tricia
+//  STUDENT D NAME: Matthew
 //////////////////////////////////////////////////////////////////////////////////
 
 module My_Top_Module (
@@ -18,7 +18,7 @@ module My_Top_Module (
     slower_clk #(32'd7) slow_clk_inst (clk, clk_6_25Hz);
     reg [15:0] oled_data = 16'h07E0;
     
-    //wire rst;
+    wire rst;
     wire frame_begin;
     wire sending_pixels;
     wire sample_pixel;

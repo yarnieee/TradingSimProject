@@ -1,0 +1,20 @@
+# Vivado Project files to ignore
+*.cache/
+*.hw/
+*.ip_user_files/
+*.runs/
+*.sim/
+*.gen/
+*.str
+*.jou
+*.log
+
+# EDA tool build directories
+/work/
+/build/
+
+# Hardware output files
+*.bit
+*.mcs
+*.prm
+*.dcp

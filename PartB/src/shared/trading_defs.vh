@@ -33,11 +33,10 @@
 // ---------------------------------------------------------------- UI bus (from D)
 // [TEAM][ASSUMPTION] Encodings D owns. Proposed in the Module I/O map, for
 // Matthew to confirm. Every part decodes these, so change them only here.
+// (No mouse: ui_click, ui_screen, ui_x, ui_y and qty_delta were removed 17 Oct.)
 `define GS_MENU        2'd0   // game_state
 `define GS_PLAYING     2'd1
 `define GS_RESULT      2'd2
-`define SCR_LEFT       2'd0   // ui_screen
-`define SCR_RIGHT      2'd1
 `define PG_L_CHART     1'b0   // page_L
 `define PG_L_OVERVIEW  1'b1
 `define PG_R_TICKET    1'b0   // page_R

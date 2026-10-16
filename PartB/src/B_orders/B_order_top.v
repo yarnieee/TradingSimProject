@@ -32,13 +32,8 @@ module B_order_top #(
     input  wire        tick,
     // UI event bus (D)
     input  wire [1:0]  sel_stock,
-    input  wire        page_R,         // active right-OLED page; B acts only on PG_R_TICKET
-    input  wire        ui_click,
-    input  wire [1:0]  ui_screen,
-    input  wire [6:0]  ui_x,
-    input  wire [5:0]  ui_y,
-    input  wire [3:0]  qty_delta,      // signed; non-zero for one clock per scroll step
-    input  wire [4:0]  btn_pulse,      // debounced 1-clock pulses, bits per BTN_* defines
+    input  wire        page_R,         // active right-OLED page; B acts only on PG_R_TICKET (tie 0 until D has pages)
+    input  wire [4:0]  btn_pulse,      // debounced 1-clock pulses, bits per BTN_* defines; B's only UI input
     // ledger (C), read-only
     input  wire [31:0] cash,
     input  wire [9:0]  pos0,
@@ -66,8 +61,6 @@ module B_order_top #(
     // ------------------------------------------------------------ decode D's bus
     wire game_live       = (game_state == `GS_PLAYING);
     wire ticket_active   = (page_R == `PG_R_TICKET);
-    wire on_right        = (ui_screen == `SCR_RIGHT);
-    wire qty_delta_valid = (qty_delta != 4'd0);
     wire key_center      = btn_pulse[`BTN_C];
     wire key_up          = btn_pulse[`BTN_U];
     wire key_left        = btn_pulse[`BTN_L];
@@ -104,8 +97,6 @@ module B_order_top #(
     order_entry #(.QTY_INIT(QTY_INIT), .TRIG_STEP(TRIG_STEP)) u_entry (
         .clk(clk), .sys_reset(sys_reset), .ticket_active(ticket_active),
         .sel_stock(sel_stock), .sel_price(sel_price),
-        .ui_click(ui_click), .ui_screen(on_right), .ui_x(ui_x), .ui_y(ui_y),
-        .qty_delta(qty_delta), .qty_delta_valid(qty_delta_valid),
         .key_up(key_up), .key_down(key_down), .key_left(key_left),
         .key_right(key_right), .key_center(key_center),
         .side(e_side), .otype(e_type), .qty(e_qty), .trig(e_trig), .focus(e_focus),

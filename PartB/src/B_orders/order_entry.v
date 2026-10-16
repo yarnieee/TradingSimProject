@@ -1,19 +1,15 @@
 `timescale 1ns / 1ps
 `default_nettype none
 `include "trading_defs.vh"
-`include "ticket_layout.vh"
 
-// order_entry: Order Ticket field state and input decoding.
+// order_entry: Order Ticket field state, driven by the five board buttons.
+// (The mouse was removed from the project on 17 Oct; buttons are the only input.)
 //
-// Inputs are only acted on while the Ticket page is showing (ticket_active).
-// If several arrive on the same clock: click > scroll > button.
-//
-// Mouse (click on right OLED): hit-tested against ticket_layout.vh.
-// Scroll : qty +/- 1 per notch, trig +/- TRIG_STEP cents per notch, on the
-//          focused field. Nothing on the SUBMIT focus.
-// Buttons [ASSUMPTION] mapping is a proposal:
+// Buttons are only acted on while the Ticket page is showing (ticket_active).
+// One button acts per clock: left > right > up > down > center.
+// [ASSUMPTION] mapping is a proposal:
 //   left/right  move focus (qty -> trig -> submit, wrapping)
-//   up/down     change the focused value by one step
+//   up/down     qty +/- 1, or trig +/- TRIG_STEP cents
 //   center      qty: toggle BUY/SELL, trig: cycle MKT/LMT/STP, submit: submit
 //
 // trig is re-centred on the market when sel_stock changes, and once after
@@ -21,19 +17,13 @@
 // qty is clamped to 1..255, trig to 0..65535 (0 is caught by RJ_BAD_TRIG).
 module order_entry #(
     parameter QTY_INIT  = 1,     // [ASSUMPTION]
-    parameter TRIG_STEP = 5      // cents per notch [ASSUMPTION]
+    parameter TRIG_STEP = 5      // cents per press [ASSUMPTION]
 ) (
     input  wire        clk,
     input  wire        sys_reset,
     input  wire        ticket_active,
     input  wire [1:0]  sel_stock,
     input  wire [15:0] sel_price,      // mid price of sel_stock
-    input  wire        ui_click,
-    input  wire        ui_screen,      // 1 = right OLED
-    input  wire [6:0]  ui_x,
-    input  wire [5:0]  ui_y,
-    input  wire [3:0]  qty_delta,      // signed
-    input  wire        qty_delta_valid,
     input  wire        key_up,
     input  wire        key_down,
     input  wire        key_left,
@@ -57,41 +47,27 @@ module order_entry #(
                F_TRG = 2'd1,
                F_SUB = 2'd2;
 
-    localparam signed [4:0] STEP_UP   =  5'sd1;
-    localparam signed [4:0] STEP_DOWN = -5'sd1;
-
     // ------------------------------------------------------------ helpers
-    function in_box;
-        input [6:0] x;
-        input [5:0] y;
-        input [6:0] x0, x1;
-        input [5:0] y0, y1;
+    function [7:0] qty_step;           // +/- 1, clamped to 1..255
+        input [7:0] q;
+        input       up;
         begin
-            in_box = (x >= x0) && (x <= x1) && (y >= y0) && (y <= y1);
+            if (up) qty_step = (q == 8'd255) ? 8'd255 : q + 8'd1;
+            else    qty_step = (q <= 8'd1)   ? 8'd1   : q - 8'd1;
         end
     endfunction
 
-    function [7:0] qty_add;
-        input [7:0]        q;
-        input signed [4:0] d;
-        reg signed [9:0]   s;
+    function [15:0] trig_step;         // +/- TRIG_STEP, clamped to 0..65535
+        input [15:0] t;
+        input        up;
+        reg   [16:0] s;
         begin
-            s = $signed({2'b00, q}) + d;
-            if (s < 10'sd1)        qty_add = 8'd1;
-            else if (s > 10'sd255) qty_add = 8'd255;
-            else                   qty_add = s[7:0];
-        end
-    endfunction
-
-    function [15:0] trig_add;
-        input [15:0]       t;
-        input signed [4:0] d;
-        reg signed [19:0]  s;
-        begin
-            s = $signed({4'b0000, t}) + d * $signed(TRIG_STEP);
-            if (s < 20'sd0)          trig_add = 16'd0;
-            else if (s > 20'sd65535) trig_add = 16'hFFFF;
-            else                     trig_add = s[15:0];
+            if (up) begin
+                s = {1'b0, t} + TRIG_STEP;
+                trig_step = s[16] ? 16'hFFFF : s[15:0];
+            end else begin
+                trig_step = (t > TRIG_STEP) ? t - TRIG_STEP : 16'd0;
+            end
         end
     endfunction
 
@@ -107,30 +83,13 @@ module order_entry #(
     endfunction
 
     // ------------------------------------------------------------ decode
-    wire click = ui_click && ui_screen && ticket_active;
+    wire k_left   = ticket_active && key_left;
+    wire k_right  = ticket_active && !key_left && key_right;
+    wire k_up     = ticket_active && !key_left && !key_right && key_up;
+    wire k_down   = ticket_active && !key_left && !key_right && !key_up && key_down;
+    wire k_center = ticket_active && !key_left && !key_right && !key_up && !key_down && key_center;
 
-    wire hit_buy  = in_box(ui_x, ui_y, `TK_BUY_X0,   `TK_BUY_X1,   `TK_BTN_Y0, `TK_BTN_Y1);
-    wire hit_sell = in_box(ui_x, ui_y, `TK_SELL_X0,  `TK_SELL_X1,  `TK_BTN_Y0, `TK_BTN_Y1);
-    wire hit_type = in_box(ui_x, ui_y, `TK_TYPE_X0,  `TK_TYPE_X1,  `TK_BTN_Y0, `TK_BTN_Y1);
-    wire hit_qm   = in_box(ui_x, ui_y, `TK_MINUS_X0, `TK_MINUS_X1, `TK_QTY_Y0, `TK_QTY_Y1);
-    wire hit_qp   = in_box(ui_x, ui_y, `TK_PLUS_X0,  `TK_PLUS_X1,  `TK_QTY_Y0, `TK_QTY_Y1);
-    wire hit_tm   = in_box(ui_x, ui_y, `TK_MINUS_X0, `TK_MINUS_X1, `TK_TRG_Y0, `TK_TRG_Y1);
-    wire hit_tp   = in_box(ui_x, ui_y, `TK_PLUS_X0,  `TK_PLUS_X1,  `TK_TRG_Y0, `TK_TRG_Y1);
-    wire hit_sub  = in_box(ui_x, ui_y, `TK_SUB_X0,   `TK_SUB_X1,   `TK_SUB_Y0, `TK_SUB_Y1);
-
-    wire scroll = qty_delta_valid && ticket_active && !click;
-    wire keys   = ticket_active && !click && !qty_delta_valid;
-
-    wire signed [4:0] sdelta = {qty_delta[3], qty_delta};
-
-    // only one key acts per clock: left > right > up > down > center
-    wire k_left   = keys && key_left;
-    wire k_right  = keys && !key_left && key_right;
-    wire k_up     = keys && !key_left && !key_right && key_up;
-    wire k_down   = keys && !key_left && !key_right && !key_up && key_down;
-    wire k_center = keys && !key_left && !key_right && !key_up && !key_down && key_center;
-
-    wire do_submit = (click && hit_sub) || (k_center && focus == F_SUB);
+    wire do_submit = k_center && focus == F_SUB;
 
     // ------------------------------------------------------------ fields
     reg [1:0] prev_sel;
@@ -148,30 +107,17 @@ module order_entry #(
         end else begin
             prev_sel <= sel_stock;
 
-            if (click) begin
-                if (hit_buy)       side  <= `SIDE_BUY;
-                else if (hit_sell) side  <= `SIDE_SELL;
-                else if (hit_type) otype <= next_type(otype);
-                else if (hit_qm) begin qty  <= qty_add(qty, STEP_DOWN);   focus <= F_QTY; end
-                else if (hit_qp) begin qty  <= qty_add(qty, STEP_UP);     focus <= F_QTY; end
-                else if (hit_tm) begin trig <= trig_add(trig, STEP_DOWN); focus <= F_TRG; end
-                else if (hit_tp) begin trig <= trig_add(trig, STEP_UP);   focus <= F_TRG; end
-            end else if (scroll) begin
-                if (focus == F_QTY)      qty  <= qty_add(qty, sdelta);
-                else if (focus == F_TRG) trig <= trig_add(trig, sdelta);
-            end else begin
-                if (k_left)
-                    focus <= (focus == F_QTY) ? F_SUB : focus - 2'd1;
-                if (k_right)
-                    focus <= (focus == F_SUB) ? F_QTY : focus + 2'd1;
-                if (k_up || k_down) begin
-                    if (focus == F_QTY)      qty  <= qty_add(qty,   k_up ? STEP_UP : STEP_DOWN);
-                    else if (focus == F_TRG) trig <= trig_add(trig, k_up ? STEP_UP : STEP_DOWN);
-                end
-                if (k_center) begin
-                    if (focus == F_QTY)      side  <= ~side;
-                    else if (focus == F_TRG) otype <= next_type(otype);
-                end
+            if (k_left)
+                focus <= (focus == F_QTY) ? F_SUB : focus - 2'd1;
+            if (k_right)
+                focus <= (focus == F_SUB) ? F_QTY : focus + 2'd1;
+            if (k_up || k_down) begin
+                if (focus == F_QTY)      qty  <= qty_step(qty, k_up);
+                else if (focus == F_TRG) trig <= trig_step(trig, k_up);
+            end
+            if (k_center) begin
+                if (focus == F_QTY)      side  <= ~side;
+                else if (focus == F_TRG) otype <= next_type(otype);
             end
 
             // re-centre the trigger on the market; wins over an edit this clock

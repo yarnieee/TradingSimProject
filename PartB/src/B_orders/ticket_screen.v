@@ -8,8 +8,8 @@
 //   y 0-5    left black: the top level overlays D's tab bar
 //   y 7-11   TEK B123.25 A123.35          ticker, bid, ask
 //   y 15-24  [ BUY ][ SELL ]  [ MKT ]     side buttons + type button
-//   y 27-31  >QTY 010          [-][+]     focused field yellow
-//   y 35-39  >TRG 120.00       [-][+]     whole line grey when type = MKT
+//   y 27-31  >QTY 010                    focused field yellow
+//   y 35-39  >TRG 120.00                 whole line grey when type = MKT
 //   y 43-52        [ SUBMIT ]             yellow border when focused
 //   y 55-59  FILL B010@123.35  PEND 3     or REJ NO CASH (red, 2 s)
 //
@@ -181,7 +181,7 @@ module ticket_screen #(
     localparam L_BLANK = 5'd0,  L_BUY  = 5'd1,  L_SELL = 5'd2,  L_MKT  = 5'd3,
                L_LMT   = 5'd4,  L_STP  = 5'd5,  L_QTY  = 5'd6,  L_TRG  = 5'd7,
                L_SUB   = 5'd8,  L_FILL = 5'd9,  L_REJ  = 5'd10, L_PEND = 5'd11,
-               L_PM    = 5'd12, L_TK0  = 5'd16;   // L_TK0 + stock = ticker
+               L_TK0   = 5'd16;                  // L_TK0 + stock = ticker
 
     function [5:0] lbl_char;
         input [4:0] which;
@@ -200,7 +200,6 @@ module ticket_screen #(
                 L_FILL:     s = "FILL  ";
                 L_REJ:      s = "REJ   ";
                 L_PEND:     s = "PEND  ";
-                L_PM:       s = "[-][+]";
                 // [ASSUMPTION] made-up tickers from the plan, stock 0..3
                 L_TK0:      s = "ABC   ";
                 L_TK0 + 1:  s = "TEK   ";
@@ -297,8 +296,8 @@ module ticket_screen #(
     // ------------------------------------------------------------ text segments
     // {x0, chars, y0} for each run of text
     localparam SEG_NONE = 4'd0,  SEG_HDR  = 4'd1,  SEG_BUY  = 4'd2,  SEG_SELL = 4'd3,
-               SEG_TYPE = 4'd4,  SEG_QTY  = 4'd5,  SEG_QPM  = 4'd6,  SEG_TRG  = 4'd7,
-               SEG_TPM  = 4'd8,  SEG_SUB  = 4'd9,  SEG_STAT = 4'd10;
+               SEG_TYPE = 4'd4,  SEG_QTY  = 4'd5,  SEG_TRG  = 4'd7,
+               SEG_SUB  = 4'd9,  SEG_STAT = 4'd10;
 
     localparam [5:0] Y_HDR = 6'd7, Y_BTN = 6'd17, Y_SUB = 6'd45;
 
@@ -315,9 +314,7 @@ module ticket_screen #(
         else if (in_text(pix_x, pix_y, 7'd34,        5'd4,  Y_BTN))       begin seg = SEG_SELL; sx0 = 7'd34;        sy0 = Y_BTN;       end
         else if (in_text(pix_x, pix_y, 7'd72,        5'd3,  Y_BTN))       begin seg = SEG_TYPE; sx0 = 7'd72;        sy0 = Y_BTN;       end
         else if (in_text(pix_x, pix_y, 7'd0,         5'd8,  `TK_QTY_Y0))  begin seg = SEG_QTY;  sx0 = 7'd0;         sy0 = `TK_QTY_Y0;  end
-        else if (in_text(pix_x, pix_y, `TK_MINUS_X0, 5'd6,  `TK_QTY_Y0))  begin seg = SEG_QPM;  sx0 = `TK_MINUS_X0; sy0 = `TK_QTY_Y0;  end
         else if (in_text(pix_x, pix_y, 7'd0,         5'd11, `TK_TRG_Y0))  begin seg = SEG_TRG;  sx0 = 7'd0;         sy0 = `TK_TRG_Y0;  end
-        else if (in_text(pix_x, pix_y, `TK_MINUS_X0, 5'd6,  `TK_TRG_Y0))  begin seg = SEG_TPM;  sx0 = `TK_MINUS_X0; sy0 = `TK_TRG_Y0;  end
         else if (in_text(pix_x, pix_y, 7'd36,        5'd6,  Y_SUB))       begin seg = SEG_SUB;  sx0 = 7'd36;        sy0 = Y_SUB;       end
         else if (in_text(pix_x, pix_y, 7'd0,         5'd24, `TK_STAT_Y0)) begin seg = SEG_STAT; sx0 = 7'd0;         sy0 = `TK_STAT_Y0; end
     end
@@ -361,9 +358,6 @@ module ticket_screen #(
                 else if (ci >= 5'd5)               ch = qty_char(bcd_qty, ci - 5'd5);
                 if (ci == 5'd0 || (ci >= 5'd5 && focus == F_QTY)) tcol = C_YELLOW;
             end
-            SEG_QPM: begin
-                ch = lbl_char(L_PM, ci);
-            end
             SEG_TRG: begin
                 if (ci == 5'd0)                    ch = (focus == F_TRG) ? `CH_GT : `CH_SPACE;
                 else if (ci <= 5'd3)               ch = lbl_char(L_TRG, ci - 5'd1);
@@ -371,10 +365,6 @@ module ticket_screen #(
                 if (ci == 5'd0)                         tcol = C_YELLOW;
                 else if (mkt)                           tcol = C_GREY;
                 else if (ci >= 5'd5 && focus == F_TRG)  tcol = C_YELLOW;
-            end
-            SEG_TPM: begin
-                ch   = lbl_char(L_PM, ci);
-                tcol = mkt ? C_GREY : C_WHITE;
             end
             SEG_SUB: begin
                 ch = lbl_char(L_SUB, ci);

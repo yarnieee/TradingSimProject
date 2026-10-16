@@ -1,9 +1,8 @@
 `timescale 1ns / 1ps
 `include "trading_defs.vh"
-`include "ticket_layout.vh"
 
 // tb_B_order_top: spec section 10 scenarios, end to end, through the real UI
-// path (clicks, scroll, buttons) with stub_market and stub_ledger standing in
+// path (the five buttons; no mouse) with stub_market and stub_ledger standing in
 // for A and C. stub_ledger stops the sim with FAIL if cash or a position ever
 // goes out of range, or if a fill arrives while ledger_busy.
 //
@@ -18,11 +17,6 @@ module tb_B_order_top;
     reg [1:0]  game_state = `GS_PLAYING;
     reg [1:0]  sel_stock = 0;
     reg        page_R = `PG_R_TICKET;
-    reg        ui_click = 0;
-    reg [1:0]  ui_screen = `SCR_RIGHT;
-    reg [6:0]  ui_x = 0;
-    reg [5:0]  ui_y = 0;
-    reg [3:0]  qty_delta = 0;
     reg [4:0]  btn_pulse = 0;
     reg [6:0]  xR = 0;
     reg [5:0]  yR = 0;
@@ -64,8 +58,7 @@ module tb_B_order_top;
         .clk(clk), .sys_reset(sys_reset), .game_state(game_state),
         .price0(price0), .price1(price1), .price2(price2), .price3(price3), .tick(tick),
         .sel_stock(sel_stock), .page_R(page_R),
-        .ui_click(ui_click), .ui_screen(ui_screen), .ui_x(ui_x), .ui_y(ui_y),
-        .qty_delta(qty_delta), .btn_pulse(btn_pulse),
+        .btn_pulse(btn_pulse),
         .cash(cash), .pos0(pos0), .pos1(pos1), .pos2(pos2), .pos3(pos3),
         .ledger_busy(ledger_busy), .xR(xR), .yR(yR),
         .fill(fill), .fill_stock(fill_stock), .fill_side(fill_side),
@@ -135,22 +128,6 @@ module tb_B_order_top;
         end
     endtask
 
-    task click;
-        input [6:0] x;
-        input [5:0] y;
-        begin
-            ui_x = x; ui_y = y; ui_screen = `SCR_RIGHT;
-            ui_click = 1; step(1); ui_click = 0; step(2);
-        end
-    endtask
-
-    task scroll;
-        input integer n;    // -8..7
-        begin
-            qty_delta = n; step(1); qty_delta = 0; step(2);   // non-zero for one clock
-        end
-    endtask
-
     localparam K_UP = `BTN_U, K_DOWN = `BTN_D, K_LEFT = `BTN_L, K_RIGHT = `BTN_R, K_CENTER = `BTN_C;
     task press;
         input integer k;
@@ -184,63 +161,58 @@ module tb_B_order_top;
     endtask
 
     // ------------------------------------------------------------ UI-level helpers
-    // centre of a layout box
-    `define CX(a, b) (((a) + (b)) / 2)
-
-    task set_side;
-        input s;
+    // Buttons only (no mouse). Focus: 0 qty, 1 trig, 2 submit.
+    task focus_to;
+        input [1:0] f;
+        integer k;
         begin
-            if (s == `SIDE_BUY) click(`CX(`TK_BUY_X0, `TK_BUY_X1),   `CX(`TK_BTN_Y0, `TK_BTN_Y1));
-            else                click(`CX(`TK_SELL_X0, `TK_SELL_X1), `CX(`TK_BTN_Y0, `TK_BTN_Y1));
+            for (k = 0; k < 3 && u_dut.u_entry.focus != f; k = k + 1) press(K_RIGHT);
         end
     endtask
 
-    task set_type;
+    task set_side;                 // centre on the qty field toggles BUY/SELL
+        input s;
+        begin
+            focus_to(0);
+            if (u_dut.u_entry.side != s) press(K_CENTER);
+        end
+    endtask
+
+    task set_type;                 // centre on the trig field cycles MKT/LMT/STP
         input [1:0] t;
         integer k;
         begin
-            for (k = 0; k < 3 && u_dut.u_entry.otype != t; k = k + 1)
-                click(`CX(`TK_TYPE_X0, `TK_TYPE_X1), `CX(`TK_BTN_Y0, `TK_BTN_Y1));
+            focus_to(1);
+            for (k = 0; k < 3 && u_dut.u_entry.otype != t; k = k + 1) press(K_CENTER);
         end
     endtask
 
-    // focus qty with the [+] button, then scroll to the target
-    task set_qty;
+    task set_qty;                  // up/down, 1 per press
         input integer q;
-        integer d, k;
+        integer k;
         begin
-            click(`CX(`TK_PLUS_X0, `TK_PLUS_X1), `CX(`TK_QTY_Y0, `TK_QTY_Y1));
-            for (k = 0; k < 100 && u_dut.u_entry.qty != q; k = k + 1) begin
-                d = q - u_dut.u_entry.qty;
-                if (d > 7)  d = 7;
-                if (d < -8) d = -8;
-                scroll(d);
-            end
+            focus_to(0);
+            for (k = 0; k < 300 && u_dut.u_entry.qty != q; k = k + 1)
+                press(q > u_dut.u_entry.qty ? K_UP : K_DOWN);
             if (u_dut.u_entry.qty != q) $display("NOTE: set_qty(%0d) stopped at %0d", q, u_dut.u_entry.qty);
         end
     endtask
 
-    // focus trig with the [+] button, then scroll (5 c per notch) to the target
-    task set_trig;
+    task set_trig;                 // up/down, 5 c per press
         input integer t;
-        integer d, k;
+        integer k;
         begin
-            click(`CX(`TK_PLUS_X0, `TK_PLUS_X1), `CX(`TK_TRG_Y0, `TK_TRG_Y1));
-            for (k = 0; k < 2000 && u_dut.u_entry.trig != t; k = k + 1) begin
-                d = t - u_dut.u_entry.trig;    // signed difference first,
-                d = d / 5;                     // then divide (unsigned divide otherwise)
-                if (d > 7)  d = 7;
-                if (d < -8) d = -8;
-                if (d == 0) k = 2000;
-                else        scroll(d);
-            end
+            focus_to(1);
+            for (k = 0; k < 3000 && u_dut.u_entry.trig != t; k = k + 1)
+                press(t > u_dut.u_entry.trig ? K_UP : K_DOWN);
             if (u_dut.u_entry.trig != t) $display("NOTE: set_trig(%0d) stopped at %0d", t, u_dut.u_entry.trig);
         end
     endtask
 
     task submit;
         begin
-            click(`CX(`TK_SUB_X0, `TK_SUB_X1), `CX(`TK_SUB_Y0, `TK_SUB_Y1));
+            focus_to(2);
+            press(K_CENTER);
         end
     endtask
 
@@ -302,9 +274,9 @@ module tb_B_order_top;
         // ------------------------------------------------ 4
         scenario("4 submit with qty 0");
         // The UI clamps qty to 1..255, so 0 cannot be dialled in:
-        set_qty(5);
-        scroll(-8);
-        check(u_dut.u_entry.qty == 1, "S4 scroll below 1 clamps to 1");
+        set_qty(2);
+        repeat (3) press(K_DOWN);
+        check(u_dut.u_entry.qty == 1, "S4 key_down below 1 clamps to 1");
         // ...so force the register to exercise the downstream path anyway.
         mark;
         force u_dut.u_entry.qty = 8'd0;
@@ -396,24 +368,18 @@ module tb_B_order_top;
         check(n_fill == b_fill && pos0 == b_pos0 && pending_count == 0, "S10 no fill, slot cleared");
 
         // ------------------------------------------------ 11
-        scenario("11 click SELL, TYPE twice, SUBMIT");
+        scenario("11 SELL, type to STP, SUBMIT (buttons)");
         set_type(`OT_MKT);
         set_qty(5);
         set_trig(10000);                               // below bid, so it rests
-        click(`CX(`TK_SELL_X0, `TK_SELL_X1), 6'd0);   // y = 0: off the ticket, no effect
-        ui_screen = `SCR_LEFT;                         // left OLED: ignored
-        ui_x = `CX(`TK_SELL_X0, `TK_SELL_X1); ui_y = `CX(`TK_BTN_Y0, `TK_BTN_Y1);
-        ui_click = 1; step(1); ui_click = 0; step(2); ui_screen = `SCR_RIGHT;
-        page_R = `PG_R_PORTFOLIO;                      // Portfolio page showing: ignored
-        click(`CX(`TK_SELL_X0, `TK_SELL_X1), `CX(`TK_BTN_Y0, `TK_BTN_Y1));
+        page_R = `PG_R_PORTFOLIO;                      // Portfolio page showing: buttons ignored
         press(K_CENTER);                               // focus is trig: would cycle MKT -> LMT
+        press(K_LEFT);                                 // would move focus to qty
         page_R = `PG_R_TICKET;
-        check(u_dut.u_entry.side == `SIDE_BUY, "S11 off-ticket, left-screen and Portfolio-page clicks ignored");
-        check(u_dut.u_entry.focus == 1 && u_dut.u_entry.otype == `OT_MKT, "S11 button ignored on Portfolio page");
+        check(u_dut.u_entry.focus == 1 && u_dut.u_entry.otype == `OT_MKT, "S11 buttons ignored on Portfolio page");
         mark;
-        click(`CX(`TK_SELL_X0, `TK_SELL_X1), `CX(`TK_BTN_Y0, `TK_BTN_Y1));
-        click(`CX(`TK_TYPE_X0, `TK_TYPE_X1), `CX(`TK_BTN_Y0, `TK_BTN_Y1));
-        click(`CX(`TK_TYPE_X0, `TK_TYPE_X1), `CX(`TK_BTN_Y0, `TK_BTN_Y1));
+        focus_to(0); press(K_CENTER);                  // qty field: BUY -> SELL
+        focus_to(1); press(K_CENTER); press(K_CENTER); // trig field: MKT -> LMT -> STP
         submit; settle;
         check(u_dut.u_entry.side == `SIDE_SELL && u_dut.u_entry.otype == `OT_STP, "S11 side SELL, type STP");
         check(pending_count == 1 && u_dut.u_book.valid[0] && u_dut.u_book.s_side[0] == `SIDE_SELL
@@ -422,14 +388,13 @@ module tb_B_order_top;
         check(n_fill == b_fill && n_rej == b_rej, "S11 no fill or reject");
 
         // ------------------------------------------------ 12
-        scenario("12 scroll +3 with focus on qty");
+        scenario("12 qty +3 with key_up, clamped at 255");
         set_qty(10);
-        scroll(3);
+        repeat (3) press(K_UP);
         check(u_dut.u_entry.qty == 13, "S12 qty 10 -> 13");
         set_qty(254);
-        scroll(3);
+        repeat (3) press(K_UP);
         check(u_dut.u_entry.qty == 255, "S12 qty 254 -> 255 (clamped)");
-        // button fallback on the same field
         press(K_DOWN);
         check(u_dut.u_entry.qty == 254, "S12 key_down -> 254");
         press(K_RIGHT); press(K_UP);                   // focus trig, +5c

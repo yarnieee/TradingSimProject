@@ -14,8 +14,8 @@ added to `TradingSimProject.xpr`; see "In Vivado" below.
 | Phase | Scope | State |
 |---|---|---|
 | P1 | MKT orders, validation, fill bus, button fallback, ticket page v1 | built, simulated |
-| P2 | 4 stocks, LMT/STP book, trigger scan, re-validation, mouse, scroll | built, simulated |
-| P3 | pending list view, cancel by click, SL/TP shortcuts | not started (`order_book` already has the cancel and read ports) |
+| P2 | 4 stocks, LMT/STP book, trigger scan, re-validation | built, simulated (mouse and scroll removed 17 Oct) |
+| P3 | pending list view, cancel, SL/TP shortcuts | not started (`order_book` already has the cancel and read ports) |
 
 "Simulated" means Icarus Verilog only. A Yosys `synth_xilinx` pass found no inferred
 latches and estimated about 1,150 LUTs, 460 FFs and 2 DSPs for the top module with the stub
@@ -28,7 +28,7 @@ font (roughly 5.5% of the xc7a35t's LUTs). That is an estimate from a different 
 src/shared/trading_defs.vh      [TEAM] widths, side/type/reject codes, font char codes
 src/B_orders/ticket_layout.vh   button boxes: shared by hit-testing and drawing
 src/B_orders/B_order_top.v      what the team top level instantiates (ports below)
-src/B_orders/order_entry.v      ticket fields, click/scroll/button decoding
+src/B_orders/order_entry.v      ticket fields, button decoding
 src/B_orders/order_validate.v   combinational checks -> ok / reject_code
 src/B_orders/order_book.v       8-slot pending book, time-shared trigger scan
 src/B_orders/exec_engine.v      arbiter: submits + book triggers -> fill / reject / insert
@@ -60,7 +60,7 @@ PASS: tb_order_validate (27 checks)
 PASS: tb_order_book (30 checks)
 PASS: tb_exec_engine (21 checks)
 PASS: tb_ticket_screen (18 checks)
-PASS: tb_B_order_top (47 checks)
+PASS: tb_B_order_top (46 checks)
 ```
 
 Logs, frame dumps (`ticket_frame*.hex`) and PNGs land in `sim/out/`.
@@ -103,7 +103,7 @@ Each one is a judgement call; change it if the team disagrees.
 
 | # | What | Why |
 |---|---|---|
-| 1 | QTY/TRG `[-]` hit regions are x 62-72 and `[+]` 74-84 (spec: 62-70, 74-82) | the drawn `[-][+]` glyphs end at x 72 and 84; the hit area now matches what is drawn |
+| 1 | No mouse or scroll wheel: the five buttons are the only input, and the `[-][+]` click targets are gone from the page (team decision, 17 Oct) | the mouse was removed from the project |
 | 2 | Number conversion is a sequential double-dabble (16 clocks per value), not combinational | a 16-stage add-3 chain is a likely timing failure at 100 MHz (inference, not measured). One converter refreshes all six values round-robin |
 | 3 | Extra check: BUY that would push a position past 1023 is rejected as `RJ_BAD_QTY` | position is 10 bits and would wrap in C. All 8 reject codes are used, so this reuses one |
 | 4 | Extra check: SELL whose proceeds are below the $1 fee, with cash near 0, is `RJ_NO_CASH` | otherwise cash goes negative (e.g. sell 1 share at $0.95 with $0.04 cash) |
@@ -129,12 +129,12 @@ until Matthew confirms them; changing one there changes it everywhere.
 | in, top | `clk`, `xR [6:0]`, `yR [5:0]` |
 | in, A | `price0..3 [15:0]`, `tick` |
 | in, C | `cash [31:0]`, `pos0..3 [9:0]`, `ledger_busy` |
-| in, D | `sys_reset`, `game_state [1:0]`, `sel_stock [1:0]`, `page_R`, `ui_click`, `ui_screen [1:0]`, `ui_x [6:0]`, `ui_y [5:0]`, `qty_delta [3:0]` (signed, non-zero for one clock per scroll step), `btn_pulse [4:0]` |
+| in, D | `sys_reset`, `game_state [1:0]`, `sel_stock [1:0]`, `page_R`, `btn_pulse [4:0]` |
 | out, to C and D | `fill`, `fill_stock [1:0]`, `fill_side`, `fill_qty [7:0]`, `fill_price [15:0]`, `fill_fee [15:0]` |
 | out, to D | `reject`, `reject_code [2:0]`, `pending_count [3:0]`, `ticket_pixel [15:0]` |
 
-B acts on clicks and buttons only while `page_R` shows the Ticket page, and on clicks only
-when `ui_screen` is the right OLED.
+B acts on buttons only while `page_R` shows the Ticket page. For prototype 1, tie
+`page_R = 0` (Ticket) and `game_state = GS_PLAYING` at the top level.
 
 ## For the team
 

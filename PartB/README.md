@@ -18,7 +18,7 @@ added to `TradingSimProject.xpr`; see "In Vivado" below.
 | P3 | pending list view, cancel by click, SL/TP shortcuts | not started (`order_book` already has the cancel and read ports) |
 
 "Simulated" means Icarus Verilog only. A Yosys `synth_xilinx` pass found no inferred
-latches and estimated about 1,150 LUTs, 460 FFs and 2 DSPs for `part_b_top` with the stub
+latches and estimated about 1,150 LUTs, 460 FFs and 2 DSPs for the top module with the stub
 font (roughly 5.5% of the xc7a35t's LUTs). That is an estimate from a different tool.
 **Not yet done:** Vivado synthesis, timing and utilisation, and anything on the board.
 
@@ -27,7 +27,7 @@ font (roughly 5.5% of the xc7a35t's LUTs). That is an estimate from a different 
 ```
 src/shared/trading_defs.vh      [TEAM] widths, side/type/reject codes, font char codes
 src/B_orders/ticket_layout.vh   button boxes: shared by hit-testing and drawing
-src/B_orders/part_b_top.v       what the team top level instantiates
+src/B_orders/B_order_top.v      what the team top level instantiates (ports below)
 src/B_orders/order_entry.v      ticket fields, click/scroll/button decoding
 src/B_orders/order_validate.v   combinational checks -> ok / reject_code
 src/B_orders/order_book.v       8-slot pending book, time-shared trigger scan
@@ -60,7 +60,7 @@ PASS: tb_order_validate (27 checks)
 PASS: tb_order_book (30 checks)
 PASS: tb_exec_engine (21 checks)
 PASS: tb_ticket_screen (18 checks)
-PASS: tb_part_b_top (46 checks)
+PASS: tb_B_order_top (47 checks)
 ```
 
 Logs, frame dumps (`ticket_frame*.hex`) and PNGs land in `sim/out/`.
@@ -75,7 +75,7 @@ Logs, frame dumps (`ticket_frame*.hex`) and PNGs land in `sim/out/`.
    as simulation sources. Set the testbench you want as the simulation top.
 3. If Vivado cannot find `trading_defs.vh` or `ticket_layout.vh`, add `src/shared`
    and `src/B_orders` under Settings > General > Verilog options > Include directories.
-4. Run behavioural simulation for at least 200 us (`tb_part_b_top` ends at about 183 us).
+4. Run behavioural simulation for at least 200 us (`tb_B_order_top` ends at about 190 us).
    Look for the `PASS:` line in the Tcl console. The frame dumps are written to the
    simulation run directory (`<project>.sim/sim_1/behav/xsim/`).
 
@@ -108,25 +108,45 @@ Each one is a judgement call; change it if the team disagrees.
 | 3 | Extra check: BUY that would push a position past 1023 is rejected as `RJ_BAD_QTY` | position is 10 bits and would wrap in C. All 8 reject codes are used, so this reuses one |
 | 4 | Extra check: SELL whose proceeds are below the $1 fee, with cash near 0, is `RJ_NO_CASH` | otherwise cash goes negative (e.g. sell 1 share at $0.95 with $0.04 cash) |
 | 5 | A triggered order fills at the bid/ask the book saw when it triggered | guarantees a limit order never fills worse than its limit, even if it queues behind other fills |
-| 6 | The book only scans while `game_live`; if the game ends mid-scan, remaining hits are cancelled with `RJ_TRIG_FAIL` | no trading outside PLAYING |
+| 6 | The book only scans while `game_state` is PLAYING; if the game ends mid-scan, remaining hits are cancelled with `RJ_TRIG_FAIL` | no trading outside PLAYING |
 | 7 | A marketable limit (e.g. LMT BUY above the ask) rests until the next tick, it does not fill on submit | keeps one code path for pending orders |
 | 8 | Status line: a reject shows for 2 s, then falls back to the last fill or placed message. Placed orders show as `LMT  B010@120.00` in white | spec only described fill and reject |
 | 9 | `trig` re-centres on the market when the stock changes, and once after reset when the price first becomes non-zero | spec covered stock change only; after reset the trigger would otherwise start at 0 |
 | 10 | `qty` starts at 1 after reset | spec gave no default |
-| 11 | Scenario 4 (qty 0) cannot be reached through the UI, since qty clamps to 1..255 | `tb_part_b_top` forces the register to 0 to test the path; the unit testbenches also cover it |
+| 11 | Scenario 4 (qty 0) cannot be reached through the UI, since qty clamps to 1..255 | `tb_B_order_top` forces the register to 0 to test the path; the unit testbenches also cover it |
 | 12 | `stub_font` has the 3x5 set only, no 5x7 | Part B does not use 5x7 |
-| 13 | Not built: `sw[7:0]` as a binary quantity (team plan section 5) | not in the Part B port list in the spec |
+| 13 | No switch input: `sw[7:0]` as a binary quantity was dropped (team decision, 17 Oct) | the 5 buttons already give a full fallback, and the switches are D's demo controls |
+
+## Ports
+
+`B_order_top` follows the **Module I/O map** in the team plan doc ("EE2026 Trading Sim
+Project Plan"). The encodings of D's signals (`game_state`, `ui_screen`, `page_R`,
+`btn_pulse` bit order) are defines in `src/shared/trading_defs.vh`, tagged [TEAM][ASSUMPTION]
+until Matthew confirms them; changing one there changes it everywhere.
+
+| Direction | Signals |
+|---|---|
+| in, top | `clk`, `xR [6:0]`, `yR [5:0]` |
+| in, A | `price0..3 [15:0]`, `tick` |
+| in, C | `cash [31:0]`, `pos0..3 [9:0]`, `ledger_busy` |
+| in, D | `sys_reset`, `game_state [1:0]`, `sel_stock [1:0]`, `page_R`, `ui_click`, `ui_screen [1:0]`, `ui_x [6:0]`, `ui_y [5:0]`, `qty_delta [3:0]` (signed, non-zero for one clock per scroll step), `btn_pulse [4:0]` |
+| out, to C and D | `fill`, `fill_stock [1:0]`, `fill_side`, `fill_qty [7:0]`, `fill_price [15:0]`, `fill_fee [15:0]` |
+| out, to D | `reject`, `reject_code [2:0]`, `pending_count [3:0]`, `ticket_pixel [15:0]` |
+
+B acts on clicks and buttons only while `page_R` shows the Ticket page, and on clicks only
+when `ui_screen` is the right OLED.
 
 ## For the team
 
 - **[TEAM] `ledger_busy` from C:** must go high on the clock after `fill`, or earlier,
-  and C's cash and positions must already be updated on the clock it drops.
-  `stub_ledger.v` is a working reference model.
+  and C's cash and positions must already be updated on the clock it drops. Drive it from
+  the ledger's own register, not from the divider's `busy` (which rises a clock too late,
+  and never rises for buys). `sim/stubs/stub_ledger.v` is a working reference model.
 - **[TEAM] `tick` from A:** `order_book` starts scanning on the clock after `tick`. All four
   new prices must be visible by then. If A updates the stocks one after another, it should
   pulse `tick` after the last one.
-- **[TEAM] `ui_screen`:** the plan has it as 2 bits; the Part B spec and this code use 1 bit
-  (0 left, 1 right).
-- **[TEAM] Font:** the ticket page needs a 3x5 font with the port of `stub_font.v`
-  (`ch`, `row`, `col` in, `pix` out, combinational). Character codes are in `trading_defs.vh`.
-- **[TEAM]** `ledger_busy` and `ticket_active` still need adding to the plan's interface table.
+- **[TEAM] Font:** team decision (17 Oct) is that page owners instantiate D's font module.
+  The ticket page needs a 3x5 font with the port of `stub_font.v` (`ch`, `row`, `col` in,
+  `pix` out, combinational). Character codes are in `trading_defs.vh`.
+- **[TEAM] Buttons:** B uses all five buttons on the Ticket page, and `My_Top_Module` currently
+  uses the centre button as reset. See the open questions in the Module I/O map.

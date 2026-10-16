@@ -2,8 +2,9 @@
 `default_nettype none
 `include "trading_defs.vh"
 
-// part_b_top: Part B (order and execution engine + Order Ticket page).
-// This is what the team top level instantiates. Ports follow spec section 4.
+// B_order_top: Part B (order and execution engine + Order Ticket page).
+// This is what the team top level instantiates. Ports follow the Module I/O
+// map in the team plan doc; encodings of the D bus are in trading_defs.vh.
 //
 //   order_entry --submit--> exec_engine --fill--> C, D
 //                              ^   |  \--reject--> D
@@ -12,7 +13,7 @@
 //   ticket_screen draws the page from all of the above.
 //
 // B never writes cash or positions; it only reads C's ledger.
-module part_b_top #(
+module B_order_top #(
     parameter SPREAD          = 5,             // cents per side [ASSUMPTION]
     parameter FEE             = 100,           // cents per execution [ASSUMPTION]
     parameter POS_MAX         = 1023,
@@ -22,27 +23,22 @@ module part_b_top #(
 ) (
     input  wire        clk,
     input  wire        sys_reset,
-    input  wire        game_live,
+    input  wire [1:0]  game_state,     // orders only while GS_PLAYING
     // price bus (A)
     input  wire [15:0] price0,
     input  wire [15:0] price1,
     input  wire [15:0] price2,
     input  wire [15:0] price3,
     input  wire        tick,
-    // UI (D)
+    // UI event bus (D)
     input  wire [1:0]  sel_stock,
-    input  wire        ticket_active,
+    input  wire        page_R,         // active right-OLED page; B acts only on PG_R_TICKET
     input  wire        ui_click,
-    input  wire        ui_screen,
+    input  wire [1:0]  ui_screen,
     input  wire [6:0]  ui_x,
     input  wire [5:0]  ui_y,
-    input  wire [3:0]  qty_delta,
-    input  wire        qty_delta_valid,
-    input  wire        key_up,
-    input  wire        key_down,
-    input  wire        key_left,
-    input  wire        key_right,
-    input  wire        key_center,
+    input  wire [3:0]  qty_delta,      // signed; non-zero for one clock per scroll step
+    input  wire [4:0]  btn_pulse,      // debounced 1-clock pulses, bits per BTN_* defines
     // ledger (C), read-only
     input  wire [31:0] cash,
     input  wire [9:0]  pos0,
@@ -51,8 +47,8 @@ module part_b_top #(
     input  wire [9:0]  pos3,
     input  wire        ledger_busy,
     // pixel being drawn on the right OLED (top)
-    input  wire [6:0]  pix_x,
-    input  wire [5:0]  pix_y,
+    input  wire [6:0]  xR,
+    input  wire [5:0]  yR,
     // fill bus (C, D)
     output wire        fill,
     output wire [1:0]  fill_stock,
@@ -64,9 +60,20 @@ module part_b_top #(
     output wire        reject,
     output wire [2:0]  reject_code,
     output wire [3:0]  pending_count,
-    // Ticket page pixel (top)
-    output wire [15:0] ticket_pix
+    // Ticket page pixel (D)
+    output wire [15:0] ticket_pixel
 );
+    // ------------------------------------------------------------ decode D's bus
+    wire game_live       = (game_state == `GS_PLAYING);
+    wire ticket_active   = (page_R == `PG_R_TICKET);
+    wire on_right        = (ui_screen == `SCR_RIGHT);
+    wire qty_delta_valid = (qty_delta != 4'd0);
+    wire key_center      = btn_pulse[`BTN_C];
+    wire key_up          = btn_pulse[`BTN_U];
+    wire key_left        = btn_pulse[`BTN_L];
+    wire key_right       = btn_pulse[`BTN_R];
+    wire key_down        = btn_pulse[`BTN_D];
+
     // ------------------------------------------------------------ selected stock
     reg [15:0] sel_price;
     always @* begin
@@ -97,7 +104,7 @@ module part_b_top #(
     order_entry #(.QTY_INIT(QTY_INIT), .TRIG_STEP(TRIG_STEP)) u_entry (
         .clk(clk), .sys_reset(sys_reset), .ticket_active(ticket_active),
         .sel_stock(sel_stock), .sel_price(sel_price),
-        .ui_click(ui_click), .ui_screen(ui_screen), .ui_x(ui_x), .ui_y(ui_y),
+        .ui_click(ui_click), .ui_screen(on_right), .ui_x(ui_x), .ui_y(ui_y),
         .qty_delta(qty_delta), .qty_delta_valid(qty_delta_valid),
         .key_up(key_up), .key_down(key_down), .key_left(key_left),
         .key_right(key_right), .key_center(key_center),
@@ -156,7 +163,7 @@ module part_b_top #(
 
     // ------------------------------------------------------------ screen
     ticket_screen #(.REJ_SHOW_CYCLES(REJ_SHOW_CYCLES)) u_screen (
-        .clk(clk), .sys_reset(sys_reset), .pix_x(pix_x), .pix_y(pix_y),
+        .clk(clk), .sys_reset(sys_reset), .pix_x(xR), .pix_y(yR),
         .sel_stock(sel_stock), .bid(sel_bid), .ask(sel_ask),
         .side(e_side), .otype(e_type), .qty(e_qty), .trig(e_trig), .focus(e_focus),
         .pending_count(pending_count),
@@ -164,7 +171,7 @@ module part_b_top #(
         .placed(placed), .placed_side(ins_side), .placed_type(ins_type),
         .placed_qty(ins_qty), .placed_trig(ins_trig),
         .reject(reject), .reject_code(reject_code),
-        .ticket_pix(ticket_pix)
+        .ticket_pix(ticket_pixel)
     );
 endmodule
 

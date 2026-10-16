@@ -30,6 +30,25 @@
 `define RJ_TRIG_FAIL 3'd6   // pending order hit but failed re-validation -> cancelled
 `define RJ_NOT_LIVE  3'd7   // game not in PLAYING state
 
+// ---------------------------------------------------------------- UI bus (from D)
+// [TEAM][ASSUMPTION] Encodings D owns. Proposed in the Module I/O map, for
+// Matthew to confirm. Every part decodes these, so change them only here.
+`define GS_MENU        2'd0   // game_state
+`define GS_PLAYING     2'd1
+`define GS_RESULT      2'd2
+`define SCR_LEFT       2'd0   // ui_screen
+`define SCR_RIGHT      2'd1
+`define PG_L_CHART     1'b0   // page_L
+`define PG_L_OVERVIEW  1'b1
+`define PG_R_TICKET    1'b0   // page_R
+`define PG_R_PORTFOLIO 1'b1
+// btn_pulse bit positions, in Basys3 master XDC order (btnC, btnU, btnL, btnR, btnD)
+`define BTN_C 0
+`define BTN_U 1
+`define BTN_L 2
+`define BTN_R 3
+`define BTN_D 4
+
 // ---------------------------------------------------------------- font
 // [TEAM][ASSUMPTION] Character codes for the shared font ROM (D owns it).
 // Digits 0..9 are codes 0..9, so a BCD digit d is char {2'b00, d}.

@@ -10,7 +10,7 @@ mkdir -p "$OUT"
 
 SRC=("$ROOT"/src/B_orders/*.v)
 STUBS=("$ROOT"/sim/stubs/*.v)
-TBS=(tb_order_validate tb_order_book tb_exec_engine tb_ticket_screen tb_part_b_top)
+TBS=(tb_order_validate tb_order_book tb_exec_engine tb_ticket_screen tb_B_order_top)
 [ $# -gt 0 ] && TBS=("$@")
 
 status=0

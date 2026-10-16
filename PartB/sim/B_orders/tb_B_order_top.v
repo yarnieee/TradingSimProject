@@ -2,31 +2,30 @@
 `include "trading_defs.vh"
 `include "ticket_layout.vh"
 
-// tb_part_b_top: spec section 10 scenarios, end to end, through the real UI
+// tb_B_order_top: spec section 10 scenarios, end to end, through the real UI
 // path (clicks, scroll, buttons) with stub_market and stub_ledger standing in
 // for A and C. stub_ledger stops the sim with FAIL if cash or a position ever
 // goes out of range, or if a fill arrives while ledger_busy.
 //
 // Run order is 1-7, 9-12, 8, 13 so the book is empty where a scenario needs
 // it: scenario 8 fills the book, and 13 (reset mid-scan) is what clears it.
-module tb_part_b_top;
+module tb_B_order_top;
     reg clk = 0;
     always #5 clk = ~clk;
 
     // ------------------------------------------------------------ stimulus
     reg        sys_reset = 1;
-    reg        game_live = 1;
+    reg [1:0]  game_state = `GS_PLAYING;
     reg [1:0]  sel_stock = 0;
-    reg        ticket_active = 1;
+    reg        page_R = `PG_R_TICKET;
     reg        ui_click = 0;
-    reg        ui_screen = 1;
+    reg [1:0]  ui_screen = `SCR_RIGHT;
     reg [6:0]  ui_x = 0;
     reg [5:0]  ui_y = 0;
     reg [3:0]  qty_delta = 0;
-    reg        qty_delta_valid = 0;
-    reg        key_up = 0, key_down = 0, key_left = 0, key_right = 0, key_center = 0;
-    reg [6:0]  pix_x = 0;
-    reg [5:0]  pix_y = 0;
+    reg [4:0]  btn_pulse = 0;
+    reg [6:0]  xR = 0;
+    reg [5:0]  yR = 0;
 
     reg [1:0]  mkt_mode = 0;
     reg        tick_req = 0;
@@ -43,7 +42,7 @@ module tb_part_b_top;
     wire        fill, fill_side, reject;
     wire [1:0]  fill_stock;
     wire [7:0]  fill_qty;
-    wire [15:0] fill_price, fill_fee, ticket_pix;
+    wire [15:0] fill_price, fill_fee, ticket_pixel;
     wire [2:0]  reject_code;
     wire [3:0]  pending_count;
 
@@ -61,20 +60,18 @@ module tb_part_b_top;
         .ledger_busy(ledger_busy)
     );
 
-    part_b_top #(.REJ_SHOW_CYCLES(1000)) u_dut (
-        .clk(clk), .sys_reset(sys_reset), .game_live(game_live),
+    B_order_top #(.REJ_SHOW_CYCLES(1000)) u_dut (
+        .clk(clk), .sys_reset(sys_reset), .game_state(game_state),
         .price0(price0), .price1(price1), .price2(price2), .price3(price3), .tick(tick),
-        .sel_stock(sel_stock), .ticket_active(ticket_active),
+        .sel_stock(sel_stock), .page_R(page_R),
         .ui_click(ui_click), .ui_screen(ui_screen), .ui_x(ui_x), .ui_y(ui_y),
-        .qty_delta(qty_delta), .qty_delta_valid(qty_delta_valid),
-        .key_up(key_up), .key_down(key_down), .key_left(key_left),
-        .key_right(key_right), .key_center(key_center),
+        .qty_delta(qty_delta), .btn_pulse(btn_pulse),
         .cash(cash), .pos0(pos0), .pos1(pos1), .pos2(pos2), .pos3(pos3),
-        .ledger_busy(ledger_busy), .pix_x(pix_x), .pix_y(pix_y),
+        .ledger_busy(ledger_busy), .xR(xR), .yR(yR),
         .fill(fill), .fill_stock(fill_stock), .fill_side(fill_side),
         .fill_qty(fill_qty), .fill_price(fill_price), .fill_fee(fill_fee),
         .reject(reject), .reject_code(reject_code), .pending_count(pending_count),
-        .ticket_pix(ticket_pix)
+        .ticket_pixel(ticket_pixel)
     );
 
     // ------------------------------------------------------------ event log
@@ -142,7 +139,7 @@ module tb_part_b_top;
         input [6:0] x;
         input [5:0] y;
         begin
-            ui_x = x; ui_y = y; ui_screen = 1;
+            ui_x = x; ui_y = y; ui_screen = `SCR_RIGHT;
             ui_click = 1; step(1); ui_click = 0; step(2);
         end
     endtask
@@ -150,23 +147,17 @@ module tb_part_b_top;
     task scroll;
         input integer n;    // -8..7
         begin
-            qty_delta = n; qty_delta_valid = 1; step(1); qty_delta_valid = 0; step(2);
+            qty_delta = n; step(1); qty_delta = 0; step(2);   // non-zero for one clock
         end
     endtask
 
-    localparam K_UP = 0, K_DOWN = 1, K_LEFT = 2, K_RIGHT = 3, K_CENTER = 4;
+    localparam K_UP = `BTN_U, K_DOWN = `BTN_D, K_LEFT = `BTN_L, K_RIGHT = `BTN_R, K_CENTER = `BTN_C;
     task press;
         input integer k;
         begin
-            case (k)
-                K_UP:     key_up = 1;
-                K_DOWN:   key_down = 1;
-                K_LEFT:   key_left = 1;
-                K_RIGHT:  key_right = 1;
-                default:  key_center = 1;
-            endcase
+            btn_pulse = 5'b00001 << k;
             step(1);
-            key_up = 0; key_down = 0; key_left = 0; key_right = 0; key_center = 0;
+            btn_pulse = 0;
             step(2);
         end
     endtask
@@ -322,13 +313,13 @@ module tb_part_b_top;
         check(n_rej == b_rej + 1 && last_rej == `RJ_BAD_QTY && n_fill == b_fill, "S4 RJ_BAD_QTY");
 
         // ------------------------------------------------ 5
-        scenario("5 submit while game_live = 0");
+        scenario("5 submit while game_state is not PLAYING");
         set_stock(0);
-        game_live = 0;
+        game_state = `GS_MENU;
         mark;
         order(`SIDE_BUY, `OT_MKT, 1, 0);
         check(n_rej == b_rej + 1 && last_rej == `RJ_NOT_LIVE && n_fill == b_fill, "S5 RJ_NOT_LIVE");
-        game_live = 1;
+        game_state = `GS_PLAYING;
 
         // ------------------------------------------------ 6
         scenario("6 LMT BUY 10 @ 12000, price ramps down");
@@ -410,10 +401,15 @@ module tb_part_b_top;
         set_qty(5);
         set_trig(10000);                               // below bid, so it rests
         click(`CX(`TK_SELL_X0, `TK_SELL_X1), 6'd0);   // y = 0: off the ticket, no effect
-        ui_screen = 0;                                 // left OLED: ignored
+        ui_screen = `SCR_LEFT;                         // left OLED: ignored
         ui_x = `CX(`TK_SELL_X0, `TK_SELL_X1); ui_y = `CX(`TK_BTN_Y0, `TK_BTN_Y1);
-        ui_click = 1; step(1); ui_click = 0; step(2); ui_screen = 1;
-        check(u_dut.u_entry.side == `SIDE_BUY, "S11 clicks off-ticket or on left screen ignored");
+        ui_click = 1; step(1); ui_click = 0; step(2); ui_screen = `SCR_RIGHT;
+        page_R = `PG_R_PORTFOLIO;                      // Portfolio page showing: ignored
+        click(`CX(`TK_SELL_X0, `TK_SELL_X1), `CX(`TK_BTN_Y0, `TK_BTN_Y1));
+        press(K_CENTER);                               // focus is trig: would cycle MKT -> LMT
+        page_R = `PG_R_TICKET;
+        check(u_dut.u_entry.side == `SIDE_BUY, "S11 off-ticket, left-screen and Portfolio-page clicks ignored");
+        check(u_dut.u_entry.focus == 1 && u_dut.u_entry.otype == `OT_MKT, "S11 button ignored on Portfolio page");
         mark;
         click(`CX(`TK_SELL_X0, `TK_SELL_X1), `CX(`TK_BTN_Y0, `TK_BTN_Y1));
         click(`CX(`TK_TYPE_X0, `TK_TYPE_X1), `CX(`TK_BTN_Y0, `TK_BTN_Y1));
@@ -475,14 +471,14 @@ module tb_part_b_top;
         // ------------------------------------------------ done
         $display("     final cash %0d, pos %0d/%0d/%0d/%0d, %0d fills, %0d rejects",
                  cash, pos0, pos1, pos2, pos3, n_fill, n_rej);
-        if (n_fail == 0) $display("PASS: tb_part_b_top (%0d checks)", n_pass);
-        else             $display("FAIL: tb_part_b_top (%0d failed, %0d passed)", n_fail, n_pass);
+        if (n_fail == 0) $display("PASS: tb_B_order_top (%0d checks)", n_pass);
+        else             $display("FAIL: tb_B_order_top (%0d failed, %0d passed)", n_fail, n_pass);
         $finish;
     end
 
     initial begin
         #20_000_000;
-        $display("FAIL: tb_part_b_top timeout");
+        $display("FAIL: tb_B_order_top timeout");
         $finish;
     end
 endmodule

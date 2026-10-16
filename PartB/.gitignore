@@ -1,0 +1,19 @@
+# simulation output
+sim/out/
+
+# Vivado
+*.jou
+*.log
+*.str
+*.cache/
+*.hw/
+*.ip_user_files/
+*.runs/
+*.sim/
+.Xil/
+
+# Python
+__pycache__/
+
+# macOS
+.DS_Store

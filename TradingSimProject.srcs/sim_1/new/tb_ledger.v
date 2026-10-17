@@ -39,7 +39,7 @@ module tb_ledger;
         .fill_qty(fill_qty), .fill_price(fill_price), .fill_fee(fill_fee),
         .cash(cash), .pos0(pos0), .pos1(pos1), .pos2(pos2), .pos3(pos3),
         .cb0(cb0), .cb1(cb1), .cb2(cb2), .cb3(cb3),
-        .realised(realised), .busy(busy), .err(err)
+        .realised(realised), .ledger_busy(busy), .err(err)
     );
 
     always #5 clk = ~clk;
@@ -52,6 +52,10 @@ module tb_ledger;
         @(negedge clk); fill_stock = s; fill_side = side; fill_qty = q;
                         fill_price = p; fill_fee = f; fill = 1;
         @(negedge clk); fill = 0;
+        if (!busy) begin
+            $display("FAIL ledger_busy not high the clock after fill");
+            errors = errors + 1;
+        end
         wait (!busy); @(negedge clk);
     end
     endtask

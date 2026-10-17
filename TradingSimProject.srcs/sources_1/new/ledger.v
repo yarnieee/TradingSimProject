@@ -21,11 +21,12 @@
 
 
 
-// Applies fills from B: tracks cash, positions, cost basis (incl. buy fees) and realised P&L.
+// Handshake: ledger_busy goes high the clock after EVERY fill (buy, sell or reject)
+//            and drops on the same clock cash/positions are updated.
 // Invariant (always true when idle): cash + sum(cost_basis) == START_CASH + realised
 module ledger #(parameter [31:0] START_CASH = 32'd1_000_000) (   // cents ($10,000)
     input  wire        clk,
-    input  wire        rst,          
+    input  wire        rst,          // also used for new game
     // fill bus from B
     input  wire        fill,         // 1-cycle pulse
     input  wire [1:0]  fill_stock,
@@ -38,7 +39,7 @@ module ledger #(parameter [31:0] START_CASH = 32'd1_000_000) (   // cents ($10,0
     output wire [9:0]  pos0, pos1, pos2, pos3,
     output wire [31:0] cb0,  cb1,  cb2,  cb3,
     output reg  signed [31:0] realised,
-    output wire        busy,         // high while a sell is processing: B must wait
+    output wire        ledger_busy,  // B must not check/send the next order while high
     output reg         err           // 1-cycle pulse when a fill is rejected
 );
     reg [9:0]  pos [0:3];
@@ -46,9 +47,9 @@ module ledger #(parameter [31:0] START_CASH = 32'd1_000_000) (   // cents ($10,0
     assign pos0 = pos[0]; assign pos1 = pos[1]; assign pos2 = pos[2]; assign pos3 = pos[3];
     assign cb0  = cb[0];  assign cb1  = cb[1];  assign cb2  = cb[2];  assign cb3  = cb[3];
 
-    localparam IDLE = 2'd0, DIV = 2'd1, APPLY = 2'd2;
-    reg [1:0] state;
-    assign busy = (state != IDLE);
+    localparam IDLE = 3'd0, DIV = 3'd1, APPLY = 3'd2, BUY = 3'd3, DONE = 3'd4;
+    reg [2:0] state;
+    assign ledger_busy = (state != IDLE);   // state is a register, so this is clean
 
     // latched copy of the fill being processed
     reg [1:0]  s_l;
@@ -56,8 +57,9 @@ module ledger #(parameter [31:0] START_CASH = 32'd1_000_000) (   // cents ($10,0
     reg [23:0] v_l;       // trade value = price * qty
     reg [15:0] f_l;
     reg [31:0] removed;   // cost basis removed by a sell
+    wire [31:0] cost_l = v_l + f_l;
 
-    // values computed straight from the incoming fill
+    // values computed straight from the incoming fill (for validation)
     wire [23:0] value_in = fill_price * fill_qty;
     wire [31:0] cost_in  = value_in + fill_fee;
     wire [10:0] newpos   = pos[fill_stock] + fill_qty;   // 11 bits so overflow is visible
@@ -94,26 +96,30 @@ module ledger #(parameter [31:0] START_CASH = 32'd1_000_000) (   // cents ($10,0
             IDLE: if (fill) begin
                 s_l <= fill_stock; q_l <= fill_qty; v_l <= value_in; f_l <= fill_fee;
                 if (fill_qty == 0) begin
-                    err <= 1'b1;
-                end else if (fill_side == 1'b0) begin                    //BUY
-                    if (cost_in > cash || newpos > 11'd1023)
-                        err <= 1'b1;
-                    else begin
-                        cash            <= cash - cost_in;
-                        pos[fill_stock] <= newpos[9:0];
-                        cb[fill_stock]  <= cb[fill_stock] + cost_in;
-                    end
-                end else begin                                           // SELL
-                    if (fill_qty > pos[fill_stock])
-                        err <= 1'b1;
-                    else if (fill_qty == pos[fill_stock]) begin          // full close, no divide
+                    err <= 1'b1; state <= DONE;
+                end else if (fill_side == 1'b0) begin                    // ---- BUY
+                    if (cost_in > cash || newpos > 11'd1023) begin
+                        err <= 1'b1; state <= DONE;
+                    end else
+                        state <= BUY;
+                end else begin                                           // ---- SELL
+                    if (fill_qty > pos[fill_stock]) begin
+                        err <= 1'b1; state <= DONE;
+                    end else if (fill_qty == pos[fill_stock]) begin      // full close: no divide
                         removed <= cb[fill_stock];
                         state   <= APPLY;
-                    end else begin                                       // partial, need avg cost
+                    end else begin                                       // partial: need avg cost
                         div_start <= 1'b1;
                         state     <= DIV;
                     end
                 end
+            end
+
+            BUY: begin
+                cash     <= cash - cost_l;
+                pos[s_l] <= pos[s_l] + q_l;
+                cb[s_l]  <= cb[s_l] + cost_l;
+                state    <= IDLE;
             end
 
             DIV: if (div_done) begin
@@ -122,12 +128,14 @@ module ledger #(parameter [31:0] START_CASH = 32'd1_000_000) (   // cents ($10,0
             end
 
             APPLY: begin
-                cash       <= cash + v_l - f_l;
-                realised   <= realised + delta[31:0];
-                cb[s_l]    <= cb[s_l] - removed;
-                pos[s_l]   <= pos[s_l] - q_l;
-                state      <= IDLE;
+                cash     <= cash + v_l - f_l;
+                realised <= realised + delta[31:0];
+                cb[s_l]  <= cb[s_l] - removed;
+                pos[s_l] <= pos[s_l] - q_l;
+                state    <= IDLE;
             end
+
+            DONE: state <= IDLE;            // reject: hold busy for one clock, change nothing
 
             default: state <= IDLE;
             endcase

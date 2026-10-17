@@ -79,6 +79,45 @@ Logs, frame dumps (`ticket_frame*.hex`) and PNGs land in `sim/out/`.
    Look for the `PASS:` line in the Tcl console. The frame dumps are written to the
    simulation run directory (`<project>.sim/sim_1/behav/xsim/`).
 
+## Board test for prototype 1 (Monday)
+
+`board/B_demo_top.v` is a stand-alone top for checking Part B on the Basys3 before the
+team top level (`My_Top_Module`) is ready. It does not replace or touch the team top.
+
+| Board | Does |
+|---|---|
+| Right OLED on **JB** | Order Ticket page |
+| btnU / btnD | change the focused field (qty +/-1, trigger +/-5c) |
+| btnL / btnR | move focus: qty, trigger, SUBMIT |
+| btnC | on qty: BUY/SELL; on trigger: MKT/LMT/STP; on SUBMIT: submit |
+| sw[15] | reset (hold up), plus an automatic power-on reset |
+| sw[1:0] | fake market: 0 flat, 1 up ~1%/tick, 2 down ~1%/tick, 3 gap down |
+| sw[3:2] | stock: 0 ABC, 1 TEK, 2 NRG, 3 MEM |
+| led[9:0] | position in the selected stock |
+| led[13:10] | pending orders |
+| led[14] / led[15] | flash on reject / fill |
+
+**Vivado steps**
+1. Add the Part B sources (see "In Vivado" above), plus `board/B_demo_top.v` and
+   `board/b_demo_btn.v` as design sources, `sim/stubs/stub_market.v` and
+   `sim/stubs/stub_ledger.v` as design sources, and `board/B_demo.xdc` as a constraint.
+   `Oled_Display.v` and `slower_clk.v` are already in the team project.
+2. Disable `Basys3_Master.xdc` and set `B_demo_top` as top.
+3. To use Tricia's real ledger instead of the stub: add her `ledger.v` and `seq_divider.v`,
+   and add the Verilog define `USE_PART_C` (Settings > General > Verilog options > Defines).
+4. Generate the bitstream, and check the timing summary (WNS should be positive).
+
+**What to try:** flip sw[3:2] to 01 (TEK), press btnU twice (qty 3), btnR twice (SUBMIT),
+btnC. led[15] flashes, led[9:0] shows 3, the status line shows `FILL B003@ 45.25`. Then btnR
+(back to qty), btnC (SELL), btnU twice (qty 5), btnR twice, btnC: led[14] flashes,
+`REJ NO POS`. For a limit order: set the trigger below the price, type LMT, submit, then
+sw[1:0] = 10 (market falls) and watch it fill.
+
+**Already checked in simulation** (`sim/run_demo_sim.sh`, ~2 min): bouncy presses give one
+pulse each, the buy and the reject above, the LEDs, and one whole frame captured from the
+real `Oled_Display` driver, with both the stub and the real ledger.
+`sim/run_integration.sh` runs Part B against Tricia's real ledger (73 checks).
+
 ## How it fits together
 
 ```

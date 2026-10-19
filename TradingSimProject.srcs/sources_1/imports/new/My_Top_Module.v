@@ -80,7 +80,8 @@ module MyTopModule (
 
     wire [3:0] screen_state;
     wire [13:0] quantity;
-    wire [1:0] menu_selection;
+    wire [2:0] selected_stock;
+    wire [3:0] menu_selection;
 
     game_fsm game_fsm_inst (
         .clk(clk),
@@ -92,6 +93,7 @@ module MyTopModule (
         .btnC(btnC_pulse),
         .screen_state(screen_state),
         .quantity(quantity),
+        .selected_stock(selected_stock),
         .menu_selection(menu_selection)
     );
 
@@ -110,6 +112,7 @@ module MyTopModule (
     OLED_Renderer Oled_Renderer (
         .pixel_index(pixel_index),
         .screen_state(screen_state),
+        .selected_stock(selected_stock),
         .menu_selection(menu_selection),
         .pixel_data(pixel_data)
     );
@@ -117,6 +120,7 @@ module MyTopModule (
     OLED_Button_Renderer Oled_Button_Renderer (
         .pixel_index(pixel_index_ja),
         .screen_state(screen_state),
+        .selected_stock(selected_stock),
         .menu_selection(menu_selection),
         .btnU(btnU_debounced),
         .btnD(btnD_debounced),

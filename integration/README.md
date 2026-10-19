@@ -24,7 +24,6 @@ TradingSimProject/
 │   ├── Integration.xdc                             pins (Matthew's, plus JA for the second OLED)
 │   ├── create_integration_project.tcl              builds the Vivado project
 │   ├── run_all_tests.tcl                           Vivado: runs every testbench
-│   ├── run_all_tests.sh, run_sim.sh                the same with Icarus (Mac/Linux)
 │   ├── tb_integration.v                            the whole game, end to end
 │   └── tests/tb_yian_market.v, tb_matthew_game_fsm.v
 │
@@ -93,8 +92,8 @@ Simulation, and look for its `PASS:` or `FAIL:` line in the Tcl Console.
 | `tb_BC_ledger` | Douglas + Tricia | 60 random orders against Tricia's real ledger, busy handshake, invariant | PASS (73) |
 | `tb_order_validate`, `tb_order_book`, `tb_exec_engine`, `tb_ticket_screen`, `tb_B_order_top` | Douglas | order engine unit and end-to-end tests | PASS (29, 30, 21, 18, 52) |
 
-These results are from Icarus Verilog on a Mac (`./run_all_tests.sh`). The Vivado runner has not been
-run yet. If `tb_integration` or `tb_yian_market` reports prices of 0, the simulator did not find
+The expected results were checked in simulation before this branch was pushed; the Vivado
+runner itself has not been run yet. If `tb_integration` or `tb_yian_market` reports prices of 0, the simulator did not find
 `AMD_seed.mem` / `MCD_seed.mem`: copy both into `Integration_vivado/Integration.sim/sim_1/behav/xsim/`
 and rerun.
 

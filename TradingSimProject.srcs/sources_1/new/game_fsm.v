@@ -11,7 +11,8 @@ module game_fsm (
     input        btnR,
     input        btnC,
     output reg [3:0]  screen_state,
-    output reg [13:0] quantity
+    output reg [13:0] quantity,
+    output     [1:0]  menu_selection
 );
 
     localparam TITLE       = 4'd0;
@@ -46,6 +47,11 @@ module game_fsm (
     reg [1:0] sell_cursor;         // 0 back, 1 quantity, 2 confirmation
     reg [1:0] next_sell_cursor;
 
+    // Selection exposed to the display layer. Title has one fixed OK button;
+    // the portfolio screen uses 0=Portfolio and 1=Stocks.
+    assign menu_selection = (screen_state == PORTFOLIO) ?
+                            {1'b0, portfolio_cursor[0]} : 2'd0;
+
     always @(*) begin
         next_state = screen_state;
         next_quantity = quantity;
@@ -69,9 +75,14 @@ module game_fsm (
                 if (btnR) next_portfolio_cursor = 1;
                 if (btnL) next_portfolio_cursor = 0;
 
-                if (btnC && (portfolio_cursor == 1)) begin
-                    next_state = STOCKS;
-                    next_stocks_cursor = 0;
+                if (btnC) begin
+                    if (portfolio_cursor == 0) begin
+                        // Portfolio is already the active state.
+                        next_state = PORTFOLIO;
+                    end else begin
+                        next_state = STOCKS;
+                        next_stocks_cursor = 0;
+                    end
                 end
             end
 

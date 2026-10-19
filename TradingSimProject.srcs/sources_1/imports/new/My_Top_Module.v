@@ -16,6 +16,7 @@ module MyTopModule (
     input btnL,
     input btnR,
     input btnC,
+    output [7:0] JA,
     output [7:0] JB,
     output [15:0] led,
     output [3:0] an,
@@ -97,11 +98,28 @@ module MyTopModule (
     wire sample_pixel;
     wire [12:0] pixel_index; // 0 to 6143 for a 96x64 display
     wire [15:0] pixel_data;
+
+    wire frame_begin_ja;
+    wire sending_pixels_ja;
+    wire sample_pixel_ja;
+    wire [12:0] pixel_index_ja;
+    wire [15:0] pixel_data_ja;
     
     OLED_Renderer Oled_Renderer (
         .pixel_index(pixel_index),
         .screen_state(screen_state),
         .pixel_data(pixel_data)
+    );
+
+    OLED_Button_Renderer Oled_Button_Renderer (
+        .pixel_index(pixel_index_ja),
+        .screen_state(screen_state),
+        .btnU(btnU_debounced),
+        .btnD(btnD_debounced),
+        .btnL(btnL_debounced),
+        .btnR(btnR_debounced),
+        .btnC(btnC_debounced),
+        .pixel_data(pixel_data_ja)
     );
     
     // The project source list contains module oled_display, whose name is
@@ -123,6 +141,25 @@ module MyTopModule (
         .pmoden(JB[7])
     );
 
+    // Second OLED on JA. It uses the same current-state text as JB, while
+    // OLED_Button_Renderer rotates the image for the upside-down mounting.
+    oled_display Oled_Display_JA_Inst (
+        .clk(clk_6_25Hz),
+        .reset(rst),
+        .pixel_data(pixel_data_ja),
+        .frame_begin(frame_begin_ja),
+        .sending_pixels(sending_pixels_ja),
+        .sample_pixel(sample_pixel_ja),
+        .pixel_index(pixel_index_ja),
+        .cs(JA[0]),
+        .sdin(JA[1]),
+        .sclk(JA[3]),
+        .d_cn(JA[4]),
+        .resn(JA[5]),
+        .vccen(JA[6]),
+        .pmoden(JA[7])
+    );
+
     quantity_7seg quantity_7seg_inst (
         .clk(clk),
         .rst(rst),
@@ -132,6 +169,8 @@ module MyTopModule (
     );
 
     // JB[2] is unused by the OLED PMOD connection.
+    // JA[2] is unused by the second OLED PMOD connection.
+    assign JA[2] = 1'b0;
     assign JB[2] = 1'b0;
     assign led = {8'b0, screen_state, 4'b0};
 
@@ -147,6 +186,7 @@ module My_Top_Module (
     input btnL,
     input btnR,
     input btnC,
+    output [7:0] JA,
     output [7:0] JB,
     output [15:0] led,
     output [3:0] an,
@@ -161,6 +201,7 @@ module My_Top_Module (
         .btnL(btnL),
         .btnR(btnR),
         .btnC(btnC),
+        .JA(JA),
         .JB(JB),
         .led(led),
         .an(an),

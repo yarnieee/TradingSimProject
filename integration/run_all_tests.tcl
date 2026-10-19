@@ -4,12 +4,12 @@
 #
 # Usage, in the Vivado Tcl Console, with the Integration project open:
 #   source C:/EE2026/TradingSimProject/integration/run_all_tests.tcl
-# To run only some:  set only_tbs {tb_integration tb_A_market}  before sourcing.
+# To run only some:  set only_tbs {tb_integration tb_yian_market}  before sourcing.
 
 set all_tbs {
     tb_integration
-    tb_A_market
-    tb_D_game_fsm
+    tb_yian_market
+    tb_matthew_game_fsm
     tb_ledger
     tb_seq_divider
     tb_BC_ledger
@@ -58,4 +58,4 @@ foreach tb $tbs {
 
 puts "\n=============== SUMMARY ==============="
 foreach line $summary { puts $line }
-puts "(tb_A_market is expected to FAIL until A's stock.v price fix: see integration/README.md)"
+puts "(tb_yian_market is expected to FAIL until Yi An's stock.v price fix: see integration/README.md)"

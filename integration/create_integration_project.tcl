@@ -1,6 +1,6 @@
 # create_integration_project.tcl
-# Builds a Vivado project for Integration_Top (all four parts) from the files
-# in this branch, used in place. The project is created NEXT TO the repo
+# Builds a Vivado project for Integration_Top (everyone's part) from the files
+# in this branch (branch-team-integration), used in place. The project is created NEXT TO the repo
 # folder, so TradingSimProject.xpr is never touched.
 #
 # Usage, in the Vivado Tcl Console (forward slashes, even on Windows):
@@ -25,23 +25,23 @@ proc add_list {fileset files} {
     add_files -fileset $fileset -norecurse $files
 }
 
-# ---------------------------------------------------------------- A (Yi An)
+# ---------------------------------------------------------------- Yi An: market engine
 set a "$srcs/imports/storage"
 add_list sources_1 [list \
     "$a/A_top.v" "$a/day_ticker.v" "$a/get_30_values.v" "$a/lfsr.v" "$a/market_state.v" \
     "$a/normalise_lfsr.v" "$a/startup_seed.v" "$a/stock.v" "$a/storage_buffer.v" \
     "$a/AMD_seed.mem" "$a/MCD_seed.mem"]
 
-# ---------------------------------------------------------------- B (Douglas)
+# ---------------------------------------------------------------- Douglas: orders
 add_list sources_1 [glob "$partb/src/shared/*.vh" "$partb/src/B_orders/*.vh" "$partb/src/B_orders/*.v"]
 add_list sources_1 [list "$partb/sim/stubs/stub_font.v"]
 set_property include_dirs [list "$partb/src/shared" "$partb/src/B_orders"] [get_filesets sources_1]
 
-# ---------------------------------------------------------------- C (Tricia)
+# ---------------------------------------------------------------- Tricia: ledger
 add_list sources_1 [list "$srcs/new/ledger.v" "$srcs/new/seq_divider.v"]
 
-# ---------------------------------------------------------------- D (Matthew)
-# Only D's copies of slower_clk and oled_display: the older imports/new copies
+# ---------------------------------------------------------------- Matthew: game, display
+# Only Matthew's copies of slower_clk and oled_display: the older imports/new copies
 # define the same modules and would clash.
 set d "$srcs/imports/verilog_code_snippets"
 add_list sources_1 [list \
@@ -55,20 +55,20 @@ set_property top Integration_Top [get_filesets sources_1]
 add_list constrs_1 [list "$here/Integration.xdc"]
 
 # ---------------------------------------------------------------- simulation
-# Every testbench in the branch, plus B's test stand-ins for A and C. Pick one
+# Every testbench in the branch, plus Douglas's test stand-ins (stub market, stub ledger). Pick one
 # with right-click > Set as Top under Simulation Sources, or run them all with
 #   source <repo>/integration/run_all_tests.tcl
 add_list sim_1 [list \
     "$here/tb_integration.v" \
-    "$here/tests/tb_A_market.v" \
-    "$here/tests/tb_D_game_fsm.v" \
+    "$here/tests/tb_yian_market.v" \
+    "$here/tests/tb_matthew_game_fsm.v" \
     "$repo/TradingSimProject.srcs/sim_1/new/tb_ledger.v" \
     "$srcs/new/tb_seq_divider.v" \
     "$partb/sim/integration/tb_BC_ledger.v" \
     "$partb/sim/stubs/stub_market.v" \
     "$partb/sim/stubs/stub_ledger.v"]
 add_list sim_1 [glob "$partb/sim/B_orders/tb_*.v"]
-# (A's .mem files are in sources_1, which sim_1 inherits; the simulator copies them to its run folder.)
+# (Yi An's .mem files are in sources_1, which sim_1 inherits; the simulator copies them to its run folder.)
 set_property include_dirs [list "$partb/src/shared" "$partb/src/B_orders"] [get_filesets sim_1]
 set_property top tb_integration [get_filesets sim_1]
 set_property -name {xsim.simulate.runtime} -value {all} -objects [get_filesets sim_1]

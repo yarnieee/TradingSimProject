@@ -2,26 +2,26 @@
 `default_nettype none
 `include "trading_defs.vh"
 
-// Integration_Top: all four parts in one build (branch-integration).
+// Integration_Top: everyone's part in one build (branch-team-integration).
 //
-//   A  A_top (Yi An)            2 stocks (AMD, MCD), one trading day every 2 s
-//   B  B_order_top (Douglas)    validates and fills orders, order book, ticket page
-//   C  ledger (Tricia)          cash, positions, cost basis, ledger_busy handshake
-//   D  game_fsm etc. (Matthew)  buttons, screens, quantity on the 7-seg
+//   Yi An    market engine   A_top         2 stocks (AMD, MCD), one trading day every 2 s
+//   Douglas  orders          B_order_top   validates and fills orders, order book, ticket page
+//   Tricia   ledger          ledger        cash, positions, cost basis, ledger_busy handshake
+//   Matthew  game / display  game_fsm etc. buttons, screens, quantity on the 7-seg
 //
 // Nobody's module is edited. Everything that joins them is in the ADAPTERS
 // section below; each adapter says which change in the owner's code would
 // replace it. Board:
-//   sw[0] (rst)   reset, as in D's constraints
-//   buttons       D's game FSM (title > portfolio > stocks > stock > buy/sell > quantity > confirm)
-//   JB (right)    D's game screens
-//   JA (left)     B's order ticket: bid/ask, last fill or reject, pending count
-//                 (temporary, until A's chart page exists for this screen)
-//   7-seg         D's quantity
-//   led[7:4]      D's screen_state;  led[15] fill;  led[14] reject;  led[11:8] pending orders
+//   sw[0] (rst)   reset, as in Matthew's constraints
+//   buttons       Matthew's game FSM (title > portfolio > stocks > stock > buy/sell > quantity > confirm)
+//   JB (right)    Matthew's game screens
+//   JA (left)     Douglas's order ticket: bid/ask, last fill or reject, pending count
+//                 (temporary, until Yi An's chart page exists for this screen)
+//   7-seg         Matthew's quantity
+//   led[7:4]      Matthew's screen_state;  led[15] fill;  led[14] reject;  led[11:8] pending orders
 module Integration_Top #(
-    parameter DAY_MAX_COUNT = 199_999_999,      // A: 2 s per trading day
-    parameter DEBOUNCE_CTR  = 32'd1_999_999     // D: 20 ms
+    parameter DAY_MAX_COUNT = 199_999_999,      // Yi An: 2 s per trading day
+    parameter DEBOUNCE_CTR  = 32'd1_999_999     // Matthew: 20 ms
 ) (
     input  wire        clk,
     input  wire        rst,
@@ -43,7 +43,7 @@ module Integration_Top #(
         sys_reset <= rst_s0;
     end
 
-    // ================================================================ D: buttons, game FSM, 7-seg, right OLED
+    // ================================================================ MATTHEW: buttons, game FSM, 7-seg, right OLED
     wire btnU_db, btnD_db, btnL_db, btnR_db, btnC_db;
     debouncer #(.DEBOUNCE_CTR(DEBOUNCE_CTR)) debounce_U (.clk(clk), .btn(btnU), .debounced(btnU_db));
     debouncer #(.DEBOUNCE_CTR(DEBOUNCE_CTR)) debounce_D (.clk(clk), .btn(btnD), .debounced(btnD_db));
@@ -92,7 +92,7 @@ module Integration_Top #(
     );
     assign JB[2] = 1'b0;
 
-    // ================================================================ A: market engine
+    // ================================================================ YI AN: market engine
     wire [1:0]  market_state;
     wire        amd_ready, mcd_ready;
     wire [15:0] amd_close, mcd_close;
@@ -100,7 +100,7 @@ module Integration_Top #(
     // Only the current prices are used here. The history outputs (for the chart
     // page) are left unconnected, so synthesis removes the 1800-day history
     // registers, which would not fit the xc7a35t as they are.
-    A_top #(.DAY_MAX_COUNT(DAY_MAX_COUNT)) A_inst (
+    A_top #(.DAY_MAX_COUNT(DAY_MAX_COUNT)) yian_market (
         .clk(clk), .rst(sys_reset),
         .market_state(market_state),
         .amd_ready(amd_ready), .mcd_ready(mcd_ready),
@@ -113,10 +113,10 @@ module Integration_Top #(
     );
 
     // ================================================================ ADAPTERS
-    // --- A -> B, C: price bus. Replace when A outputs price0..3 and tick.
-    //     A updates both stocks on the same internal day tick, and the date
+    // --- Yi An -> Douglas, Tricia: price bus. Replace when A_top outputs price0..3 and tick.
+    //     A_top updates both stocks on the same internal day tick, and the date
     //     always moves on a trading day, so a date change marks the tick.
-    //     Stocks 2 and 3 have no data yet: price 0, which B treats as closed.
+    //     Stocks 2 and 3 have no data yet: price 0, which Douglas's B_order_top treats as closed.
     wire [15:0] price0 = amd_ready ? amd_close : 16'd0;
     wire [15:0] price1 = mcd_ready ? mcd_close : 16'd0;
     wire [15:0] price2 = 16'd0;
@@ -133,7 +133,7 @@ module Integration_Top #(
         end
     end
 
-    // --- D -> B: the order. Replace when game_fsm outputs sel_stock, the
+    // --- Matthew -> Douglas: the order. Replace when game_fsm outputs sel_stock, the
     //     side and a confirm pulse. Screen codes are game_fsm's localparams.
     localparam [3:0] S_TITLE = 4'd0, S_PORTFOLIO = 4'd1, S_STOCKS = 4'd2, S_SPECIFIC = 4'd3,
                      S_BUY = 4'd4, S_SELL = 4'd5, S_CONFIRM = 4'd7, S_GAME_END = 4'd8;
@@ -169,11 +169,11 @@ module Integration_Top #(
         end
     end
 
-    // --- D -> A, B: game state. Replace when D outputs game_state.
+    // --- Matthew -> Yi An, Douglas: game state. Replace when game_fsm outputs game_state.
     wire [1:0] game_state = (screen_state == S_TITLE || screen_state == S_GAME_END)
                             ? `GS_MENU : `GS_PLAYING;
 
-    // ================================================================ C: ledger
+    // ================================================================ TRICIA: ledger
     wire [31:0] cash, cb0, cb1, cb2, cb3;
     wire [9:0]  pos0, pos1, pos2, pos3;
     wire signed [31:0] realised;
@@ -182,7 +182,7 @@ module Integration_Top #(
     wire [1:0]  fill_stock;
     wire [7:0]  fill_qty;
     wire [15:0] fill_price, fill_fee;
-    ledger C_inst (
+    ledger tricia_ledger (
         .clk(clk), .rst(sys_reset),
         .fill(fill), .fill_stock(fill_stock), .fill_side(fill_side),
         .fill_qty(fill_qty), .fill_price(fill_price), .fill_fee(fill_fee),
@@ -191,7 +191,7 @@ module Integration_Top #(
         .realised(realised), .ledger_busy(ledger_busy), .err(ledger_err)
     );
 
-    // ================================================================ B: orders, left OLED
+    // ================================================================ DOUGLAS: orders, left OLED
     wire [12:0] pixel_index_L;
     wire [15:0] ticket_pixel;
     wire        frame_begin_L, sending_pixels_L, sample_pixel_L;
@@ -200,11 +200,11 @@ module Integration_Top #(
     wire [6:0]  xL = pixel_index_L % 96;
     wire [5:0]  yL = pixel_index_L / 96;
 
-    B_order_top B_inst (
+    B_order_top douglas_orders (
         .clk(clk), .sys_reset(sys_reset), .game_state(game_state),
         .price0(price0), .price1(price1), .price2(price2), .price3(price3), .tick(tick),
         .sel_stock(sel_stock),
-        .page_R(`PG_R_PORTFOLIO),        // D owns the buttons: B's own button entry is off
+        .page_R(`PG_R_PORTFOLIO),        // Matthew owns the buttons: Douglas's own button entry is off
         .btn_pulse(5'd0),
         .ord_req(ord_req), .ord_side(ord_side), .ord_type(`OT_MKT),
         .ord_qty(quantity), .ord_trig(16'd0),

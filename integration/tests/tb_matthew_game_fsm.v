@@ -1,9 +1,9 @@
 `timescale 1ns / 1ps
 
-// tb_D_game_fsm: checks Matthew's game_fsm on its own (button pulses in,
+// tb_matthew_game_fsm: checks Matthew's game_fsm on its own (button pulses in,
 // screen_state and quantity out). Covers every screen transition in the
 // current flow and the quantity editor's digits and limits.
-module tb_D_game_fsm;
+module tb_matthew_game_fsm;
     reg clk = 0;
     always #5 clk = ~clk;
     reg rst = 1;
@@ -115,8 +115,8 @@ module tb_D_game_fsm;
         rst = 1; @(negedge clk); rst = 0; @(negedge clk);
         check(screen_state == TITLE && quantity == 0, "reset returns to title, quantity 0");
 
-        if (n_fail == 0) $display("PASS: tb_D_game_fsm (%0d checks)", n_pass);
-        else             $display("FAIL: tb_D_game_fsm (%0d failed, %0d passed)", n_fail, n_pass);
+        if (n_fail == 0) $display("PASS: tb_matthew_game_fsm (%0d checks)", n_pass);
+        else             $display("FAIL: tb_matthew_game_fsm (%0d failed, %0d passed)", n_fail, n_pass);
         $finish;
     end
 endmodule

@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
 
-// tb_A_market: checks A_top (Yi An) on its own.
+// tb_yian_market: checks Yi An's market engine (A_top) on its own.
 //   - both stocks become ready, starting from the LAST row of their seed file
 //     (the most recent trading day, 2025-12-19)
 //   - one tick per trading day: the date moves forward every day
@@ -11,7 +11,7 @@
 // EXPECTED TO FAIL until stock.v's calculate_next_close is fixed (unsigned
 // arithmetic pins prices at 65535; a 10% daily downward drift). See
 // integration/README.md, Known issues. It passes once those are fixed.
-module tb_A_market;
+module tb_yian_market;
     reg clk = 0;
     always #5 clk = ~clk;
     reg rst = 1;
@@ -84,10 +84,10 @@ module tb_A_market;
         check(bad_range == 0, "prices stay between $1.00 and $655.35 (exclusive) for 60 days");
         check(bad_jump == 0,  "no day moves a price by more than 25%");
 
-        if (n_fail == 0) $display("PASS: tb_A_market (%0d checks)", n_pass);
-        else             $display("FAIL: tb_A_market (%0d failed, %0d passed)", n_fail, n_pass);
+        if (n_fail == 0) $display("PASS: tb_yian_market (%0d checks)", n_pass);
+        else             $display("FAIL: tb_yian_market (%0d failed, %0d passed)", n_fail, n_pass);
         $finish;
     end
 
-    initial begin #10_000_000; $display("FAIL: tb_A_market timeout"); $finish; end
+    initial begin #10_000_000; $display("FAIL: tb_yian_market timeout"); $finish; end
 endmodule

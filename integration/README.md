@@ -33,25 +33,28 @@ TradingSimProject/
 │   └── stock.v, day_ticker.v, lfsr.v, normalise_lfsr.v, market_state.v,
 │       startup_seed.v, storage_buffer.v, get_30_values.v
 │
-├── PartB/                                          DOUGLAS
-│   ├── src/shared/trading_defs.vh                  codes shared by everyone
-│   ├── src/B_orders/                               B_order_top.v and its modules
-│   ├── sim/                                        testbenches and test stand-ins
-│   └── AI_USAGE_LOG.md
-│
-├── TradingSimProject.srcs/sources_1/new/           TRICIA and MATTHEW share this folder
+├── TradingSimProject.srcs/sources_1/new/           DOUGLAS, TRICIA and MATTHEW share this folder
+│   ├── B_order_top.v, order_entry.v, order_validate.v, exec_engine.v, order_book.v,
+│   │   spread_calc.v, ticket_screen.v, b_bin2bcd_seq.v, stub_font.v,
+│   │   trading_defs.vh, ticket_layout.vh           Douglas
 │   ├── ledger.v, seq_divider.v, tb_seq_divider.v   Tricia
 │   └── game_fsm.v, OLED_Renderer.v, text_layer.v, font_renderer.v,
 │       quantity_7seg.v, binary_to_bcd_14bit.v      Matthew
-├── TradingSimProject.srcs/sim_1/new/tb_ledger.v    Tricia
-└── TradingSimProject.srcs/sources_1/imports/verilog_code_snippets/   MATTHEW
-    └── input_btn/debouncer.v, clocks/slower_clk.v, output_oled/oled_display.v
+├── TradingSimProject.srcs/sim_1/new/               testbenches
+│   ├── tb_order_validate.v, tb_order_book.v, tb_exec_engine.v, tb_ticket_screen.v,
+│   │   tb_B_order_top.v, tb_BC_ledger.v, stub_market.v, stub_ledger.v   Douglas
+│   └── tb_ledger.v                                 Tricia
+├── TradingSimProject.srcs/sources_1/imports/verilog_code_snippets/   MATTHEW
+│   └── input_btn/debouncer.v, clocks/slower_clk.v, output_oled/oled_display.v
+│
+├── README_douglas_orders.md                        Douglas's notes on the order engine
+└── AI_USAGE_LOG.md                                 what was AI-generated
 ```
 
 Not used by this build: `TradingSimProject.xpr` (main's old copy), Matthew's `My_Top_Module.v`
 (replaced by `Integration_Top`), the older `imports/new/Oled_Display.v` and `slower_clk.v`
-(duplicates of Matthew's copies), the mouse files (the mouse is out), and `PartB/board/`
-(Douglas's stand-alone demo).
+(duplicates of Matthew's copies), the mouse files (the mouse is out), and Douglas's stand-alone board test
+(`B_demo_top.v`, `b_demo_btn.v`, `tb_B_demo_top.v`, `constrs_1/new/B_demo.xdc`).
 
 ## Opening it in Vivado (Windows)
 

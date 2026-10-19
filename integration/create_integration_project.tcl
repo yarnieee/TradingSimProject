@@ -10,7 +10,6 @@
 set here  [file dirname [file normalize [info script]]]
 set repo  [file normalize "$here/.."]
 set srcs  "$repo/TradingSimProject.srcs/sources_1"
-set partb "$repo/PartB"
 if {![info exists proj_dir]} { set proj_dir [file normalize "$repo/../Integration_vivado"] }
 puts "Repo   : $repo"
 puts "Project: $proj_dir"
@@ -33,9 +32,12 @@ add_list sources_1 [list \
     "$a/AMD_seed.mem" "$a/MCD_seed.mem"]
 
 # ---------------------------------------------------------------- Douglas: orders
-add_list sources_1 [glob "$partb/src/shared/*.vh" "$partb/src/B_orders/*.vh" "$partb/src/B_orders/*.v"]
-add_list sources_1 [list "$partb/sim/stubs/stub_font.v"]
-set_property include_dirs [list "$partb/src/shared" "$partb/src/B_orders"] [get_filesets sources_1]
+set n "$srcs/new"
+add_list sources_1 [list \
+    "$n/B_order_top.v" "$n/order_entry.v" "$n/order_validate.v" "$n/exec_engine.v" \
+    "$n/order_book.v" "$n/spread_calc.v" "$n/ticket_screen.v" "$n/b_bin2bcd_seq.v" \
+    "$n/stub_font.v" "$n/trading_defs.vh" "$n/ticket_layout.vh"]
+set_property include_dirs [list "$n"] [get_filesets sources_1]
 
 # ---------------------------------------------------------------- Tricia: ledger
 add_list sources_1 [list "$srcs/new/ledger.v" "$srcs/new/seq_divider.v"]
@@ -55,6 +57,7 @@ set_property top Integration_Top [get_filesets sources_1]
 add_list constrs_1 [list "$here/Integration.xdc"]
 
 # ---------------------------------------------------------------- simulation
+set t "$repo/TradingSimProject.srcs/sim_1/new"
 # Every testbench in the branch, plus Douglas's test stand-ins (stub market, stub ledger). Pick one
 # with right-click > Set as Top under Simulation Sources, or run them all with
 #   source <repo>/integration/run_all_tests.tcl
@@ -62,14 +65,13 @@ add_list sim_1 [list \
     "$here/tb_integration.v" \
     "$here/tests/tb_yian_market.v" \
     "$here/tests/tb_matthew_game_fsm.v" \
-    "$repo/TradingSimProject.srcs/sim_1/new/tb_ledger.v" \
+    "$t/tb_ledger.v" \
     "$srcs/new/tb_seq_divider.v" \
-    "$partb/sim/integration/tb_BC_ledger.v" \
-    "$partb/sim/stubs/stub_market.v" \
-    "$partb/sim/stubs/stub_ledger.v"]
-add_list sim_1 [glob "$partb/sim/B_orders/tb_*.v"]
+    "$t/tb_BC_ledger.v" "$t/stub_market.v" "$t/stub_ledger.v" \
+    "$t/tb_order_validate.v" "$t/tb_order_book.v" "$t/tb_exec_engine.v" \
+    "$t/tb_ticket_screen.v" "$t/tb_B_order_top.v"]
 # (Yi An's .mem files are in sources_1, which sim_1 inherits; the simulator copies them to its run folder.)
-set_property include_dirs [list "$partb/src/shared" "$partb/src/B_orders"] [get_filesets sim_1]
+set_property include_dirs [list "$n"] [get_filesets sim_1]
 set_property top tb_integration [get_filesets sim_1]
 set_property -name {xsim.simulate.runtime} -value {all} -objects [get_filesets sim_1]
 

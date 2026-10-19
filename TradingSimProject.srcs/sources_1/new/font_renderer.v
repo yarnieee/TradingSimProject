@@ -1,0 +1,101 @@
+`timescale 1ns / 1ps
+
+// Shared 5x7 bitmap font used by every OLED screen.
+module font_renderer (
+    input  [7:0] char_code,
+    input  [2:0] glyph_x,
+    input  [2:0] glyph_y,
+    output reg   pixel_on
+);
+
+    reg [34:0] bitmap;
+    reg [4:0] row_bits;
+
+    function [34:0] font_bitmap;
+        input [7:0] code;
+        begin
+            case (code)
+                8'h20: font_bitmap = {
+                    5'b00000, 5'b00000, 5'b00000, 5'b00000,
+                    5'b00000, 5'b00000, 5'b00000}; // space
+                8'h61: font_bitmap = {
+                    5'b00000, 5'b00000, 5'b01110, 5'b00001,
+                    5'b01111, 5'b10001, 5'b01111}; // a
+                8'h62: font_bitmap = {
+                    5'b10000, 5'b10000, 5'b10110, 5'b11001,
+                    5'b10001, 5'b10001, 5'b11110}; // b
+                8'h63: font_bitmap = {
+                    5'b00000, 5'b00000, 5'b01111, 5'b10000,
+                    5'b10000, 5'b10000, 5'b01111}; // c
+                8'h64: font_bitmap = {
+                    5'b00001, 5'b00001, 5'b01101, 5'b10011,
+                    5'b10001, 5'b10001, 5'b01111}; // d
+                8'h65: font_bitmap = {
+                    5'b00000, 5'b00000, 5'b01110, 5'b10001,
+                    5'b11111, 5'b10000, 5'b01110}; // e
+                8'h66: font_bitmap = {
+                    5'b00110, 5'b01001, 5'b01000, 5'b11100,
+                    5'b01000, 5'b01000, 5'b01000}; // f
+                8'h67: font_bitmap = {
+                    5'b00000, 5'b00000, 5'b01111, 5'b10001,
+                    5'b01111, 5'b00001, 5'b01110}; // g
+                8'h69: font_bitmap = {
+                    5'b00100, 5'b00000, 5'b01100, 5'b00100,
+                    5'b00100, 5'b00100, 5'b01110}; // i
+                8'h6b: font_bitmap = {
+                    5'b10000, 5'b10000, 5'b10010, 5'b10100,
+                    5'b11000, 5'b10100, 5'b10010}; // k
+                8'h6c: font_bitmap = {
+                    5'b01100, 5'b00100, 5'b00100, 5'b00100,
+                    5'b00100, 5'b00100, 5'b01110}; // l
+                8'h6d: font_bitmap = {
+                    5'b00000, 5'b00000, 5'b11011, 5'b10101,
+                    5'b10101, 5'b10101, 5'b10101}; // m
+                8'h6e: font_bitmap = {
+                    5'b00000, 5'b00000, 5'b10110, 5'b11001,
+                    5'b10001, 5'b10001, 5'b10001}; // n
+                8'h6f: font_bitmap = {
+                    5'b00000, 5'b00000, 5'b01110, 5'b10001,
+                    5'b10001, 5'b10001, 5'b01110}; // o
+                8'h70: font_bitmap = {
+                    5'b00000, 5'b00000, 5'b11110, 5'b10001,
+                    5'b11110, 5'b10000, 5'b10000}; // p
+                8'h71: font_bitmap = {
+                    5'b00000, 5'b00000, 5'b01111, 5'b10001,
+                    5'b01111, 5'b00001, 5'b00001}; // q
+                8'h72: font_bitmap = {
+                    5'b00000, 5'b00000, 5'b10111, 5'b11000,
+                    5'b10000, 5'b10000, 5'b10000}; // r
+                8'h73: font_bitmap = {
+                    5'b00000, 5'b00000, 5'b01111, 5'b10000,
+                    5'b01110, 5'b00001, 5'b11110}; // s
+                8'h74: font_bitmap = {
+                    5'b01000, 5'b01000, 5'b11110, 5'b01000,
+                    5'b01000, 5'b01001, 5'b00110}; // t
+                8'h75: font_bitmap = {
+                    5'b00000, 5'b00000, 5'b10001, 5'b10001,
+                    5'b10001, 5'b10011, 5'b01101}; // u
+                8'h79: font_bitmap = {
+                    5'b00000, 5'b00000, 5'b10001, 5'b10001,
+                    5'b01111, 5'b00001, 5'b01110}; // y
+                default: font_bitmap = {
+                    5'b00000, 5'b00000, 5'b00000, 5'b00000,
+                    5'b00000, 5'b00000, 5'b00000};
+            endcase
+        end
+    endfunction
+
+    always @(*) begin
+        bitmap = font_bitmap(char_code);
+        row_bits = 5'b00000;
+
+        if (glyph_y < 7)
+            row_bits = bitmap >> ((6 - glyph_y) * 5);
+
+        if ((glyph_x < 5) && (glyph_y < 7))
+            pixel_on = row_bits[4 - glyph_x];
+        else
+            pixel_on = 1'b0;
+    end
+
+endmodule

@@ -5,6 +5,7 @@
 // (trigger price for new pending orders, execution price otherwise).
 module tb_order_validate;
     reg        game_live;
+    reg        mkt_open;
     reg        retest;
     reg [1:0]  stock;
     reg        side;
@@ -19,7 +20,7 @@ module tb_order_validate;
     wire [2:0] code;
 
     order_validate #(.FEE(100), .POS_MAX(1023)) dut (
-        .game_live(game_live), .retest(retest), .stock(stock), .side(side),
+        .game_live(game_live), .mkt_open(mkt_open), .retest(retest), .stock(stock), .side(side),
         .otype(otype), .qty(qty), .trig(trig), .px_exec(px_exec), .cash(cash),
         .pos0(pos0), .pos1(pos1), .pos2(pos2), .pos3(pos3),
         .book_full(book_full), .ok(ok), .reject_code(code)
@@ -44,7 +45,7 @@ module tb_order_validate;
     // a valid MKT BUY 10 @ 123.05, plenty of cash
     task base;
         begin
-            game_live = 1; retest = 0; stock = 0; side = `SIDE_BUY; otype = `OT_MKT;
+            game_live = 1; mkt_open = 1; retest = 0; stock = 0; side = `SIDE_BUY; otype = `OT_MKT;
             qty = 10; trig = 0; px_exec = 12305; cash = 1000000;
             pos0 = 0; pos1 = 0; pos2 = 0; pos3 = 0; book_full = 0;
         end
@@ -55,6 +56,9 @@ module tb_order_validate;
 
         // 1. not live wins over everything else
         base; game_live = 0; qty = 0; expect_code(`RJ_NOT_LIVE, "not live beats bad qty");
+
+        base; mkt_open = 0; expect_code(`RJ_NOT_LIVE, "stock with no price");
+        base; mkt_open = 0; retest = 1; otype = `OT_LMT; expect_code(`RJ_NOT_LIVE, "no price on retest too");
 
         // 2. qty 0
         base; qty = 0; expect_code(`RJ_BAD_QTY, "qty 0");

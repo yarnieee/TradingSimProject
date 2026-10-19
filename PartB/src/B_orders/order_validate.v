@@ -5,7 +5,7 @@
 // order_validate: combinational order checks -> ok / reject_code.
 //
 // Checked in this order; the first that fails sets reject_code:
-//   1. !game_live                                   RJ_NOT_LIVE
+//   1. !game_live, or the stock has no price (0)     RJ_NOT_LIVE
 //   2. qty == 0                                     RJ_BAD_QTY
 //   3. new LMT/STP with trig == 0                   RJ_BAD_TRIG
 //   4. new LMT/STP with no free slot                RJ_BOOK_FULL
@@ -33,6 +33,7 @@ module order_validate #(
     parameter POS_MAX = 1023
 ) (
     input  wire        game_live,
+    input  wire        mkt_open,     // the stock's mid price is non-zero
     input  wire        retest,
     input  wire [1:0]  stock,
     input  wire        side,
@@ -77,7 +78,7 @@ module order_validate #(
     always @* begin
         ok          = 1'b0;
         reject_code = `RJ_NONE;
-        if (!game_live)
+        if (!game_live || !mkt_open)
             reject_code = `RJ_NOT_LIVE;
         else if (qty == 8'd0)
             reject_code = `RJ_BAD_QTY;

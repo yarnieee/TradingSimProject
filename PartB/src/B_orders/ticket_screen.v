@@ -200,11 +200,11 @@ module ticket_screen #(
                 L_FILL:     s = "FILL  ";
                 L_REJ:      s = "REJ   ";
                 L_PEND:     s = "PEND  ";
-                // [ASSUMPTION] made-up tickers from the plan, stock 0..3
-                L_TK0:      s = "ABC   ";
-                L_TK0 + 1:  s = "TEK   ";
-                L_TK0 + 2:  s = "NRG   ";
-                L_TK0 + 3:  s = "MEM   ";
+                // stock 0..3: A's AMD and MCD; 2 and 3 have no data yet
+                L_TK0:      s = "AMD   ";
+                L_TK0 + 1:  s = "MCD   ";
+                L_TK0 + 2:  s = "ST3   ";
+                L_TK0 + 3:  s = "ST4   ";
                 default:    s = "      ";
             endcase
             lbl_char = (k > 5'd5) ? `CH_SPACE : asc(s[47 - 8*k -: 8]);

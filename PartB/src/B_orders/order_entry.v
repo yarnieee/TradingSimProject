@@ -2,8 +2,14 @@
 `default_nettype none
 `include "trading_defs.vh"
 
-// order_entry: Order Ticket field state, driven by the five board buttons.
-// (The mouse was removed from the project on 17 Oct; buttons are the only input.)
+// order_entry: Order Ticket field state, driven by the five board buttons,
+// or by a complete order from D's confirm screen (ext_load).
+// (The mouse was removed from the project on 17 Oct.)
+//
+// ext_load: copies the external order into the ticket fields (so the page
+// shows what was sent) and submits it on the same clock. It wins over a button
+// press on the same clock. ext_qty 0 is passed through so B rejects it as
+// RJ_BAD_QTY; B_order_top maps out-of-range quantities to 0.
 //
 // Buttons are only acted on while the Ticket page is showing (ticket_active).
 // One button acts per clock: left > right > up > down > center.
@@ -29,6 +35,12 @@ module order_entry #(
     input  wire        key_left,
     input  wire        key_right,
     input  wire        key_center,
+    // complete order from D (confirm screen)
+    input  wire        ext_load,
+    input  wire        ext_side,
+    input  wire [1:0]  ext_type,
+    input  wire [7:0]  ext_qty,
+    input  wire [15:0] ext_trig,
     // live fields (for ticket_screen)
     output reg         side,
     output reg  [1:0]  otype,
@@ -89,7 +101,8 @@ module order_entry #(
     wire k_down   = ticket_active && !key_left && !key_right && !key_up && key_down;
     wire k_center = ticket_active && !key_left && !key_right && !key_up && !key_down && key_center;
 
-    wire do_submit = k_center && focus == F_SUB;
+    wire key_submit = k_center && focus == F_SUB && !ext_load;
+    wire do_submit  = key_submit || ext_load;
 
     // ------------------------------------------------------------ fields
     reg [1:0] prev_sel;
@@ -107,6 +120,12 @@ module order_entry #(
         end else begin
             prev_sel <= sel_stock;
 
+            if (ext_load) begin
+                side  <= ext_side;
+                otype <= ext_type;
+                qty   <= ext_qty;
+                if (ext_type != `OT_MKT) trig <= ext_trig;
+            end else begin
             if (k_left)
                 focus <= (focus == F_QTY) ? F_SUB : focus - 2'd1;
             if (k_right)
@@ -118,6 +137,7 @@ module order_entry #(
             if (k_center) begin
                 if (focus == F_QTY)      side  <= ~side;
                 else if (focus == F_TRG) otype <= next_type(otype);
+            end
             end
 
             // re-centre the trigger on the market; wins over an edit this clock
@@ -139,7 +159,13 @@ module order_entry #(
             sub_trig   <= 16'd0;
         end else begin
             submit_req <= do_submit;
-            if (do_submit) begin
+            if (ext_load) begin
+                sub_stock <= sel_stock;
+                sub_side  <= ext_side;
+                sub_type  <= ext_type;
+                sub_qty   <= ext_qty;
+                sub_trig  <= ext_trig;
+            end else if (do_submit) begin
                 sub_stock <= sel_stock;
                 sub_side  <= side;
                 sub_type  <= otype;

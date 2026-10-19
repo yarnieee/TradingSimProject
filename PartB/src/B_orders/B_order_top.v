@@ -33,7 +33,13 @@ module B_order_top #(
     // UI event bus (D)
     input  wire [1:0]  sel_stock,
     input  wire        page_R,         // active right-OLED page; B acts only on PG_R_TICKET (tie 0 until D has pages)
-    input  wire [4:0]  btn_pulse,      // debounced 1-clock pulses, bits per BTN_* defines; B's only UI input
+    input  wire [4:0]  btn_pulse,      // debounced 1-clock pulses, bits per BTN_* defines
+    // complete order from D's confirm screen, for stock sel_stock
+    input  wire        ord_req,        // 1-clock pulse
+    input  wire        ord_side,
+    input  wire [1:0]  ord_type,       // `OT_MKT for prototype 1
+    input  wire [13:0] ord_qty,        // D's 0..9999; B accepts 1..255, else RJ_BAD_QTY
+    input  wire [15:0] ord_trig,       // LMT/STP only
     // ledger (C), read-only
     input  wire [31:0] cash,
     input  wire [9:0]  pos0,
@@ -66,6 +72,8 @@ module B_order_top #(
     wire key_left        = btn_pulse[`BTN_L];
     wire key_right       = btn_pulse[`BTN_R];
     wire key_down        = btn_pulse[`BTN_D];
+    // out-of-range quantities become 0, which order_validate rejects as RJ_BAD_QTY
+    wire [7:0] ord_qty8  = (ord_qty == 14'd0 || ord_qty > 14'd255) ? 8'd0 : ord_qty[7:0];
 
     // ------------------------------------------------------------ selected stock
     reg [15:0] sel_price;
@@ -99,6 +107,8 @@ module B_order_top #(
         .sel_stock(sel_stock), .sel_price(sel_price),
         .key_up(key_up), .key_down(key_down), .key_left(key_left),
         .key_right(key_right), .key_center(key_center),
+        .ext_load(ord_req), .ext_side(ord_side), .ext_type(ord_type),
+        .ext_qty(ord_qty8), .ext_trig(ord_trig),
         .side(e_side), .otype(e_type), .qty(e_qty), .trig(e_trig), .focus(e_focus),
         .submit_req(submit_req), .sub_stock(sub_stock), .sub_side(sub_side),
         .sub_type(sub_type), .sub_qty(sub_qty), .sub_trig(sub_trig)

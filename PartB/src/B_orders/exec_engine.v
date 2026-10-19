@@ -120,6 +120,7 @@ module exec_engine #(
     wire [2:0] v_code;
     order_validate #(.FEE(FEE), .POS_MAX(POS_MAX)) u_validate (
         .game_live   (game_live),
+        .mkt_open    (cand_mid != 16'd0),
         .retest      (cand_book),
         .stock       (cand_stock),
         .side        (cand_side),

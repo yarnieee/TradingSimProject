@@ -126,7 +126,7 @@ module order_book #(
             default:               sc_cond = 1'b0;
         endcase
     end
-    wire sc_hit = valid[idx] && sc_cond;
+    wire sc_hit = valid[idx] && sc_cond && (sc_mid != 16'd0);   // no price: no trigger
 
     wire new_tick = tick && scan_en;
 

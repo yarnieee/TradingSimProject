@@ -18,6 +18,10 @@ module tb_B_order_top;
     reg [1:0]  sel_stock = 0;
     reg        page_R = `PG_R_TICKET;
     reg [4:0]  btn_pulse = 0;
+    reg        ord_req = 0, ord_side = 0;
+    reg [1:0]  ord_type = 0;
+    reg [13:0] ord_qty = 0;
+    reg [15:0] ord_trig = 0;
     reg [6:0]  xR = 0;
     reg [5:0]  yR = 0;
 
@@ -59,6 +63,7 @@ module tb_B_order_top;
         .price0(price0), .price1(price1), .price2(price2), .price3(price3), .tick(tick),
         .sel_stock(sel_stock), .page_R(page_R),
         .btn_pulse(btn_pulse),
+        .ord_req(ord_req), .ord_side(ord_side), .ord_type(ord_type), .ord_qty(ord_qty), .ord_trig(ord_trig),
         .cash(cash), .pos0(pos0), .pos1(pos1), .pos2(pos2), .pos3(pos3),
         .ledger_busy(ledger_busy), .xR(xR), .yR(yR),
         .fill(fill), .fill_stock(fill_stock), .fill_side(fill_side),
@@ -213,6 +218,16 @@ module tb_B_order_top;
         begin
             focus_to(2);
             press(K_CENTER);
+        end
+    endtask
+
+    task send_ord;                 // what D's confirm screen does
+        input        sd;
+        input integer q;
+        begin
+            ord_side = sd; ord_type = `OT_MKT; ord_qty = q; ord_trig = 0;
+            ord_req = 1; step(1); ord_req = 0;
+            settle;
         end
     endtask
 
@@ -432,6 +447,34 @@ module tb_B_order_top;
         check(n_fill == b_fill && n_rej == b_rej, "S13 no stray fill or reject after reset");
         check(cash == 1000000 && u_dut.u_entry.qty == 1 && u_dut.u_entry.otype == `OT_MKT,
               "S13 ledger and ticket back to defaults");
+
+        // ------------------------------------------------ 14
+        scenario("14 order from D's confirm screen (ord_req)");
+        set_stock(0); set_price(0, 12300);
+        page_R = `PG_R_PORTFOLIO;                      // D owns the buttons: B's own entry is off
+        mark;
+        send_ord(`SIDE_BUY, 7);
+        check(n_fill == b_fill + 1 && f_qty[b_fill] == 7 && f_side[b_fill] == `SIDE_BUY
+              && f_price[b_fill] == 12305 && pos0 == 7, "S14 ord_req MKT BUY 7 fills at the ask");
+        check(u_dut.u_entry.qty == 7 && u_dut.u_entry.side == `SIDE_BUY, "S14 ticket shows the order D sent");
+        mark;
+        send_ord(`SIDE_SELL, 3);
+        check(n_fill == b_fill + 1 && f_side[b_fill] == `SIDE_SELL && pos0 == 4, "S14 ord_req SELL 3");
+        mark;
+        send_ord(`SIDE_BUY, 300);
+        check(n_rej == b_rej + 1 && last_rej == `RJ_BAD_QTY && n_fill == b_fill, "S14 qty 300 (> 255) -> RJ_BAD_QTY");
+        send_ord(`SIDE_BUY, 0);
+        check(n_rej == b_rej + 2 && last_rej == `RJ_BAD_QTY && n_fill == b_fill, "S14 qty 0 -> RJ_BAD_QTY");
+        page_R = `PG_R_TICKET;
+
+        // ------------------------------------------------ 15
+        scenario("15 stock with no price is closed");
+        set_price(2, 0);
+        set_stock(2);
+        mark;
+        order(`SIDE_BUY, `OT_MKT, 1, 0);
+        check(n_rej == b_rej + 1 && last_rej == `RJ_NOT_LIVE && n_fill == b_fill, "S15 MKT buy on a 0 price -> RJ_NOT_LIVE");
+        set_stock(0);
 
         // ------------------------------------------------ done
         $display("     final cash %0d, pos %0d/%0d/%0d/%0d, %0d fills, %0d rejects",

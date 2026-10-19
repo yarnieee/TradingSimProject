@@ -56,11 +56,11 @@ PartB/sim/run_iverilog.sh
 Expected output, one line per testbench:
 
 ```
-PASS: tb_order_validate (27 checks)
+PASS: tb_order_validate (29 checks)
 PASS: tb_order_book (30 checks)
 PASS: tb_exec_engine (21 checks)
 PASS: tb_ticket_screen (18 checks)
-PASS: tb_B_order_top (46 checks)
+PASS: tb_B_order_top (52 checks)
 ```
 
 Logs, frame dumps (`ticket_frame*.hex`) and PNGs land in `sim/out/`.
@@ -174,9 +174,14 @@ until Matthew confirms them; changing one there changes it everywhere.
 | in, top | `clk`, `xR [6:0]`, `yR [5:0]` |
 | in, A | `price0..3 [15:0]`, `tick` |
 | in, C | `cash [31:0]`, `pos0..3 [9:0]`, `ledger_busy` |
-| in, D | `sys_reset`, `game_state [1:0]`, `sel_stock [1:0]`, `page_R`, `btn_pulse [4:0]` |
+| in, D | `sys_reset`, `game_state [1:0]`, `sel_stock [1:0]`, `page_R`, `btn_pulse [4:0]`, and a complete order from D's confirm screen: `ord_req` (pulse), `ord_side`, `ord_type [1:0]`, `ord_qty [13:0]`, `ord_trig [15:0]` |
 | out, to C and D | `fill`, `fill_stock [1:0]`, `fill_side`, `fill_qty [7:0]`, `fill_price [15:0]`, `fill_fee [15:0]` |
 | out, to D | `reject`, `reject_code [2:0]`, `pending_count [3:0]`, `ticket_pixel [15:0]` |
+
+Orders come either from D's confirm screen (`ord_req`, used in the integrated build) or from
+B's own button entry. `ord_qty` is D's 0-9999; B accepts 1-255 and rejects anything else as
+`BAD QTY` (team decision, 19 Oct: orders stay 8-bit). A stock whose price is 0 (no data from
+A yet) is closed: orders on it are rejected as `NOT LIVE` and pending orders do not trigger.
 
 B acts on buttons only while `page_R` shows the Ticket page. For prototype 1, tie
 `page_R = 0` (Ticket) and `game_state = GS_PLAYING` at the top level.

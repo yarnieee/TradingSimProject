@@ -9,7 +9,7 @@
 // two-second day ticks.
 module A_top #(
     parameter integer DAY_MAX_COUNT = 199_999_999,
-    parameter integer BUFFER_DEPTH = 1800,
+    parameter integer BUFFER_DEPTH = 180,           // 19 Oct: last 180 trading days only (was 1800)
     parameter integer AMD_VOLATILITY = 10,
     parameter integer MCD_VOLATILITY = 10
     )(
@@ -41,6 +41,12 @@ module A_top #(
     output wire [15:0] mcd_mean_720,
     output wire [15:0] mcd_mean_1800
     );
+
+    // 19 Oct: with 180 days of history the 720- and 1800-day windows cannot
+    // exist, so they are capped at BUFFER_DEPTH. Port names are unchanged;
+    // the *_720 and *_1800 outputs currently equal the 180-day window.
+    localparam integer WINDOW_720  = (720  > BUFFER_DEPTH) ? BUFFER_DEPTH : 720;
+    localparam integer WINDOW_1800 = (1800 > BUFFER_DEPTH) ? BUFFER_DEPTH : 1800;
 
     wire day_tick;
     wire [31:0] startup_random_seed;
@@ -201,7 +207,7 @@ module A_top #(
     );
 
     get_30_values #(
-        .WINDOW(720),
+        .WINDOW(WINDOW_720),
         .TOTAL_DEPTH(BUFFER_DEPTH)
         ) amd_get_720_values_inst (
         .history_in(amd_close_history),
@@ -210,7 +216,7 @@ module A_top #(
     );
 
     get_30_values #(
-        .WINDOW(1800),
+        .WINDOW(WINDOW_1800),
         .TOTAL_DEPTH(BUFFER_DEPTH)
         ) amd_get_1800_values_inst (
         .history_in(amd_close_history),
@@ -237,7 +243,7 @@ module A_top #(
     );
 
     get_30_values #(
-        .WINDOW(720),
+        .WINDOW(WINDOW_720),
         .TOTAL_DEPTH(BUFFER_DEPTH)
         ) mcd_get_720_values_inst (
         .history_in(mcd_close_history),
@@ -246,7 +252,7 @@ module A_top #(
     );
 
     get_30_values #(
-        .WINDOW(1800),
+        .WINDOW(WINDOW_1800),
         .TOTAL_DEPTH(BUFFER_DEPTH)
         ) mcd_get_1800_values_inst (
         .history_in(mcd_close_history),

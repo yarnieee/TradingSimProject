@@ -3,7 +3,7 @@
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"; REPO="$(cd "$HERE/.." && pwd)"
 S="$REPO/TradingSimProject.srcs/sources_1"; O="$HERE/sim_out"
-mkdir -p "$O" && ln -sfn "$S/imports/storage" "$O/storage"
+mkdir -p "$O" && ln -sfn "$S/imports/storage/AMD_seed.mem" "$O/AMD_seed.mem" && ln -sfn "$S/imports/storage/MCD_seed.mem" "$O/MCD_seed.mem"
 iverilog -g2005 -I "$REPO/PartB/src/shared" -I "$REPO/PartB/src/B_orders" -s tb_integration -o "$O/tb.vvp" \
   "$HERE/Integration_Top.v" "$HERE/tb_integration.v" "$S"/imports/storage/*.v \
   "$REPO"/PartB/src/B_orders/*.v "$REPO/PartB/sim/stubs/stub_font.v" \

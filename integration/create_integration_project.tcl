@@ -55,7 +55,20 @@ set_property top Integration_Top [get_filesets sources_1]
 add_list constrs_1 [list "$here/Integration.xdc"]
 
 # ---------------------------------------------------------------- simulation
-add_list sim_1 [list "$here/tb_integration.v"]
+# Every testbench in the branch, plus B's test stand-ins for A and C. Pick one
+# with right-click > Set as Top under Simulation Sources, or run them all with
+#   source <repo>/integration/run_all_tests.tcl
+add_list sim_1 [list \
+    "$here/tb_integration.v" \
+    "$here/tests/tb_A_market.v" \
+    "$here/tests/tb_D_game_fsm.v" \
+    "$repo/TradingSimProject.srcs/sim_1/new/tb_ledger.v" \
+    "$srcs/new/tb_seq_divider.v" \
+    "$partb/sim/integration/tb_BC_ledger.v" \
+    "$partb/sim/stubs/stub_market.v" \
+    "$partb/sim/stubs/stub_ledger.v"]
+add_list sim_1 [glob "$partb/sim/B_orders/tb_*.v"]
+# (A's .mem files are in sources_1, which sim_1 inherits; the simulator copies them to its run folder.)
 set_property include_dirs [list "$partb/src/shared" "$partb/src/B_orders"] [get_filesets sim_1]
 set_property top tb_integration [get_filesets sim_1]
 set_property -name {xsim.simulate.runtime} -value {all} -objects [get_filesets sim_1]
@@ -65,5 +78,5 @@ update_compile_order -fileset sim_1
 
 puts ""
 puts "Done. Next:"
-puts "  Run Simulation > Run Behavioral Simulation  (look for 'PASS: tb_integration')"
+puts "  Tests: source $here/run_all_tests.tcl   (runs every testbench, prints a summary)"
 puts "  Generate Bitstream, check the timing summary (WNS > 0), then program the board"

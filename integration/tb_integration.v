@@ -6,8 +6,9 @@
 // Only two times are shrunk: a trading day is 4000 clocks (not 2 s) and the
 // debounce is 50 clocks (not 20 ms). Every module is the owner's own code.
 //
-// A reads its seed files from "storage/AMD_seed.mem" and "storage/MCD_seed.mem",
-// relative to where the simulator runs.
+// A's seed files: A_top asks for "storage/AMD_seed.mem", but Vivado's simulator
+// copies .mem files flat into its run folder. For simulation only, the defparams
+// below point A at the plain file names. (Synthesis is not affected.)
 module tb_integration;
     reg clk = 0;
     always #5 clk = ~clk;
@@ -17,6 +18,9 @@ module tb_integration;
     wire [7:0]  JA, JB, seg;
     wire [15:0] led;
     wire [3:0]  an;
+
+    defparam dut.A_inst.amd_stock_inst.SEED_FILE = "AMD_seed.mem";
+    defparam dut.A_inst.mcd_stock_inst.SEED_FILE = "MCD_seed.mem";
 
     localparam DAY = 4000;
     Integration_Top #(.DAY_MAX_COUNT(DAY), .DEBOUNCE_CTR(32'd50)) dut (
@@ -88,7 +92,7 @@ module tb_integration;
         rst = 0;
         wait (dut.amd_ready && dut.mcd_ready);
         repeat (DAY + 100) @(posedge clk);              // one day ticks over
-        check(dut.price0 != 0 && dut.price1 != 0, "A: AMD and MCD have prices");
+        check(dut.price0 != 0 && dut.price1 != 0, "A: AMD and MCD have prices (if not: AMD_seed.mem / MCD_seed.mem not found)");
         check(n_tick >= 1, "A -> B: a tick reached B after a trading day");
         $display("     AMD %0d c, MCD %0d c", dut.price0, dut.price1);
         // A's own price maths, reported but not counted: see integration/README.md

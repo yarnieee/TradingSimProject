@@ -98,6 +98,12 @@ team top level (`My_Top_Module`) is ready. It does not replace or touch the team
 | led[14] / led[15] | flash on reject / fill |
 
 **Vivado steps**
+
+Quickest: in the Vivado Tcl Console run
+`source <repo>/PartB/board/create_B_demo_project.tcl` (forward slashes on Windows).
+It creates a separate project next to the repo with everything below already set up,
+so the team's `.xpr` is never touched. By hand instead:
+
 1. Add the Part B sources (see "In Vivado" above), plus `board/B_demo_top.v` and
    `board/b_demo_btn.v` as design sources, `sim/stubs/stub_market.v` and
    `sim/stubs/stub_ledger.v` as design sources, and `board/B_demo.xdc` as a constraint.

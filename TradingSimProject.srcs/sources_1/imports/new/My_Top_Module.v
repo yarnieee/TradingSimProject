@@ -113,6 +113,7 @@ module MyTopModule (
         .pixel_index(pixel_index),
         .screen_state(screen_state),
         .selected_stock(selected_stock),
+        .quantity(quantity),
         .menu_selection(menu_selection),
         .pixel_data(pixel_data)
     );
@@ -121,6 +122,7 @@ module MyTopModule (
         .pixel_index(pixel_index_ja),
         .screen_state(screen_state),
         .selected_stock(selected_stock),
+        .quantity(quantity),
         .menu_selection(menu_selection),
         .btnU(btnU_debounced),
         .btnD(btnD_debounced),

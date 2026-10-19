@@ -43,9 +43,9 @@ module game_fsm (
     reg [2:0] next_stocks_cursor;
     reg [2:0] specific_cursor;     // 0 buy, 1 sell, 2 back, 3 portfolio, 4 stocks
     reg [2:0] next_specific_cursor;
-    reg [1:0] buy_cursor;          // 0 back, 1 quantity, 2 confirmation
+    reg [1:0] buy_cursor;          // 0 cancel, 1 quantity, 2 confirmation
     reg [1:0] next_buy_cursor;
-    reg [1:0] sell_cursor;         // 0 back, 1 quantity, 2 confirmation
+    reg [1:0] sell_cursor;         // 0 cancel, 1 quantity, 2 confirmation
     reg [1:0] next_sell_cursor;
 
     reg [2:0] next_selected_stock;
@@ -57,7 +57,11 @@ module game_fsm (
                             (screen_state == STOCKS) ?
                             {1'b0, stocks_cursor} :
                             (screen_state == SPECIFIC) ?
-                            {1'b0, specific_cursor} : 4'd0;
+                            {1'b0, specific_cursor} :
+                            (screen_state == BUY_STOCK) ?
+                            {2'b00, buy_cursor} :
+                            (screen_state == SELL_STOCK) ?
+                            {2'b00, sell_cursor} : 4'd0;
 
     always @(*) begin
         next_state = screen_state;
@@ -196,7 +200,6 @@ module game_fsm (
                         end
                         1: begin
                             next_state = QUANTITY;
-                            next_quantity = 0;
                             next_quantity_return_state = RETURN_BUY;
                             next_quantity_cursor = 0;
                         end
@@ -222,7 +225,6 @@ module game_fsm (
                         end
                         1: begin
                             next_state = QUANTITY;
-                            next_quantity = 0;
                             next_quantity_return_state = RETURN_SELL;
                             next_quantity_cursor = 0;
                         end

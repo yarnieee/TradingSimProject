@@ -5,6 +5,7 @@ module OLED_Renderer (
     input  [12:0] pixel_index,
     input  [3:0]  screen_state,
     input  [2:0]  selected_stock,
+    input  [13:0] quantity,
     input  [3:0]  menu_selection,
     output reg [15:0] pixel_data
 );
@@ -18,6 +19,7 @@ module OLED_Renderer (
         .pixel_index(pixel_index),
         .screen_state(screen_state),
         .selected_stock(selected_stock),
+        .quantity(quantity),
         .text_pixel(text_pixel)
     );
 
@@ -65,6 +67,7 @@ module OLED_Button_Renderer (
     input  [12:0] pixel_index,
     input  [3:0]  screen_state,
     input  [2:0]  selected_stock,
+    input  [13:0] quantity,
     input  [3:0]  menu_selection,
     input         btnU,
     input         btnD,
@@ -88,6 +91,7 @@ module OLED_Button_Renderer (
         .pixel_index(flipped_pixel_index),
         .screen_state(screen_state),
         .selected_stock(selected_stock),
+        .quantity(quantity),
         .text_pixel(text_pixel)
     );
 
@@ -154,6 +158,8 @@ module menu_buttons (
     localparam PORTFOLIO = 4'd1;
     localparam STOCKS    = 4'd2;
     localparam SPECIFIC  = 4'd3;
+    localparam BUY_STOCK = 4'd4;
+    localparam SELL_STOCK= 4'd5;
 
     localparam NAV_PORTFOLIO = 4'd0;
     localparam NAV_STOCKS    = 4'd1;
@@ -165,6 +171,9 @@ module menu_buttons (
     localparam ACTION_SELL   = 4'd7;
     localparam ACTION_BACK   = 4'd8;
     localparam TITLE_OK      = 4'd9;
+    localparam ACTION_CANCEL = 4'd10;
+    localparam ACTION_QTY    = 4'd11;
+    localparam ACTION_CONFIRM= 4'd12;
     localparam NO_BUTTON     = 4'hF;
 
     reg [3:0] button_kind;
@@ -245,6 +254,22 @@ module menu_buttons (
             end
         end
 
+        if ((screen_state == BUY_STOCK) || (screen_state == SELL_STOCK)) begin
+            if ((pixel_x >= 7'd1) && (pixel_x <= 7'd31) &&
+                (pixel_y >= 6'd40) && (pixel_y <= 6'd50)) begin
+                button_kind = ACTION_CANCEL;
+                button_selected = (menu_selection == 4'd0);
+            end else if ((pixel_x >= 7'd34) && (pixel_x <= 7'd53) &&
+                         (pixel_y >= 6'd40) && (pixel_y <= 6'd50)) begin
+                button_kind = ACTION_QTY;
+                button_selected = (menu_selection == 4'd1);
+            end else if ((pixel_x >= 7'd56) && (pixel_x <= 7'd94) &&
+                         (pixel_y >= 6'd40) && (pixel_y <= 6'd50)) begin
+                button_kind = ACTION_CONFIRM;
+                button_selected = (menu_selection == 4'd2);
+            end
+        end
+
         // A one-pixel border surrounds each button. Selected buttons use a
         // blue fill and yellow border; unselected buttons are black with a
         // white border.
@@ -288,6 +313,18 @@ module menu_buttons (
                 end
                 ACTION_BACK: begin
                     button_border = (pixel_x == 7'd64) || (pixel_x == 7'd91) ||
+                                    (pixel_y == 6'd40) || (pixel_y == 6'd50);
+                end
+                ACTION_CANCEL: begin
+                    button_border = (pixel_x == 7'd1) || (pixel_x == 7'd31) ||
+                                    (pixel_y == 6'd40) || (pixel_y == 6'd50);
+                end
+                ACTION_QTY: begin
+                    button_border = (pixel_x == 7'd34) || (pixel_x == 7'd53) ||
+                                    (pixel_y == 6'd40) || (pixel_y == 6'd50);
+                end
+                ACTION_CONFIRM: begin
+                    button_border = (pixel_x == 7'd56) || (pixel_x == 7'd94) ||
                                     (pixel_y == 6'd40) || (pixel_y == 6'd50);
                 end
                 default: button_border = 1'b0;
@@ -461,6 +498,8 @@ module menu_button_text (
     localparam PORTFOLIO = 4'd1;
     localparam STOCKS    = 4'd2;
     localparam SPECIFIC  = 4'd3;
+    localparam BUY_STOCK = 4'd4;
+    localparam SELL_STOCK= 4'd5;
 
     localparam NAV_PORTFOLIO = 4'd0;
     localparam NAV_STOCKS    = 4'd1;
@@ -472,6 +511,9 @@ module menu_button_text (
     localparam ACTION_SELL   = 4'd7;
     localparam ACTION_BACK   = 4'd8;
     localparam TITLE_OK      = 4'd9;
+    localparam ACTION_CANCEL = 4'd10;
+    localparam ACTION_QTY    = 4'd11;
+    localparam ACTION_CONFIRM= 4'd12;
     localparam NO_LABEL      = 4'hF;
 
     wire [6:0] pixel_x = pixel_index % 96;
@@ -483,6 +525,7 @@ module menu_button_text (
     reg [6:0] text_start_x;
     reg [5:0] text_start_y;
     reg [3:0] text_length;
+    reg [2:0] text_cell_width;
     reg       label_active;
     reg [2:0] glyph_x;
     reg [2:0] glyph_y;
@@ -594,6 +637,37 @@ module menu_button_text (
                         default: label_char = 8'h20;
                     endcase
                 end
+                ACTION_CANCEL: begin
+                    case (position)
+                        0: label_char = 8'h43; // C
+                        1: label_char = 8'h61; // a
+                        2: label_char = 8'h6E; // n
+                        3: label_char = 8'h63; // c
+                        4: label_char = 8'h65; // e
+                        5: label_char = 8'h6C; // l
+                        default: label_char = 8'h20;
+                    endcase
+                end
+                ACTION_QTY: begin
+                    case (position)
+                        0: label_char = 8'h51; // Q
+                        1: label_char = 8'h74; // t
+                        2: label_char = 8'h79; // y
+                        default: label_char = 8'h20;
+                    endcase
+                end
+                ACTION_CONFIRM: begin
+                    case (position)
+                        0: label_char = 8'h43; // C
+                        1: label_char = 8'h6F; // o
+                        2: label_char = 8'h6E; // n
+                        3: label_char = 8'h66; // f
+                        4: label_char = 8'h69; // i
+                        5: label_char = 8'h72; // r
+                        6: label_char = 8'h6D; // m
+                        default: label_char = 8'h20;
+                    endcase
+                end
                 default: label_char = 8'h20;
             endcase
         end
@@ -606,6 +680,7 @@ module menu_button_text (
         text_start_x = 0;
         text_start_y = 0;
         text_length = 0;
+        text_cell_width = 6;
         label_active = 1'b0;
         glyph_x = 0;
         glyph_y = 0;
@@ -691,11 +766,38 @@ module menu_button_text (
                 text_length = 4;
                 label_active = 1'b1;
             end
+        end else if ((screen_state == BUY_STOCK) ||
+                     (screen_state == SELL_STOCK)) begin
+            if ((pixel_x >= 7'd2) && (pixel_x < 7'd32) &&
+                (pixel_y >= 6'd42) && (pixel_y < 6'd49)) begin
+                label_kind = ACTION_CANCEL;
+                text_start_x = 7'd2;
+                text_start_y = 6'd42;
+                text_length = 6;
+                text_cell_width = 5;
+                label_active = 1'b1;
+            end else if ((pixel_x >= 7'd36) && (pixel_x < 7'd51) &&
+                         (pixel_y >= 6'd42) && (pixel_y < 6'd49)) begin
+                label_kind = ACTION_QTY;
+                text_start_x = 7'd36;
+                text_start_y = 6'd42;
+                text_length = 3;
+                text_cell_width = 5;
+                label_active = 1'b1;
+            end else if ((pixel_x >= 7'd58) && (pixel_x < 7'd93) &&
+                         (pixel_y >= 6'd42) && (pixel_y < 6'd49)) begin
+                label_kind = ACTION_CONFIRM;
+                text_start_x = 7'd58;
+                text_start_y = 6'd42;
+                text_length = 7;
+                text_cell_width = 5;
+                label_active = 1'b1;
+            end
         end
 
         if (label_active) begin
-            char_position = (pixel_x - text_start_x) / 6;
-            glyph_x = (pixel_x - text_start_x) % 6;
+            char_position = (pixel_x - text_start_x) / text_cell_width;
+            glyph_x = (pixel_x - text_start_x) % text_cell_width;
             glyph_y = pixel_y - text_start_y;
             char_code = label_char(label_kind, char_position);
         end

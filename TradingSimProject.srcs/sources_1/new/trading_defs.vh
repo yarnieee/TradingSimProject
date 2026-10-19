@@ -1,5 +1,5 @@
 // trading_defs.vh
-// [TEAM] Codes and widths shared by parts A, B, C and D.
+// [TEAM] Codes and widths shared by everyone (Yi An, Douglas, Tricia, Matthew).
 // Change only by team agreement: every part decodes these values.
 
 `ifndef TRADING_DEFS_VH
@@ -30,8 +30,8 @@
 `define RJ_TRIG_FAIL 3'd6   // pending order hit but failed re-validation -> cancelled
 `define RJ_NOT_LIVE  3'd7   // game not in PLAYING state
 
-// ---------------------------------------------------------------- UI bus (from D)
-// [TEAM][ASSUMPTION] Encodings D owns. Proposed in the Module I/O map, for
+// ---------------------------------------------------------------- UI bus (from Matthew)
+// [TEAM][ASSUMPTION] Encodings Matthew owns. Proposed in the Module I/O map, for
 // Matthew to confirm. Every part decodes these, so change them only here.
 // (No mouse: ui_click, ui_screen, ui_x, ui_y and qty_delta were removed 17 Oct.)
 `define GS_MENU        2'd0   // game_state
@@ -49,7 +49,7 @@
 `define BTN_D 4
 
 // ---------------------------------------------------------------- font
-// [TEAM][ASSUMPTION] Character codes for the shared font ROM (D owns it).
+// [TEAM][ASSUMPTION] Character codes for the shared font ROM (Matthew owns it).
 // Digits 0..9 are codes 0..9, so a BCD digit d is char {2'b00, d}.
 // Letters A..Z are codes 10..35.
 `define CH_W      6         // char code width

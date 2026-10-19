@@ -4,6 +4,11 @@ The EE2026 manual requires AI usage to be clearly documented in the report.
 Add an entry every time AI output goes into the project. Record what was generated,
 and what a person changed by hand afterwards.
 
+> **19 Oct:** Douglas's files moved from `PartB/` into `TradingSimProject.srcs/` (design files in
+> `sources_1/new/`, testbenches and test stand-ins in `sim_1/new/`, the board-test pins in
+> `constrs_1/new/`). Paths in the entries below are where the files were at the time.
+> Component letters were also replaced by names (A = Yi An, B = Douglas, C = Tricia, D = Matthew).
+
 ## 2026-10-05: Part B first build
 
 **Tool:** Claude Code (Claude Opus 5.5, Anthropic), run locally.
@@ -136,4 +141,14 @@ conflicts were resolved by keeping `main`'s copy.
 `calculate_next_close` evaluates unsigned, so prices pin at $655.35, and drifts down 10% a day.
 
 **Verification:** tb_integration 15 checks pass (Icarus Verilog). Not yet built in Vivado.
+
+## 2026-10-19: files moved, labels by name
+
+**Asked for:** no separate `PartB/` folder and no letter labels; follow the team's layout and names.
+
+**Done by the AI:** moved every file with `git mv` (history kept) into `TradingSimProject.srcs/`;
+README rewritten as `README_douglas_orders.md` (repo root) and this log moved to the repo root;
+comments and test messages now say Yi An / Douglas / Tricia / Matthew instead of A / B / C / D.
+Removed the Icarus scripts and the stand-alone board-test project script (Vivado only; the team
+build on `branch-team-integration` replaces it). No logic changed.
 

@@ -3,7 +3,7 @@
 
 // tb_B_order_top: spec section 10 scenarios, end to end, through the real UI
 // path (the five buttons; no mouse) with stub_market and stub_ledger standing in
-// for A and C. stub_ledger stops the sim with FAIL if cash or a position ever
+// for Yi An's market and Tricia's ledger. stub_ledger stops the sim with FAIL if cash or a position ever
 // goes out of range, or if a fill arrives while ledger_busy.
 //
 // Run order is 1-7, 9-12, 8, 13 so the book is empty where a scenario needs
@@ -221,7 +221,7 @@ module tb_B_order_top;
         end
     endtask
 
-    task send_ord;                 // what D's confirm screen does
+    task send_ord;                 // what Matthew's confirm screen does
         input        sd;
         input integer q;
         begin
@@ -438,7 +438,7 @@ module tb_B_order_top;
         do_tick;
         wait (n_fill == b_fill + 1);                   // first fill out, rest queued
         step(5);
-        sys_reset = 1; step(2); sys_reset = 0;         // global reset: B and the ledger
+        sys_reset = 1; step(2); sys_reset = 0;         // global reset: order engine and ledger
         check(pending_count == 0, "S13 book cleared");
         check(u_dut.u_book.state == 0 && u_dut.u_exec.state == 0 && !u_dut.u_book.trq,
               "S13 book and exec FSMs idle");
@@ -449,14 +449,14 @@ module tb_B_order_top;
               "S13 ledger and ticket back to defaults");
 
         // ------------------------------------------------ 14
-        scenario("14 order from D's confirm screen (ord_req)");
+        scenario("14 order from Matthew's confirm screen (ord_req)");
         set_stock(0); set_price(0, 12300);
-        page_R = `PG_R_PORTFOLIO;                      // D owns the buttons: B's own entry is off
+        page_R = `PG_R_PORTFOLIO;                      // Matthew owns the buttons: the order engine's own entry is off
         mark;
         send_ord(`SIDE_BUY, 7);
         check(n_fill == b_fill + 1 && f_qty[b_fill] == 7 && f_side[b_fill] == `SIDE_BUY
               && f_price[b_fill] == 12305 && pos0 == 7, "S14 ord_req MKT BUY 7 fills at the ask");
-        check(u_dut.u_entry.qty == 7 && u_dut.u_entry.side == `SIDE_BUY, "S14 ticket shows the order D sent");
+        check(u_dut.u_entry.qty == 7 && u_dut.u_entry.side == `SIDE_BUY, "S14 ticket shows the order Matthew sent");
         mark;
         send_ord(`SIDE_SELL, 3);
         check(n_fill == b_fill + 1 && f_side[b_fill] == `SIDE_SELL && pos0 == 4, "S14 ord_req SELL 3");

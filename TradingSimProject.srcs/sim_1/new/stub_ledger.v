@@ -1,11 +1,11 @@
 `timescale 1ns / 1ps
 `default_nettype none
 
-// stub_ledger: behavioural model of C's ledger, for Part B testing only.
+// stub_ledger: behavioural model of Tricia's ledger, for testing the order engine only.
 //
 // On fill: raises ledger_busy on the next clock (the [TEAM] contract), holds
 // it for BUSY_CYCLES clocks, then applies the fill and drops busy on the same
-// clock, so cash/pos are already updated when B sees !ledger_busy.
+// clock, so cash/pos are already updated when the order engine sees !ledger_busy.
 //   BUY : cash -= qty*price + fee, pos += qty
 //   SELL: cash += qty*price - fee, pos -= qty
 //

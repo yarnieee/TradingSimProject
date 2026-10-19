@@ -2,17 +2,17 @@
 `default_nettype none
 `include "trading_defs.vh"
 
-// B_order_top: Part B (order and execution engine + Order Ticket page).
+// B_order_top: Douglas's order and execution engine + Order Ticket page.
 // This is what the team top level instantiates. Ports follow the Module I/O
-// map in the team plan doc; encodings of the D bus are in trading_defs.vh.
+// map in the team plan doc; encodings of Matthew's signals are in trading_defs.vh.
 //
-//   order_entry --submit--> exec_engine --fill--> C, D
-//                              ^   |  \--reject--> D
+//   order_entry --submit--> exec_engine --fill--> Tricia, Matthew
+//                              ^   |  \--reject--> Matthew
 //                    trq/ack   |   v ins
 //                            order_book
 //   ticket_screen draws the page from all of the above.
 //
-// B never writes cash or positions; it only reads C's ledger.
+// The order engine never writes cash or positions; it only reads Tricia's ledger.
 module B_order_top #(
     parameter SPREAD          = 5,             // cents per side [ASSUMPTION]
     parameter FEE             = 100,           // cents per execution [ASSUMPTION]
@@ -24,23 +24,23 @@ module B_order_top #(
     input  wire        clk,
     input  wire        sys_reset,
     input  wire [1:0]  game_state,     // orders only while GS_PLAYING
-    // price bus (A)
+    // price bus (Yi An)
     input  wire [15:0] price0,
     input  wire [15:0] price1,
     input  wire [15:0] price2,
     input  wire [15:0] price3,
     input  wire        tick,
-    // UI event bus (D)
+    // UI event bus (Matthew)
     input  wire [1:0]  sel_stock,
-    input  wire        page_R,         // active right-OLED page; B acts only on PG_R_TICKET (tie 0 until D has pages)
+    input  wire        page_R,         // active right-OLED page; buttons act only on PG_R_TICKET (tie 0 until Matthew has pages)
     input  wire [4:0]  btn_pulse,      // debounced 1-clock pulses, bits per BTN_* defines
-    // complete order from D's confirm screen, for stock sel_stock
+    // complete order from Matthew's confirm screen, for stock sel_stock
     input  wire        ord_req,        // 1-clock pulse
     input  wire        ord_side,
     input  wire [1:0]  ord_type,       // `OT_MKT for prototype 1
-    input  wire [13:0] ord_qty,        // D's 0..9999; B accepts 1..255, else RJ_BAD_QTY
+    input  wire [13:0] ord_qty,        // Matthew's 0..9999; accepted 1..255, else RJ_BAD_QTY
     input  wire [15:0] ord_trig,       // LMT/STP only
-    // ledger (C), read-only
+    // ledger (Tricia), read-only
     input  wire [31:0] cash,
     input  wire [9:0]  pos0,
     input  wire [9:0]  pos1,
@@ -50,21 +50,21 @@ module B_order_top #(
     // pixel being drawn on the right OLED (top)
     input  wire [6:0]  xR,
     input  wire [5:0]  yR,
-    // fill bus (C, D)
+    // fill bus (Tricia, Matthew)
     output wire        fill,
     output wire [1:0]  fill_stock,
     output wire        fill_side,
     output wire [7:0]  fill_qty,
     output wire [15:0] fill_price,
     output wire [15:0] fill_fee,
-    // reject (D)
+    // reject (Matthew)
     output wire        reject,
     output wire [2:0]  reject_code,
     output wire [3:0]  pending_count,
-    // Ticket page pixel (D)
+    // Ticket page pixel (Matthew)
     output wire [15:0] ticket_pixel
 );
-    // ------------------------------------------------------------ decode D's bus
+    // ------------------------------------------------------------ decode Matthew's signals
     wire game_live       = (game_state == `GS_PLAYING);
     wire ticket_active   = (page_R == `PG_R_TICKET);
     wire key_center      = btn_pulse[`BTN_C];

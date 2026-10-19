@@ -1,14 +1,14 @@
 `timescale 1ns / 1ps
 `include "trading_defs.vh"
 
-// tb_BC_ledger: Part B against Part C's real ledger (Tricia's ledger.v and
+// tb_BC_ledger: Douglas's order engine against Tricia's real ledger (Tricia's ledger.v and
 // seq_divider.v, from branch-tricia-ledger), with stub_market for prices.
 // Driven only through the five buttons, as in prototype 1.
 //
 // Checks:
 //   - exact cash / position / realised P&L for a buy, then a partial sell
 //     (the partial sell takes the ledger's divider path, its longest busy time)
-//   - B never sends a fill the ledger has to reject (ledger err never pulses)
+//   - the order engine never sends a fill the ledger has to reject (ledger err never pulses)
 //   - three book triggers on one tick, each a partial sell through the divider
 //   - the ledger invariant cash + sum(cost basis) == START + realised, whenever idle
 //   - 60 random orders on all four stocks with random price moves
@@ -48,7 +48,7 @@ module tb_BC_ledger;
         .price0(price0), .price1(price1), .price2(price2), .price3(price3), .tick(tick)
     );
 
-    // Part C, unmodified
+    // Tricia's ledger, unmodified
     ledger #(.START_CASH(32'd1_000_000)) u_c (
         .clk(clk), .rst(sys_reset),
         .fill(fill), .fill_stock(fill_stock), .fill_side(fill_side),
@@ -174,12 +174,12 @@ module tb_BC_ledger;
         check(realised == 4 * 12295 - 4 * 12315 - 100, "I1 sell: realised = -180");
         invariant("partial sell");
 
-        $display("---- I2 B's rejects never reach the ledger");
+        $display("---- I2 the order engine's rejects never reach the ledger");
         br = n_rej; bf = n_fill;
         order(`SIDE_SELL, `OT_MKT, 7, 0);                    // only 6 held
-        check(n_rej == br + 1 && last_rej == `RJ_NO_POS && n_fill == bf, "I2 sell 7 of 6: RJ_NO_POS in B");
+        check(n_rej == br + 1 && last_rej == `RJ_NO_POS && n_fill == bf, "I2 sell 7 of 6: RJ_NO_POS in the order engine");
         order(`SIDE_BUY, `OT_MKT, 255, 0);                   // 255 * 12305 > cash
-        check(n_rej == br + 2 && last_rej == `RJ_NO_CASH && n_fill == bf, "I2 buy 255: RJ_NO_CASH in B");
+        check(n_rej == br + 2 && last_rej == `RJ_NO_CASH && n_fill == bf, "I2 buy 255: RJ_NO_CASH in the order engine");
 
         $display("---- I3 three stop sells trigger on one tick (divider each time)");
         set_price(0, 12300);
@@ -210,8 +210,8 @@ module tb_BC_ledger;
         $display("     after random orders: cash %0d, pos %0d/%0d/%0d/%0d, realised %0d, %0d fills, %0d B rejects",
                  cash, pos0, pos1, pos2, pos3, realised, n_fill, n_rej);
 
-        check(n_err == 0, "ledger never rejected a fill from B");
-        check(n_fill_busy == 0, "B never sent a fill while ledger_busy was high");
+        check(n_err == 0, "ledger never rejected a fill from the order engine");
+        check(n_fill_busy == 0, "order engine never sent a fill while ledger_busy was high");
 
         if (n_fail == 0) $display("PASS: tb_BC_ledger (%0d checks)", n_pass);
         else             $display("FAIL: tb_BC_ledger (%0d failed, %0d passed)", n_fail, n_pass);

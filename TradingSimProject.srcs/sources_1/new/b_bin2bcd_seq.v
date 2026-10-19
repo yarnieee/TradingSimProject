@@ -4,7 +4,7 @@
 // b_bin2bcd_seq: 16-bit binary -> 5 BCD digits, sequential double-dabble.
 // One add-3/shift step per clock, 16 clocks per conversion.
 //
-// Part B's private copy until D's shared bin2bcd_seq exists. The spec said a
+// The order engine's private copy until Matthew's shared bin2bcd_seq exists. The spec said a
 // combinational converter for now; this is sequential instead because a
 // 16-stage add-3 chain is a likely 100 MHz timing failure, and one shared
 // sequential unit is the resource story the plan wants anyway. [ASSUMPTION]

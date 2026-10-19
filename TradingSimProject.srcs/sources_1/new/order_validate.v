@@ -23,8 +23,8 @@
 // at submit, and the order is leaving the book, not entering it.
 //
 // Additions beyond the spec, both so "cash and positions can never go out of
-// range" holds without help from C:
-//   6. position is 10 bits; buying past 1023 would wrap C's counter. No spare
+// range" holds without help from the ledger:
+//   6. position is 10 bits; buying past 1023 would wrap the ledger's counter. No spare
 //      reject code exists, so this reuses RJ_BAD_QTY.
 //   8. a sell whose proceeds are below the flat fee lowers cash; with cash
 //      near zero that would go negative.

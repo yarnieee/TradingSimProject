@@ -3,12 +3,12 @@
 `include "trading_defs.vh"
 
 // order_entry: Order Ticket field state, driven by the five board buttons,
-// or by a complete order from D's confirm screen (ext_load).
+// or by a complete order from Matthew's confirm screen (ext_load).
 // (The mouse was removed from the project on 17 Oct.)
 //
 // ext_load: copies the external order into the ticket fields (so the page
 // shows what was sent) and submits it on the same clock. It wins over a button
-// press on the same clock. ext_qty 0 is passed through so B rejects it as
+// press on the same clock. ext_qty 0 is passed through so the order engine rejects it as
 // RJ_BAD_QTY; B_order_top maps out-of-range quantities to 0.
 //
 // Buttons are only acted on while the Ticket page is showing (ticket_active).
@@ -35,7 +35,7 @@ module order_entry #(
     input  wire        key_left,
     input  wire        key_right,
     input  wire        key_center,
-    // complete order from D (confirm screen)
+    // complete order from Matthew (confirm screen)
     input  wire        ext_load,
     input  wire        ext_side,
     input  wire [1:0]  ext_type,

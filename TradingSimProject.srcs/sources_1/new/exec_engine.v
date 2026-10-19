@@ -6,7 +6,7 @@
 //   - submits from order_entry (priority), held in a one-deep buffer, and
 //   - trigger requests from order_book.
 // Every job goes IDLE -> CHECK -> EVAL -> POST -> IDLE:
-//   CHECK  wait for !ledger_busy (C has settled the last fill), then latch the
+//   CHECK  wait for !ledger_busy (Tricia's ledger has settled the last fill), then latch the
 //          execution price: ask for BUY, bid for SELL. A book job keeps the
 //          price the book latched when the trigger was seen.
 //   EVAL   run order_validate on the latched job, then exactly one of:
@@ -15,8 +15,8 @@
 //            book job ok     -> pulse fill, ack the book
 //            any failure     -> pulse reject (book jobs report RJ_TRIG_FAIL
 //                               and are acked, so the slot is cleared)
-//   POST   one dead clock, so C can raise ledger_busy before the next CHECK.
-// [TEAM] C must assert ledger_busy on the clock after fill, or earlier.
+//   POST   one dead clock, so the ledger can raise ledger_busy before the next CHECK.
+// [TEAM] Tricia's ledger must assert ledger_busy on the clock after fill, or earlier.
 module exec_engine #(
     parameter SPREAD  = 5,
     parameter FEE     = 100,
@@ -59,14 +59,14 @@ module exec_engine #(
     output wire [7:0]  ins_qty,
     output wire [15:0] ins_trig,
     output reg         placed,         // a pending order was accepted (for the screen)
-    // fill bus to C and D (fields hold their value after the pulse)
+    // fill bus to Tricia and Matthew (fields hold their value after the pulse)
     output reg         fill,
     output reg  [1:0]  fill_stock,
     output reg         fill_side,
     output reg  [7:0]  fill_qty,
     output reg  [15:0] fill_price,
     output reg  [15:0] fill_fee,
-    // reject to D
+    // reject to Matthew
     output reg         reject,
     output reg  [2:0]  reject_code
 );

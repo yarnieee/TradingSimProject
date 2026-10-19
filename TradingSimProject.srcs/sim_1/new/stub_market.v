@@ -1,7 +1,7 @@
 `timescale 1ns / 1ps
 `default_nettype none
 
-// stub_market: fake price bus standing in for A's market engine.
+// stub_market: fake price bus standing in for Yi An's market engine.
 //
 // Ticks come from tick_req (testbench) and, if TICK_DIV != 0, every TICK_DIV
 // clocks. On a tick all four prices step by `mode` and tick pulses on the
@@ -11,7 +11,7 @@
 //   mode 2  ramp down ~1 % per tick, floor $1.00
 //   mode 3  gap down  1/8 per tick,  floor $1.00
 // force_en sets one price immediately, without a tick (scripted jumps).
-// Synthesisable, so it can drive Part B on the board before A is integrated.
+// Synthesisable, so it can drive the order engine without Yi An's market engine.
 module stub_market #(
     parameter [15:0] P0       = 16'd10000,
     parameter [15:0] P1       = 16'd4520,

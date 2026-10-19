@@ -1,4 +1,4 @@
-## B_demo.xdc: constraints for B_demo_top only (Part B stand-alone board test).
+## B_demo.xdc: constraints for B_demo_top only (Douglas's order engine, stand-alone board test).
 ## Pin numbers copied from the team's Basys3_Master.xdc.
 ## In Vivado, disable Basys3_Master.xdc while B_demo_top is the top module.
 

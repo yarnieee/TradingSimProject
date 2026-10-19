@@ -2,14 +2,14 @@
 `default_nettype none
 `include "trading_defs.vh"
 
-// stub_font: 3x5 font standing in for D's font ROM.
+// stub_font: 3x5 font standing in for Matthew's font ROM.
 // Character codes follow trading_defs.vh. Synthesisable (a case ROM), so it
-// can go on the board for Part B bring-up until D's ROM is integrated.
-// [TEAM] D's ROM needs a 3x5 port with this behaviour, or B swaps this out.
+// can go on the board for order engine bring-up until Matthew's ROM is integrated.
+// [TEAM] Matthew's ROM needs a 3x5 port with this behaviour, or the order engine swaps this out.
 //
 // Glyph bits are rows top to bottom, 3 bits per row, MSB = leftmost pixel.
 // col 3 is the gap between characters and is always off.
-// Not included: the 5x7 set from the spec. Part B does not use it.
+// Not included: the 5x7 set from the spec. The order engine does not use it.
 module stub_font (
     input  wire [5:0] ch,
     input  wire [2:0] row,     // 0..4

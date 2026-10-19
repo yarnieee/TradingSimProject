@@ -1,8 +1,8 @@
 `timescale 1ns / 1ps
 
 // tb_B_demo_top: the whole board-test top, as it will run on the Basys3.
-// Raw button presses (with contact bounce) go through the debouncers into B,
-// fills go to the ledger (stub, or C's real one with -DUSE_PART_C), and one
+// Raw button presses (with contact bounce) go through the debouncers into the order engine,
+// fills go to the ledger (stub, or Tricia's real one with -DUSE_PART_C), and one
 // full frame is captured from the real Oled_Display driver as it clocks pixels
 // out, then written to demo_frame.hex.
 // Only the debounce time is shrunk (10 ms -> 50 clocks); the OLED driver runs at its real timing.

@@ -2,12 +2,12 @@
 `default_nettype none
 `include "trading_defs.vh"
 
-// B_demo_top: stand-alone board test for Part B (prototype 1).
-// NOT the team top level: My_Top_Module stays the real one. This lets Part B
-// be checked on the Basys3 before A, C and D are integrated.
+// B_demo_top: stand-alone board test for Douglas's order engine (prototype 1).
+// NOT the team top level: My_Top_Module stays the real one. This lets the order
+// engine be checked on the Basys3 on its own.
 //
 //   Right OLED (Pmod on JB)  Order Ticket page
-//   btnU/D/L/R/C             the five ticket buttons (debounced here; D's job later)
+//   btnU/D/L/R/C             the five ticket buttons (debounced here; Matthew's job in the team build)
 //   sw[15]                   reset (also a short power-on reset)
 //   sw[1:0]                  fake market: 0 flat, 1 up ~1%/tick, 2 down ~1%/tick, 3 gap down 1/8
 //   sw[3:2]                  selected stock (0 ABC, 1 TEK, 2 NRG, 3 MEM)
@@ -17,7 +17,7 @@
 //   led[15]                  flashes on a fill
 //
 // Ledger: stub_ledger by default. Compile with `define USE_PART_C (Vivado:
-// Settings > Verilog options > Defines) to use C's real ledger.v and seq_divider.v.
+// Settings > Verilog options > Defines) to use Tricia's real ledger.v and seq_divider.v.
 module B_demo_top (
     input  wire        clk,
     input  wire [15:0] sw,
@@ -46,7 +46,7 @@ module B_demo_top (
     b_demo_btn u_br (.clk(clk), .rst(sys_reset), .btn(btnR), .pulse(btn_pulse[`BTN_R]));
     b_demo_btn u_bd (.clk(clk), .rst(sys_reset), .btn(btnD), .pulse(btn_pulse[`BTN_D]));
 
-    // ------------------------------------------------------------ fake market (A)
+    // ------------------------------------------------------------ fake market (stands in for Yi An)
     wire [15:0] price0, price1, price2, price3;
     wire        tick;
     stub_market #(.TICK_DIV(25_000_000)) u_mkt (          // 250 ms
@@ -55,7 +55,7 @@ module B_demo_top (
         .price0(price0), .price1(price1), .price2(price2), .price3(price3), .tick(tick)
     );
 
-    // ------------------------------------------------------------ ledger (C)
+    // ------------------------------------------------------------ ledger (Tricia's, or the stub)
     wire [31:0] cash;
     wire [9:0]  pos0, pos1, pos2, pos3;
     wire        ledger_busy;
@@ -107,7 +107,7 @@ module B_demo_top (
     );
     assign JB[2] = 1'b0;                  // unused Pmod pin (as in My_Top_Module)
 
-    // ------------------------------------------------------------ Part B
+    // ------------------------------------------------------------ Douglas: order engine
     B_order_top u_b (
         .clk(clk), .sys_reset(sys_reset), .game_state(`GS_PLAYING),
         .price0(price0), .price1(price1), .price2(price2), .price3(price3), .tick(tick),

@@ -2,7 +2,7 @@
 `default_nettype none
 
 // b_demo_btn: debounce one push button and emit a 1-clock pulse per press.
-// Board-demo stand-in only. In the team build, D owns debouncing and sends
+// Board-demo stand-in only. In the team build, Matthew owns debouncing and sends
 // btn_pulse to B.
 //   2-FF synchroniser, then the input must hold its new level for STABLE
 //   clocks before the debounced state changes; pulse on the rising edge.

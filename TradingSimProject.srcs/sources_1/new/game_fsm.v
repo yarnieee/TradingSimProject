@@ -13,6 +13,7 @@ module game_fsm (
     output reg [3:0]  screen_state,
     output reg [13:0] quantity,
     output reg [2:0]  selected_stock,
+    output reg [1:0]  quantity_cursor,
     output     [3:0]  menu_selection
 );
 
@@ -33,7 +34,6 @@ module game_fsm (
     reg [13:0] next_quantity;
     reg        quantity_return_state;
     reg        next_quantity_return_state;
-    reg [1:0] quantity_cursor;
     reg [1:0] next_quantity_cursor;
 
     // Menu cursors are intentionally kept separate for each screen.
@@ -282,6 +282,7 @@ module game_fsm (
                 if (btnC) begin
                     next_state = PORTFOLIO;
                     next_portfolio_cursor = 0;
+                    next_quantity = 0;
                 end
             end
 

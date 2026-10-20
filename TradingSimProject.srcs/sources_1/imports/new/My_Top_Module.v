@@ -81,6 +81,7 @@ module MyTopModule (
     wire [3:0] screen_state;
     wire [13:0] quantity;
     wire [2:0] selected_stock;
+    wire [1:0] quantity_cursor;
     wire [3:0] menu_selection;
 
     game_fsm game_fsm_inst (
@@ -94,6 +95,7 @@ module MyTopModule (
         .screen_state(screen_state),
         .quantity(quantity),
         .selected_stock(selected_stock),
+        .quantity_cursor(quantity_cursor),
         .menu_selection(menu_selection)
     );
 
@@ -174,6 +176,8 @@ module MyTopModule (
         .clk(clk),
         .rst(rst),
         .quantity(quantity),
+        .screen_state(screen_state),
+        .quantity_cursor(quantity_cursor),
         .an(an),
         .seg(seg)
     );

@@ -58,4 +58,4 @@ foreach tb $tbs {
 
 puts "\n=============== SUMMARY ==============="
 foreach line $summary { puts $line }
-puts "(tb_yian_market is expected to FAIL until Yi An's stock.v price fix: see README.md)"
+puts "(tb_yian_market is expected to FAIL until Yi An's stock.v price fix (calculate_next_close))"

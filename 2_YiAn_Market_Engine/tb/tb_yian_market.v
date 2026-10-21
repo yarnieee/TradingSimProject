@@ -9,8 +9,8 @@
 // A trading day is shortened to 2000 clocks; nothing else is changed.
 //
 // EXPECTED TO FAIL until stock.v's calculate_next_close is fixed (unsigned
-// arithmetic pins prices at 65535; a 10% daily downward drift). See
-// README.md (repo root), Known issues. It passes once those are fixed.
+// arithmetic pins prices at 65535; a 10% daily downward drift). It passes
+// once those are fixed.
 module tb_yian_market;
     reg clk = 0;
     always #5 clk = ~clk;

@@ -90,9 +90,9 @@ module tb_integration;
         check(dut.price0 != 0 && dut.price1 != 0, "Yi An: AMD and MCD have prices (if not: AMD_seed.mem / MCD_seed.mem not found)");
         check(n_tick >= 1, "Yi An -> Douglas: a tick reached the order engine after a trading day");
         $display("     AMD %0d c, MCD %0d c", dut.price0, dut.price1);
-        // Yi An's own price maths, reported but not counted: see README.md (repo root)
+        // Yi An's own price maths (stock.v, calculate_next_close), reported but not counted
         if (dut.price0 == 16'hFFFF || dut.price1 == 16'hFFFF || dut.price0 < 100 || dut.price1 < 100)
-            $display("WARN: Yi An's prices look wrong (pinned at $655.35 or near 0): see README.md (repo root), Known issues");
+            $display("WARN: Yi An's prices look wrong (pinned at $655.35 or near 0): see stock.v, calculate_next_close");
 
         // ---------------- title -> portfolio
         press(C);

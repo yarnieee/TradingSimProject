@@ -132,28 +132,3 @@ Each of these is temporary, until the owner adds the signal from the Module I/O 
 | (matthew_top) `game_state` = PLAYING except on the title and game-end screens | no `game_state` output yet | Matthew outputs `game_state` |
 | Quantities outside 1-255 rejected as BAD QTY | team decision, 19 Oct: orders stay 8-bit | Matthew may cap his quantity at 255 |
 
-## Known issues (owners to fix)
-
-1. **Yi An, `stock.v`, `calculate_next_close`: prices pin at $655.35.** `previous_close` is
-   unsigned, so the whole `random_term` expression is evaluated unsigned. When `random_offset`
-   is negative it wraps to a huge number, and the price clamps to 65535 and stays there.
-2. **Yi An, same function: prices drift down 10% a day.** `stable_term` keeps 90% of the price and
-   `random_term` adds at most a few percent back. With both fixes, `tb_yian_market` passes
-   (tried on a scratch copy, not committed):
-   ```verilog
-   integer prev_signed;                       // add next to the other integers
-   ...
-   prev_signed = previous_close;
-   stable_term = prev_signed;
-   random_term = prev_signed * VOLATILITY * random_offset / 10000;
-   result = stable_term + random_term;
-   ```
-   Even fixed, prices still lean downward over 60 days (AMD $213 to $123), which may come from the
-   market-state adjustment or the random value's centre. [ASSUMPTION: not investigated further.]
-3. **Seed files in Vivado.** The script adds both `.mem` files to the project and `Integration_Top`
-   points at them by name. [ASSUMPTION: Vivado finds `.mem` files added to the project by name, in
-   synthesis and simulation. Not tested here.] If it reports it cannot open `AMD_seed.mem`, copy
-   both files into the synthesis or simulation run folder.
-4. **Size.** With the old 1800 days, a Yosys estimate put the build at about 95% of the chip's LUTs,
-   almost all in the market engine; the other three parts together are about 2,300 LUTs. The
-   180-day data cuts that a lot, but check Vivado's utilisation report.

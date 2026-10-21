@@ -30,7 +30,8 @@ Branch `branch-team-integration`. Everyone's work in one build, laid out by pers
 │   submodules/              ledger_fsm, ledger_validate, seq_divider
 │   tb/                      tb_ledger.v, tb_seq_divider.v
 │
-5_Matthew_Display/         MATTHEW      game_fsm.v, OLED_Renderer.v, quantity_7seg.v
+5_Matthew_Display/         MATTHEW      top module: matthew_top.v (buttons, game FSM, 7-seg, both OLEDs)
+│                            game_fsm.v, OLED_Renderer.v, quantity_7seg.v
 │   submodules/              text_layer, font_renderer, binary_to_bcd_14bit
 │   tb/                      tb_matthew_game_fsm.v
 │
@@ -40,8 +41,17 @@ Branch `branch-team-integration`. Everyone's work in one build, laid out by pers
 
 Each person's branch (`branch-yian-market-engine`, `branch-douglas-orders`, `branch-tricia-ledger`,
 `branch-matthew-oled-ui`) is merged in here, and the files are then placed in that person's
-folder. Matthew has no single top module yet: his three blocks are wired straight into
-`Integration_Top`.
+folder.
+
+In Vivado's hierarchy, `Integration_Top` has one block per person:
+
+```
+Integration_Top
+├─ matthew_display : matthew_top    buttons, game screens, 7-seg, both OLEDs (JA and JB)
+├─ yian_market     : A_top          market engine
+├─ tricia_ledger   : ledger         ledger
+└─ douglas_orders  : B_order_top    orders and the ticket page (drawn on Matthew's left OLED)
+```
 
 ## Opening it in Vivado (Windows)
 
@@ -108,7 +118,7 @@ outputs are gone). `data/AMD_seed.mem` and `data/MCD_seed.mem` hold their last 1
 **4 Apr 2025 to 19 Dec 2025**. Yi An's own branch still has the full 1800-row files, which with a
 depth of 180 would load the *oldest* 180 days (2018); use the trimmed files.
 
-## How the parts are joined (in Integration_Top.v)
+## How the parts are joined (Integration_Top.v and matthew_top.v)
 
 Each of these is temporary, until the owner adds the signal from the Module I/O map.
 
@@ -117,9 +127,9 @@ Each of these is temporary, until the owner adds the signal from the Module I/O 
 | price0 = AMD, price1 = MCD, price2/3 = 0 | Yi An has 2 stocks, the plan has 4; a 0 price means closed | Yi An outputs `price0..3` |
 | `tick` from Yi An's date changing | the day tick is inside `A_top` | Yi An outputs `tick` |
 | Seed files pointed at by name (`defparam`) | `A_top` asks for `storage/data/...`, a folder that does not exist here | Yi An uses plain file names |
-| The order = the move into Matthew's CONFIRM screen; side from BUY or SELL; quantity = Matthew's `quantity` | `game_fsm` has no order output | Matthew outputs a confirm pulse and side |
-| Selected stock: a copy of `game_fsm`'s `stocks_cursor` logic | `stocks_cursor` is inside `game_fsm` | Matthew outputs `sel_stock` |
-| `game_state` = PLAYING except on the title and game-end screens | no `game_state` output yet | Matthew outputs `game_state` |
+| (matthew_top) The order = the move into Matthew's CONFIRM screen; side from BUY or SELL; quantity = Matthew's `quantity` | `game_fsm` has no order output | Matthew outputs a confirm pulse and side |
+| (matthew_top) Selected stock: a copy of `game_fsm`'s `stocks_cursor` logic | `stocks_cursor` is inside `game_fsm` | Matthew outputs `sel_stock` |
+| (matthew_top) `game_state` = PLAYING except on the title and game-end screens | no `game_state` output yet | Matthew outputs `game_state` |
 | Quantities outside 1-255 rejected as BAD QTY | team decision, 19 Oct: orders stay 8-bit | Matthew may cap his quantity at 255 |
 
 ## Known issues (owners to fix)

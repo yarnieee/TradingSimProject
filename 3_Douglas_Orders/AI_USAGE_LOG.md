@@ -180,3 +180,16 @@ OLED's ticket to `TICKET_FLIP_180`, rewrote the Vivado script and the READMEs. N
 anyone's modules changed. All testbench results as before (10 of 11 pass; the market engine
 test fails on its known price bug).
 
+
+## 2026-10-21: one block per person under Integration_Top
+
+**Asked for:** `Integration_Top` had 14 modules directly under it (Matthew's pieces were loose
+in the top); give each person one block, with both OLEDs under Matthew.
+
+**Done by the AI (branch-team-integration):** wrote `5_Matthew_Display/matthew_top.v`, which
+holds Matthew's debouncers, `game_fsm`, `quantity_7seg`, `OLED_Renderer`, the 6.25 MHz clock
+and both OLED drivers (JB his screens, JA the page given on `left_pixel`, now Douglas's ticket),
+plus the order signals worked out from his screens (`sel_stock`, the order pulse and side,
+`game_state`), moved there from `Integration_Top`. Matthew's own modules are unchanged.
+`Integration_Top` now has `matthew_display`, `yian_market`, `tricia_ledger`, `douglas_orders`.
+`tb_integration` passes as before (15 checks).

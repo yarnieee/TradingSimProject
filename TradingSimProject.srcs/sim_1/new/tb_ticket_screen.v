@@ -33,6 +33,7 @@ module tb_ticket_screen;
     reg        reject = 0;
     reg [2:0]  reject_code = 0;
     wire [15:0] ticket_pix;
+    wire [15:0] ticket_pix_flip;
 
     ticket_screen #(.REJ_SHOW_CYCLES(100000)) dut (
         .clk(clk), .sys_reset(sys_reset), .pix_x(pix_x), .pix_y(pix_y),
@@ -42,6 +43,18 @@ module tb_ticket_screen;
         .placed(placed), .placed_side(placed_side), .placed_type(placed_type),
         .placed_qty(placed_qty), .placed_trig(placed_trig),
         .reject(reject), .reject_code(reject_code), .ticket_pix(ticket_pix)
+    );
+
+    // Same page with FLIP_180 = 1. Its OLED pixel (95 - x, 63 - y) must show
+    // exactly what the normal one shows at (x, y).
+    ticket_screen #(.REJ_SHOW_CYCLES(100000), .FLIP_180(1)) dut_flip (
+        .clk(clk), .sys_reset(sys_reset), .pix_x(7'd95 - pix_x), .pix_y(6'd63 - pix_y),
+        .sel_stock(sel_stock), .bid(bid), .ask(ask), .side(side), .otype(otype),
+        .qty(qty), .trig(trig), .focus(focus), .pending_count(pending_count),
+        .fill(fill), .fill_side(fill_side), .fill_qty(fill_qty), .fill_price(fill_price),
+        .placed(placed), .placed_side(placed_side), .placed_type(placed_type),
+        .placed_qty(placed_qty), .placed_trig(placed_trig),
+        .reject(reject), .reject_code(reject_code), .ticket_pix(ticket_pix_flip)
     );
 
     integer n_pass = 0, n_fail = 0;
@@ -108,6 +121,20 @@ module tb_ticket_screen;
         end
     endtask
 
+    task flip_check;
+        input [8*56:1] name;
+        integer x, y, bad;
+        begin
+            bad = 0;
+            for (y = 0; y < 64; y = y + 1)
+                for (x = 0; x < 96; x = x + 1) begin
+                    pix_x = x; pix_y = y; #1;
+                    if (ticket_pix_flip !== ticket_pix) bad = bad + 1;
+                end
+            check(bad == 0, name);
+        end
+    endtask
+
     task pulse_fill;
         input        sd;
         input [7:0]  q;
@@ -136,6 +163,7 @@ module tb_ticket_screen;
         count_col(20, 31, 27, 31, 16'hFFE0); check(cnt > 5, "F1 focused qty yellow");
         count_col(0, 60, 35, 39, 16'hFFFF); check(cnt == 0, "F1 TRG line dimmed (MKT)");
         dump("ticket_frame.hex");
+        flip_check("F1 FLIP_180: whole page rotated 180 degrees");
 
         // ---------------------------------------------------- frame 2
         side = `SIDE_SELL; otype = `OT_LMT; focus = 1; trig = 12000; qty = 25;
@@ -147,6 +175,7 @@ module tb_ticket_screen;
         count_col(0, 63, 55, 59, 16'hF800); check(cnt > 20, "F2 reject message red");
         count_col(20, 43, 35, 39, 16'hFFE0); check(cnt > 5, "F2 focused trig yellow");
         dump("ticket_frame_lmt.hex");
+        flip_check("F2 FLIP_180: whole page rotated 180 degrees");
 
         // reject times out back to the last fill
         step(100000);
@@ -162,6 +191,7 @@ module tb_ticket_screen;
         px_at(`TK_SUB_X0, `TK_SUB_Y0); check(px == 16'hFFE0, "F3 SUBMIT focused -> yellow edge");
         count_col(0, 63, 55, 59, 16'hFFFF); check(cnt > 20, "F3 placed message white");
         dump("ticket_frame_stp.hex");
+        flip_check("F3 FLIP_180: whole page rotated 180 degrees");
 
         if (n_fail == 0) $display("PASS: tb_ticket_screen (%0d checks)", n_pass);
         else             $display("FAIL: tb_ticket_screen (%0d failed, %0d passed)", n_fail, n_pass);

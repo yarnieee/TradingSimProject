@@ -193,3 +193,9 @@ plus the order signals worked out from his screens (`sel_stock`, the order pulse
 `game_state`), moved there from `Integration_Top`. Matthew's own modules are unchanged.
 `Integration_Top` now has `matthew_display`, `yian_market`, `tricia_ledger`, `douglas_orders`.
 `tb_integration` passes as before (15 checks).
+
+## 2026-10-21: READMEs shortened
+
+**Asked for:** the READMEs had too much detail. **Done by the AI:** rewrote `README.md`,
+`3_Douglas_Orders/README.md` and `9_Not_Used/README.md` to the essentials (folders, how to open
+and test in Vivado, board use, known issues).

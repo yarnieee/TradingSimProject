@@ -5,11 +5,11 @@
 //
 // One independent random source drives AMD and MCD.  Dedicated LFSRs supply
 // market-state choices and the five-to-twelve-day market-state duration.  Each
-// stock loads its latest 1800 CSV records before it starts accepting
+// stock loads its latest 180 CSV records before it starts accepting
 // two-second day ticks.
 module A_top #(
     parameter integer DAY_MAX_COUNT = 199_999_999,
-    parameter integer BUFFER_DEPTH = 180,           // 19 Oct: last 180 trading days only (was 1800)
+    parameter integer BUFFER_DEPTH = 180,
     parameter integer AMD_VOLATILITY = 10,
     parameter integer MCD_VOLATILITY = 10
     )(
@@ -26,27 +26,13 @@ module A_top #(
     output wire [31:0] mcd_current_date,
     output wire [(30*16)-1:0] amd_samples_30,
     output wire [(30*16)-1:0] amd_samples_180,
-    output wire [(30*16)-1:0] amd_samples_720,
-    output wire [(30*16)-1:0] amd_samples_1800,
     output wire [15:0] amd_mean_30,
     output wire [15:0] amd_mean_180,
-    output wire [15:0] amd_mean_720,
-    output wire [15:0] amd_mean_1800,
     output wire [(30*16)-1:0] mcd_samples_30,
     output wire [(30*16)-1:0] mcd_samples_180,
-    output wire [(30*16)-1:0] mcd_samples_720,
-    output wire [(30*16)-1:0] mcd_samples_1800,
     output wire [15:0] mcd_mean_30,
-    output wire [15:0] mcd_mean_180,
-    output wire [15:0] mcd_mean_720,
-    output wire [15:0] mcd_mean_1800
+    output wire [15:0] mcd_mean_180
     );
-
-    // 19 Oct: with 180 days of history the 720- and 1800-day windows cannot
-    // exist, so they are capped at BUFFER_DEPTH. Port names are unchanged;
-    // the *_720 and *_1800 outputs currently equal the 180-day window.
-    localparam integer WINDOW_720  = (720  > BUFFER_DEPTH) ? BUFFER_DEPTH : 720;
-    localparam integer WINDOW_1800 = (1800 > BUFFER_DEPTH) ? BUFFER_DEPTH : 1800;
 
     wire day_tick;
     wire [31:0] startup_random_seed;
@@ -152,7 +138,7 @@ module A_top #(
     stock #(
         .BUFFER_DEPTH(BUFFER_DEPTH),
         .VOLATILITY(AMD_VOLATILITY),
-        .SEED_FILE("storage/AMD_seed.mem")
+        .SEED_FILE("storage/data/AMD_seed.mem")
         ) amd_stock_inst (
         .clk(clk),
         .rst(rst),
@@ -171,7 +157,7 @@ module A_top #(
     stock #(
         .BUFFER_DEPTH(BUFFER_DEPTH),
         .VOLATILITY(MCD_VOLATILITY),
-        .SEED_FILE("storage/MCD_seed.mem")
+        .SEED_FILE("storage/data/MCD_seed.mem")
         ) mcd_stock_inst (
         .clk(clk),
         .rst(rst),
@@ -207,24 +193,6 @@ module A_top #(
     );
 
     get_30_values #(
-        .WINDOW(WINDOW_720),
-        .TOTAL_DEPTH(BUFFER_DEPTH)
-        ) amd_get_720_values_inst (
-        .history_in(amd_close_history),
-        .samples_out(amd_samples_720),
-        .mean_out(amd_mean_720)
-    );
-
-    get_30_values #(
-        .WINDOW(WINDOW_1800),
-        .TOTAL_DEPTH(BUFFER_DEPTH)
-        ) amd_get_1800_values_inst (
-        .history_in(amd_close_history),
-        .samples_out(amd_samples_1800),
-        .mean_out(amd_mean_1800)
-    );
-
-    get_30_values #(
         .WINDOW(30),
         .TOTAL_DEPTH(BUFFER_DEPTH)
         ) mcd_get_30_values_inst (
@@ -240,24 +208,6 @@ module A_top #(
         .history_in(mcd_close_history),
         .samples_out(mcd_samples_180),
         .mean_out(mcd_mean_180)
-    );
-
-    get_30_values #(
-        .WINDOW(WINDOW_720),
-        .TOTAL_DEPTH(BUFFER_DEPTH)
-        ) mcd_get_720_values_inst (
-        .history_in(mcd_close_history),
-        .samples_out(mcd_samples_720),
-        .mean_out(mcd_mean_720)
-    );
-
-    get_30_values #(
-        .WINDOW(WINDOW_1800),
-        .TOTAL_DEPTH(BUFFER_DEPTH)
-        ) mcd_get_1800_values_inst (
-        .history_in(mcd_close_history),
-        .samples_out(mcd_samples_1800),
-        .mean_out(mcd_mean_1800)
     );
 
 endmodule

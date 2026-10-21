@@ -16,6 +16,55 @@
 // be changed with the buttons, so the ticket can place any order by itself.
 //
 // The order engine never writes cash or positions; it only reads Tricia's ledger.
+//
+// ============================================================== INPUTS AND OUTPUTS
+// How each port connects to the other top modules in the team build
+// (Integration_Top, branch-team-integration). "now" = how it is wired today;
+// "plan" = what the Module I/O map asks for, if different.
+//
+// INPUTS
+//   Port           Width  From                          Use here
+//   clk            1      board 100 MHz clock           everything
+//   sys_reset      1      Integration_Top (sw[0],       clears the book, ticket, messages
+//                         synchronised)
+//   game_state     [1:0]  Matthew: matthew_top          orders and book scans only while PLAYING
+//                         (PLAYING except title / game-end screens)
+//   price0..3      [15:0] Yi An: A_top                  bid/ask, order checks, book triggers
+//                         now: price0 = AMD, price1 = MCD, price2/3 = 0 (closed)
+//                         plan: A_top outputs price0..3 itself
+//   tick           1      Yi An: A_top                  starts a book scan (one pulse per trading day)
+//                         now: made in Integration_Top from AMD's date changing
+//   sel_stock      [1:0]  Matthew: matthew_top          stock for his orders; the ticket follows it
+//   page_R         1      Matthew                       0 = ticket has the buttons, 1 = it ignores them
+//                         now: tied to 1 (Matthew's screens own the buttons)
+//   btn_pulse      [4:0]  Matthew (debounced buttons)   ticket fields, submit, cancel
+//                         now: tied to 0
+//   ord_req        1      Matthew: matthew_top          places his order (entering the CONFIRM screen)
+//   ord_side       1      Matthew: matthew_top          BUY or SELL screen he came from
+//   ord_type       [1:0]  Matthew                       now: tied to MKT
+//   ord_qty        [13:0] Matthew: game_fsm quantity    1-255 accepted, else BAD QTY
+//   ord_trig       [15:0] Matthew                       now: tied to 0 (market orders only)
+//   cash           [31:0] Tricia: ledger                buy checks (cost + fee <= cash)
+//   pos0..3        [9:0]  Tricia: ledger                sell checks (qty <= position)
+//   ledger_busy    1      Tricia: ledger                waits for it to drop before the next order
+//   xR, yR         [6:0], Matthew: matthew_top          pixel the left OLED (JA) is drawing
+//                  [5:0]  (left_x, left_y)              (named xR/yR from the plan's right OLED)
+//
+// OUTPUTS
+//   Port           Width  To                            Meaning
+//   fill           1      Tricia: ledger;               one pulse per filled order
+//                         Integration_Top: led[15]
+//   fill_stock     [1:0]  Tricia: ledger                which stock
+//   fill_side      1      Tricia: ledger                0 buy, 1 sell
+//   fill_qty       [7:0]  Tricia: ledger                shares
+//   fill_price     [15:0] Tricia: ledger                cents per share (ask for buys, bid for sells)
+//   fill_fee       [15:0] Tricia: ledger                cents ($1 flat)
+//   reject         1      Integration_Top: led[14]      one pulse per rejected order
+//                         plan: Matthew (reject screen)
+//   reject_code    [2:0]  plan: Matthew                 why (codes in trading_defs.vh); now unused
+//   pending_count  [3:0]  Integration_Top: led[11:8]    orders waiting in the book, 0-8
+//   ticket_pixel   [15:0] Matthew: matthew_top          RGB565 colour of the ticket page at (xR, yR),
+//                         (left_pixel) -> left OLED JA  drawn rotated 180 degrees (TICKET_FLIP_180)
 module B_order_top #(
     parameter SPREAD          = 5,             // cents per side [ASSUMPTION]
     parameter FEE             = 100,           // cents per execution [ASSUMPTION]

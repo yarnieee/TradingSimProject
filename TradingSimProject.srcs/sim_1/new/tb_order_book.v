@@ -3,7 +3,8 @@
 
 // tb_order_book: insert / cancel / full, the four trigger rules at their exact
 // boundaries, gap fills, slot-order servicing, rescan on a mid-scan tick,
-// scan_en gating, and reset during a scan. The testbench plays exec_engine:
+// scan_en gating, reset during a scan, and stop-loss / take-profit pairs (one
+// leg leaving removes the other). The testbench plays exec_engine:
 // it acks every request ACK_DELAY clocks after it appears and logs it.
 module tb_order_book;
     reg clk = 0;
@@ -19,6 +20,11 @@ module tb_order_book;
     reg [1:0]  ins_type = 0;
     reg [7:0]  ins_qty = 0;
     reg [15:0] ins_trig = 0;
+    reg [1:0]  ins_brk = 0;
+    reg        ins_pair = 0;
+    reg [1:0]  pair_stock = 0;
+    reg [7:0]  pair_qty = 0;
+    reg [15:0] pair_sl = 0, pair_tp = 0;
     reg        cancel = 0;
     reg [2:0]  cancel_idx = 0;
     reg [2:0]  rd_idx = 0;
@@ -27,6 +33,7 @@ module tb_order_book;
 
     wire        full;
     wire [3:0]  count;
+    wire [3:0]  free_cnt;
     wire        trq;
     wire [2:0]  trq_slot;
     wire [1:0]  trq_stock;
@@ -34,6 +41,11 @@ module tb_order_book;
     wire [1:0]  trq_type;
     wire [7:0]  trq_qty;
     wire [15:0] trq_px;
+    wire [1:0]  trq_brk;
+    wire [7:0]  all_valid, all_side, all_leg;
+    wire [15:0] all_stock, all_type;
+    wire [63:0] all_qty;
+    wire [127:0] all_trig;
     wire        rd_valid;
     wire [1:0]  rd_stock;
     wire        rd_side;
@@ -45,13 +57,18 @@ module tb_order_book;
         .clk(clk), .sys_reset(sys_reset), .tick(tick), .scan_en(scan_en),
         .price0(price0), .price1(price1), .price2(price2), .price3(price3),
         .ins(ins), .ins_stock(ins_stock), .ins_side(ins_side), .ins_type(ins_type),
-        .ins_qty(ins_qty), .ins_trig(ins_trig),
+        .ins_qty(ins_qty), .ins_trig(ins_trig), .ins_brk(ins_brk),
+        .ins_pair(ins_pair), .pair_stock(pair_stock), .pair_qty(pair_qty),
+        .pair_sl(pair_sl), .pair_tp(pair_tp),
         .cancel(cancel), .cancel_idx(cancel_idx),
-        .full(full), .count(count),
+        .full(full), .count(count), .free_cnt(free_cnt),
         .trq(trq), .trq_slot(trq_slot), .trq_stock(trq_stock), .trq_side(trq_side),
-        .trq_type(trq_type), .trq_qty(trq_qty), .trq_px(trq_px), .trq_ack(trq_ack),
+        .trq_type(trq_type), .trq_qty(trq_qty), .trq_px(trq_px), .trq_brk(trq_brk),
+        .trq_ack(trq_ack),
         .rd_idx(rd_idx), .rd_valid(rd_valid), .rd_stock(rd_stock), .rd_side(rd_side),
-        .rd_type(rd_type), .rd_qty(rd_qty), .rd_trig(rd_trig)
+        .rd_type(rd_type), .rd_qty(rd_qty), .rd_trig(rd_trig),
+        .all_valid(all_valid), .all_side(all_side), .all_stock(all_stock), .all_type(all_type),
+        .all_qty(all_qty), .all_trig(all_trig), .all_leg(all_leg)
     );
 
     // ------------------------------------------------------------ fake exec_engine
@@ -61,6 +78,7 @@ module tb_order_book;
     reg [2:0]  log_slot [0:31];
     reg [15:0] log_px   [0:31];
     reg [7:0]  log_qty  [0:31];
+    reg [1:0]  log_brk  [0:31];
 
     always @(posedge clk) begin
         trq_ack <= 1'b0;
@@ -71,6 +89,7 @@ module tb_order_book;
             log_slot[n_req] = trq_slot;
             log_px[n_req]   = trq_px;
             log_qty[n_req]  = trq_qty;
+            log_brk[n_req]  = trq_brk;
             n_req           = n_req + 1;
             wcnt            <= 0;
         end else begin
@@ -117,6 +136,17 @@ module tb_order_book;
         input [2:0] k;
         begin
             cancel_idx = k; cancel = 1; step(1); cancel = 0; step(1);
+        end
+    endtask
+
+    task insert_pair;
+        input [1:0]  s;
+        input [7:0]  q;
+        input [15:0] sl;
+        input [15:0] tp;
+        begin
+            pair_stock = s; pair_qty = q; pair_sl = sl; pair_tp = tp;
+            ins_pair = 1; step(1); ins_pair = 0; step(1);
         end
     endtask
 
@@ -260,6 +290,75 @@ module tb_order_book;
         check(!trq && count == 0 && dut.state == 0, "B13 reset clears book, drops trq, FSM idle");
         step(50);
         check(!trq && n_req == base, "B13 no stray request after reset");
+
+        // ---------------------------------------------------- B14 stop-loss / take-profit pair
+        price0 = 10000;  // bid 9995
+        check(count == 0 && free_cnt == 8, "B14 empty, 8 free");
+        insert_pair(0, 10, 9000, 11000);
+        check(count == 2 && free_cnt == 6 && all_leg == 8'b0000_0011, "B14 pair in slots 0 and 1, both legs");
+        rd_idx = 0; #1;
+        check(rd_side == `SIDE_SELL && rd_type == `OT_STP && rd_qty == 10 && rd_trig == 9000, "B14 slot 0 = STP SELL 10 @ 90.00 (stop-loss)");
+        rd_idx = 1; #1;
+        check(rd_side == `SIDE_SELL && rd_type == `OT_LMT && rd_qty == 10 && rd_trig == 11000, "B14 slot 1 = LMT SELL 10 @ 110.00 (take-profit)");
+        check(dut.s_lnk[0] == 1 && dut.s_lnk[1] == 0, "B14 legs point at each other");
+        check(all_trig[15:0] == 9000 && all_trig[31:16] == 11000 && all_qty[15:0] == 16'h0A0A, "B14 all_* outputs");
+
+        // ---------------------------------------------------- B15 stop-loss fills, take-profit goes
+        price0 = 9005;   // bid 9000 <= 9000
+        base = n_req; do_tick; step(30);
+        check(n_req == base + 1 && log_slot[base] == 0 && log_px[base] == 9000, "B15 stop-loss triggers at bid 90.00");
+        check(count == 0 && all_leg == 0, "B15 take-profit removed with it");
+
+        // ---------------------------------------------------- B16 take-profit fills, stop-loss goes
+        price0 = 10000;
+        insert_pair(0, 10, 9000, 11000);
+        price0 = 11005;  // bid 11000 >= 11000
+        base = n_req; do_tick; step(30);
+        check(n_req == base + 1 && log_slot[base] == 1 && log_px[base] == 11000, "B16 take-profit triggers at bid 110.00");
+        check(count == 0, "B16 stop-loss removed with it");
+
+        // ---------------------------------------------------- B17 cancel one leg -> both go
+        price0 = 10000;
+        insert(1, `SIDE_BUY, `OT_LMT, 5, 100);      // slot 0, unrelated
+        insert_pair(0, 10, 9000, 11000);            // slots 1 and 2
+        do_cancel(2);
+        check(count == 1 && all_valid == 8'b0000_0001, "B17 cancelling the TP removes the SL too, other order stays");
+        // the empty slots keep stale link bits; cancelling an empty slot must not touch anything
+        do_cancel(1);
+        check(count == 1 && all_valid == 8'b0000_0001, "B17 cancel of an empty former leg does nothing");
+        clear_book;
+
+        // ---------------------------------------------------- B18 cancel a leg while the other is filling
+        price0 = 10000;
+        insert_pair(0, 10, 9000, 11000);            // SL slot 0, TP slot 1
+        ack_en = 0;
+        price0 = 9005;                              // SL triggers
+        base = n_req; do_tick;
+        wait (trq); step(2);
+        check(trq_slot == 0, "B18 stop-loss is waiting on exec");
+        do_cancel(1);                               // cancel the TP while the SL is filling
+        check(all_valid == 8'b0000_0001 && dut.lnk_v[0] == 0, "B18 TP gone, waiting SL unlinked");
+        insert(2, `SIDE_BUY, `OT_LMT, 77, 100);     // reuses slot 1
+        ack_en = 1; step(30);
+        rd_idx = 1; #1;
+        check(n_req == base + 1 && count == 1 && rd_valid && rd_qty == 77, "B18 SL fill does not remove the new order in slot 1");
+        clear_book;
+
+        // ---------------------------------------------------- B19 pair needs two free slots
+        price0 = 10000;
+        for (k = 0; k < 7; k = k + 1) insert(0, `SIDE_BUY, `OT_LMT, k + 1, 100);
+        insert_pair(0, 10, 9000, 11000);
+        check(count == 7 && all_leg == 0, "B19 pair ignored with one free slot");
+        clear_book;
+
+        // ---------------------------------------------------- B20 SL/TP setting rides with a pending BUY
+        price0 = 10000;
+        ins_brk = `BRK_5;
+        insert(0, `SIDE_BUY,  `OT_LMT, 1, 10005);   // slot 0: triggers now
+        insert(0, `SIDE_SELL, `OT_LMT, 1, 9995);    // slot 1: triggers now; a SELL keeps no SL/TP
+        ins_brk = `BRK_OFF;
+        base = n_req; do_tick; step(40);
+        check(n_req == base + 2 && log_brk[base] == `BRK_5 && log_brk[base+1] == `BRK_OFF, "B20 trq_brk: BUY keeps 5%, SELL has none");
 
         if (n_fail == 0) $display("PASS: tb_order_book (%0d checks)", n_pass);
         else             $display("FAIL: tb_order_book (%0d failed, %0d passed)", n_fail, n_pass);

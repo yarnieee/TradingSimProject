@@ -7,10 +7,13 @@
 // map in the team plan doc; encodings of Matthew's signals are in trading_defs.vh.
 //
 //   order_entry --submit--> exec_engine --fill--> Tricia, Matthew
-//                              ^   |  \--reject--> Matthew
-//                    trq/ack   |   v ins
-//                            order_book
+//        |                     ^   |  \--reject--> Matthew
+//        | cancel    trq/ack   |   v ins, ins_pair (stop-loss + take-profit)
+//        +------------------> order_book
 //   ticket_screen draws the page from all of the above.
+//
+// The ticket has its own stock, which follows Matthew's sel_stock and can also
+// be changed with the buttons, so the ticket can place any order by itself.
 //
 // The order engine never writes cash or positions; it only reads Tricia's ledger.
 module B_order_top #(
@@ -76,47 +79,56 @@ module B_order_top #(
     // out-of-range quantities become 0, which order_validate rejects as RJ_BAD_QTY
     wire [7:0] ord_qty8  = (ord_qty == 14'd0 || ord_qty > 14'd255) ? 8'd0 : ord_qty[7:0];
 
-    // ------------------------------------------------------------ selected stock
-    reg [15:0] sel_price;
+    // ------------------------------------------------------------ the ticket's stock
+    wire [1:0]  e_stock;
+    reg  [15:0] tk_price;
     always @* begin
-        case (sel_stock)
-            2'd0:    sel_price = price0;
-            2'd1:    sel_price = price1;
-            2'd2:    sel_price = price2;
-            default: sel_price = price3;
+        case (e_stock)
+            2'd0:    tk_price = price0;
+            2'd1:    tk_price = price1;
+            2'd2:    tk_price = price2;
+            default: tk_price = price3;
         endcase
     end
 
-    wire [15:0] sel_bid, sel_ask;
-    spread_calc #(.SPREAD(SPREAD)) u_sel_spread (.price(sel_price), .bid(sel_bid), .ask(sel_ask));
+    wire [15:0] tk_bid, tk_ask;
+    spread_calc #(.SPREAD(SPREAD)) u_tk_spread (.price(tk_price), .bid(tk_bid), .ask(tk_ask));
 
     // ------------------------------------------------------------ order entry
     wire        e_side;
     wire [1:0]  e_type;
     wire [7:0]  e_qty;
     wire [15:0] e_trig;
-    wire [1:0]  e_focus;
+    wire [1:0]  e_brk;
+    wire [2:0]  e_ord_sel;
+    wire [2:0]  e_focus;
     wire        submit_req;
     wire [1:0]  sub_stock;
     wire        sub_side;
     wire [1:0]  sub_type;
     wire [7:0]  sub_qty;
     wire [15:0] sub_trig;
+    wire [1:0]  sub_brk;
+    wire        cancel_req;
+    wire [2:0]  cancel_idx;
 
     order_entry #(.QTY_INIT(QTY_INIT), .TRIG_STEP(TRIG_STEP)) u_entry (
         .clk(clk), .sys_reset(sys_reset), .ticket_active(ticket_active),
-        .sel_stock(sel_stock), .sel_price(sel_price),
+        .sel_stock(sel_stock), .tk_price(tk_price),
         .key_up(key_up), .key_down(key_down), .key_left(key_left),
         .key_right(key_right), .key_center(key_center),
         .ext_load(ord_req), .ext_side(ord_side), .ext_type(ord_type),
         .ext_qty(ord_qty8), .ext_trig(ord_trig),
-        .side(e_side), .otype(e_type), .qty(e_qty), .trig(e_trig), .focus(e_focus),
+        .stock(e_stock), .side(e_side), .otype(e_type), .qty(e_qty), .trig(e_trig),
+        .brk(e_brk), .ord_sel(e_ord_sel), .focus(e_focus),
         .submit_req(submit_req), .sub_stock(sub_stock), .sub_side(sub_side),
-        .sub_type(sub_type), .sub_qty(sub_qty), .sub_trig(sub_trig)
+        .sub_type(sub_type), .sub_qty(sub_qty), .sub_trig(sub_trig), .sub_brk(sub_brk),
+        .cancel_req(cancel_req), .cancel_idx(cancel_idx)
     );
 
     // ------------------------------------------------------------ book <-> engine
     wire        book_full;
+    wire [3:0]  free_cnt;
     wire        trq, trq_ack;
     wire [2:0]  trq_slot;
     wire [1:0]  trq_stock;
@@ -124,13 +136,23 @@ module B_order_top #(
     wire [1:0]  trq_type;
     wire [7:0]  trq_qty;
     wire [15:0] trq_px;
+    wire [1:0]  trq_brk;
     wire        ins;
     wire [1:0]  ins_stock;
     wire        ins_side;
     wire [1:0]  ins_type;
     wire [7:0]  ins_qty;
     wire [15:0] ins_trig;
+    wire [1:0]  ins_brk;
+    wire        ins_pair;
+    wire [1:0]  pair_stock;
+    wire [7:0]  pair_qty;
+    wire [15:0] pair_sl, pair_tp;
     wire        placed;
+    wire [7:0]   bk_valid, bk_side, bk_leg;
+    wire [15:0]  bk_stock, bk_type;
+    wire [63:0]  bk_qty;
+    wire [127:0] bk_trig;
 
     exec_engine #(.SPREAD(SPREAD), .FEE(FEE), .POS_MAX(POS_MAX)) u_exec (
         .clk(clk), .sys_reset(sys_reset), .game_live(game_live),
@@ -138,37 +160,46 @@ module B_order_top #(
         .cash(cash), .pos0(pos0), .pos1(pos1), .pos2(pos2), .pos3(pos3),
         .ledger_busy(ledger_busy),
         .submit_req(submit_req), .sub_stock(sub_stock), .sub_side(sub_side),
-        .sub_type(sub_type), .sub_qty(sub_qty), .sub_trig(sub_trig),
-        .book_full(book_full),
+        .sub_type(sub_type), .sub_qty(sub_qty), .sub_trig(sub_trig), .sub_brk(sub_brk),
+        .book_full(book_full), .free_cnt(free_cnt),
         .trq(trq), .trq_stock(trq_stock), .trq_side(trq_side), .trq_type(trq_type),
-        .trq_qty(trq_qty), .trq_px(trq_px), .trq_ack(trq_ack),
+        .trq_qty(trq_qty), .trq_px(trq_px), .trq_brk(trq_brk), .trq_ack(trq_ack),
         .ins(ins), .ins_stock(ins_stock), .ins_side(ins_side), .ins_type(ins_type),
-        .ins_qty(ins_qty), .ins_trig(ins_trig), .placed(placed),
+        .ins_qty(ins_qty), .ins_trig(ins_trig), .ins_brk(ins_brk), .placed(placed),
+        .ins_pair(ins_pair), .pair_stock(pair_stock), .pair_qty(pair_qty),
+        .pair_sl(pair_sl), .pair_tp(pair_tp),
         .fill(fill), .fill_stock(fill_stock), .fill_side(fill_side),
         .fill_qty(fill_qty), .fill_price(fill_price), .fill_fee(fill_fee),
         .reject(reject), .reject_code(reject_code)
     );
 
-    // rd_* left unconnected until the Phase 3 pending list uses them
+    // rd_* is for testbenches; the ORDERS view reads every slot through all_*
     order_book #(.SPREAD(SPREAD)) u_book (
         .clk(clk), .sys_reset(sys_reset), .tick(tick), .scan_en(game_live),
         .price0(price0), .price1(price1), .price2(price2), .price3(price3),
         .ins(ins), .ins_stock(ins_stock), .ins_side(ins_side), .ins_type(ins_type),
-        .ins_qty(ins_qty), .ins_trig(ins_trig),
-        .cancel(1'b0), .cancel_idx(3'd0),          // Phase 3
-        .full(book_full), .count(pending_count),
+        .ins_qty(ins_qty), .ins_trig(ins_trig), .ins_brk(ins_brk),
+        .ins_pair(ins_pair), .pair_stock(pair_stock), .pair_qty(pair_qty),
+        .pair_sl(pair_sl), .pair_tp(pair_tp),
+        .cancel(cancel_req), .cancel_idx(cancel_idx),
+        .full(book_full), .count(pending_count), .free_cnt(free_cnt),
         .trq(trq), .trq_slot(trq_slot), .trq_stock(trq_stock), .trq_side(trq_side),
-        .trq_type(trq_type), .trq_qty(trq_qty), .trq_px(trq_px), .trq_ack(trq_ack),
+        .trq_type(trq_type), .trq_qty(trq_qty), .trq_px(trq_px), .trq_brk(trq_brk),
+        .trq_ack(trq_ack),
         .rd_idx(3'd0), .rd_valid(), .rd_stock(), .rd_side(), .rd_type(),
-        .rd_qty(), .rd_trig()
+        .rd_qty(), .rd_trig(),
+        .all_valid(bk_valid), .all_side(bk_side), .all_stock(bk_stock), .all_type(bk_type),
+        .all_qty(bk_qty), .all_trig(bk_trig), .all_leg(bk_leg)
     );
 
     // ------------------------------------------------------------ screen
     ticket_screen #(.REJ_SHOW_CYCLES(REJ_SHOW_CYCLES), .FLIP_180(TICKET_FLIP_180)) u_screen (
         .clk(clk), .sys_reset(sys_reset), .pix_x(xR), .pix_y(yR),
-        .sel_stock(sel_stock), .bid(sel_bid), .ask(sel_ask),
-        .side(e_side), .otype(e_type), .qty(e_qty), .trig(e_trig), .focus(e_focus),
-        .pending_count(pending_count),
+        .stock(e_stock), .bid(tk_bid), .ask(tk_ask),
+        .side(e_side), .otype(e_type), .qty(e_qty), .trig(e_trig), .brk(e_brk),
+        .ord_sel(e_ord_sel), .focus(e_focus), .pending_count(pending_count),
+        .bk_valid(bk_valid), .bk_side(bk_side), .bk_stock(bk_stock), .bk_type(bk_type),
+        .bk_qty(bk_qty), .bk_trig(bk_trig), .bk_leg(bk_leg),
         .fill(fill), .fill_side(fill_side), .fill_qty(fill_qty), .fill_price(fill_price),
         .placed(placed), .placed_side(ins_side), .placed_type(ins_type),
         .placed_qty(ins_qty), .placed_trig(ins_trig),

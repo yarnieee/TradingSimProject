@@ -2,18 +2,20 @@
 `default_nettype none
 `include "trading_defs.vh"
 
-// stub_font: 3x5 font standing in for Matthew's font ROM.
-// Character codes follow trading_defs.vh. Synthesisable (a case ROM), so it
-// can go on the board for order engine bring-up until Matthew's ROM is integrated.
-// [TEAM] Matthew's ROM needs a 3x5 port with this behaviour, or the order engine swaps this out.
+// font_3x5: 3x5 pixel font in 4x6 cells (24 characters x 10 rows on a 96x64
+// OLED). The "optional 3x5 font for dense tables" in the plan; Matthew's
+// font_renderer is the 5x7 one. Any page can instantiate it.
+//
+// Character codes are in trading_defs.vh: 0-9 digits, 10-35 A-Z, 36 space,
+// then punctuation (CH_DOT .. CH_BLOCK). Unknown codes are blank.
 //
 // Glyph bits are rows top to bottom, 3 bits per row, MSB = leftmost pixel.
-// col 3 is the gap between characters and is always off.
-// Not included: the 5x7 set from the spec. The order engine does not use it.
-module stub_font (
+// Column 3 and row 5 are the gaps between characters and are always off.
+// Purely combinational (a case ROM): no clock, no latency.
+module font_3x5 (
     input  wire [5:0] ch,
-    input  wire [2:0] row,     // 0..4
-    input  wire [1:0] col,     // 0..3
+    input  wire [2:0] row,     // 0..5 (5 is the gap)
+    input  wire [1:0] col,     // 0..3 (3 is the gap)
     output wire       pix
 );
     reg [14:0] g;
@@ -67,6 +69,21 @@ module stub_font (
             6'd45: g = 15'b110_100_100_100_110;   // [
             6'd46: g = 15'b011_001_001_001_011;   // ]
             6'd47: g = 15'b100_010_001_010_100;   // >
+            6'd48: g = 15'b001_010_100_010_001;   // <
+            6'd49: g = 15'b000_111_000_111_000;   // =
+            6'd50: g = 15'b010_100_100_100_010;   // (
+            6'd51: g = 15'b010_001_001_001_010;   // )
+            6'd52: g = 15'b000_000_000_010_100;   // ,
+            6'd53: g = 15'b010_010_010_000_010;   // !
+            6'd54: g = 15'b110_001_010_000_010;   // ?
+            6'd55: g = 15'b000_101_010_101_000;   // *
+            6'd56: g = 15'b101_111_101_111_101;   // #
+            6'd57: g = 15'b000_000_000_000_111;   // _
+            6'd58: g = 15'b010_010_000_000_000;   // '
+            6'd59: g = 15'b010_101_010_101_011;   // &
+            6'd60: g = 15'b010_111_010_010_010;   // up arrow
+            6'd61: g = 15'b010_010_010_111_010;   // down arrow
+            6'd62: g = 15'b111_111_111_111_111;   // filled cell
             default: g = 15'b000_000_000_000_000;
         endcase
     end

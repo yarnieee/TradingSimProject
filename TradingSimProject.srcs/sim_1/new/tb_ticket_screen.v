@@ -2,12 +2,15 @@
 `include "trading_defs.vh"
 `include "ticket_layout.vh"
 
-// tb_ticket_screen: drives ticket_screen directly into three states, checks
+// tb_ticket_screen: drives ticket_screen directly into five states, checks
 // a few key pixels, and writes one frame dump per state (96x64 RGB565, one
-// hex value per line, row-major). tools/hex2png.py turns them into PNGs.
-//   ticket_frame.hex       MKT BUY, focus qty, after a fill
-//   ticket_frame_lmt.hex   LMT SELL, focus trig, reject showing
-//   ticket_frame_stp.hex   STP BUY, focus submit, pending order placed
+// hex value per line, row-major). hex2png.py turns them into PNGs.
+//   ticket_frame.hex         MKT BUY, focus qty, after a fill
+//   ticket_frame_lmt.hex     LMT SELL, focus trig, reject showing
+//   ticket_frame_stp.hex     STP BUY, focus submit, pending order placed
+//   ticket_frame_sltp.hex    SL/TP 10% focused, then the stock field focused
+//   ticket_frame_orders.hex  ORDERS view: an order, an SL/TP pair, empty slots
+// Every state is also checked against the FLIP_180 version, pixel for pixel.
 module tb_ticket_screen;
     reg clk = 0;
     always #5 clk = ~clk;
@@ -15,14 +18,20 @@ module tb_ticket_screen;
     reg        sys_reset = 1;
     reg [6:0]  pix_x = 0;
     reg [5:0]  pix_y = 0;
-    reg [1:0]  sel_stock = 1;            // TEK
+    reg [1:0]  stock = 1;                // MCD
     reg [15:0] bid = 12325, ask = 12335;
     reg        side = `SIDE_BUY;
     reg [1:0]  otype = `OT_MKT;
     reg [7:0]  qty = 10;
     reg [15:0] trig = 12330;
-    reg [1:0]  focus = 0;
+    reg [2:0]  focus = 0;
+    reg [1:0]  brk = `BRK_OFF;
+    reg [2:0]  ord_sel = 0;
     reg [3:0]  pending_count = 3;
+    reg [7:0]   bk_valid = 0, bk_side = 0, bk_leg = 0;
+    reg [15:0]  bk_stock = 0, bk_type = 0;
+    reg [63:0]  bk_qty = 0;
+    reg [127:0] bk_trig = 0;
     reg        fill = 0, fill_side = 0;
     reg [7:0]  fill_qty = 0;
     reg [15:0] fill_price = 0;
@@ -37,8 +46,11 @@ module tb_ticket_screen;
 
     ticket_screen #(.REJ_SHOW_CYCLES(100000)) dut (
         .clk(clk), .sys_reset(sys_reset), .pix_x(pix_x), .pix_y(pix_y),
-        .sel_stock(sel_stock), .bid(bid), .ask(ask), .side(side), .otype(otype),
-        .qty(qty), .trig(trig), .focus(focus), .pending_count(pending_count),
+        .stock(stock), .bid(bid), .ask(ask), .side(side), .otype(otype),
+        .qty(qty), .trig(trig), .brk(brk), .ord_sel(ord_sel), .focus(focus),
+        .pending_count(pending_count),
+        .bk_valid(bk_valid), .bk_side(bk_side), .bk_stock(bk_stock), .bk_type(bk_type),
+        .bk_qty(bk_qty), .bk_trig(bk_trig), .bk_leg(bk_leg),
         .fill(fill), .fill_side(fill_side), .fill_qty(fill_qty), .fill_price(fill_price),
         .placed(placed), .placed_side(placed_side), .placed_type(placed_type),
         .placed_qty(placed_qty), .placed_trig(placed_trig),
@@ -49,8 +61,11 @@ module tb_ticket_screen;
     // exactly what the normal one shows at (x, y).
     ticket_screen #(.REJ_SHOW_CYCLES(100000), .FLIP_180(1)) dut_flip (
         .clk(clk), .sys_reset(sys_reset), .pix_x(7'd95 - pix_x), .pix_y(6'd63 - pix_y),
-        .sel_stock(sel_stock), .bid(bid), .ask(ask), .side(side), .otype(otype),
-        .qty(qty), .trig(trig), .focus(focus), .pending_count(pending_count),
+        .stock(stock), .bid(bid), .ask(ask), .side(side), .otype(otype),
+        .qty(qty), .trig(trig), .brk(brk), .ord_sel(ord_sel), .focus(focus),
+        .pending_count(pending_count),
+        .bk_valid(bk_valid), .bk_side(bk_side), .bk_stock(bk_stock), .bk_type(bk_type),
+        .bk_qty(bk_qty), .bk_trig(bk_trig), .bk_leg(bk_leg),
         .fill(fill), .fill_side(fill_side), .fill_qty(fill_qty), .fill_price(fill_price),
         .placed(placed), .placed_side(placed_side), .placed_type(placed_type),
         .placed_qty(placed_qty), .placed_trig(placed_trig),
@@ -151,7 +166,7 @@ module tb_ticket_screen;
 
         // ---------------------------------------------------- frame 1
         pulse_fill(`SIDE_BUY, 10, 12335);
-        step(300);                                 // BCD refresh: ~6 x 18 clocks
+        step(800);                                 // BCD refresh: 22 values x ~18 clocks
         check(dut.bcd_bid == 20'h12325 && dut.bcd_ask == 20'h12335, "F1 bid/ask BCD");
         check(dut.bcd_qty == 20'h00010 && dut.bcd_mpx == 20'h12335, "F1 qty/fill BCD");
         count_col(0, 95, 0, 5, 16'hFFFF); check(cnt == 0, "F1 tab bar rows left black");
@@ -162,14 +177,15 @@ module tb_ticket_screen;
         count_col(0, 63, 55, 59, 16'h07E0); check(cnt > 20, "F1 fill message green");
         count_col(20, 31, 27, 31, 16'hFFE0); check(cnt > 5, "F1 focused qty yellow");
         count_col(0, 60, 35, 39, 16'hFFFF); check(cnt == 0, "F1 TRG line dimmed (MKT)");
+        count_col(52, 91, 35, 39, 16'h4208); check(cnt > 20, "F1 SL/TP OFF shown grey");
         dump("ticket_frame.hex");
         flip_check("F1 FLIP_180: whole page rotated 180 degrees");
 
         // ---------------------------------------------------- frame 2
         side = `SIDE_SELL; otype = `OT_LMT; focus = 1; trig = 12000; qty = 25;
-        sel_stock = 3; bid = 1225; ask = 1235;
+        stock = 3; bid = 1225; ask = 1235;
         reject_code = `RJ_NO_CASH; reject = 1; step(1); reject = 0;
-        step(300);
+        step(800);
         px_at(40, 16); check(px == 16'hF800, "F2 SELL selected -> red fill");
         px_at(3, 16); check(px == 16'h0000, "F2 BUY interior black");
         count_col(0, 63, 55, 59, 16'hF800); check(cnt > 20, "F2 reject message red");
@@ -183,15 +199,53 @@ module tb_ticket_screen;
         count_col(0, 63, 55, 59, 16'h07E0); check(cnt > 20,  "F2 status falls back to last fill");
 
         // ---------------------------------------------------- frame 3
-        side = `SIDE_BUY; otype = `OT_STP; focus = 2; sel_stock = 0; bid = 9995; ask = 10005;
+        side = `SIDE_BUY; otype = `OT_STP; focus = 2; stock = 0; bid = 9995; ask = 10005;
         trig = 10500; qty = 255; pending_count = 4;
         placed_side = `SIDE_BUY; placed_type = `OT_STP; placed_qty = 255; placed_trig = 10500;
         placed = 1; step(1); placed = 0;
-        step(300);
+        step(800);
         px_at(`TK_SUB_X0, `TK_SUB_Y0); check(px == 16'hFFE0, "F3 SUBMIT focused -> yellow edge");
         count_col(0, 63, 55, 59, 16'hFFFF); check(cnt > 20, "F3 placed message white");
         dump("ticket_frame_stp.hex");
         flip_check("F3 FLIP_180: whole page rotated 180 degrees");
+
+        // ---------------------------------------------------- frame 4: SL/TP field, stock field
+        focus = 3; brk = `BRK_10;
+        step(10);
+        count_col(52, 55, 35, 39, 16'hFFE0); check(cnt > 3,  "F4 SL/TP focus marker yellow");
+        count_col(80, 91, 35, 39, 16'hFFE0); check(cnt > 10, "F4 SL/TP value 10% yellow");
+        count_col(56, 75, 35, 39, 16'hFFFF); check(cnt > 10, "F4 SL/TP label white when on");
+        dump("ticket_frame_sltp.hex");
+        flip_check("F4 FLIP_180: whole page rotated 180 degrees");
+        focus = 5;
+        count_col(0, 15, 7, 11, 16'hFFE0); check(cnt > 15, "F4 stock field focused: marker + ticker yellow");
+        count_col(80, 91, 35, 39, 16'hFFE0); check(cnt == 0, "F4 SL/TP value back to white");
+
+        // ---------------------------------------------------- frame 5: ORDERS view
+        // slot 0: LMT BUY AMD 10 @ 120.00
+        // slots 1, 2: SL/TP pair on MCD, 5 shares, SL 116.90 / TP 129.20
+        bk_valid = 8'b0000_0111; bk_leg = 8'b0000_0110;
+        bk_side  = 8'b0000_0110;                               // slots 1, 2 SELL
+        bk_stock = {10'd0, 2'd1, 2'd1, 2'd0};
+        bk_type  = {10'd0, `OT_LMT, `OT_STP, `OT_LMT};
+        bk_qty   = {40'd0, 8'd5, 8'd5, 8'd10};
+        bk_trig  = {80'd0, 16'd12920, 16'd11690, 16'd12000};
+        pending_count = 3; ord_sel = 1; focus = 4;
+        step(800);
+        check(dut.bcd_sq[0] == 12'h010 && dut.bcd_st[0] == 20'h12000, "F5 slot 0 qty/price BCD");
+        check(dut.bcd_sq[1] == 12'h005 && dut.bcd_st[1] == 20'h11690 && dut.bcd_st[2] == 20'h12920, "F5 SL/TP slot BCD");
+        px_at(3, 16); check(px == 16'h0000, "F5 ticket buttons hidden");
+        count_col(0, 23, 7, 11, 16'hFFFF);  check(cnt > 30, "F5 ORDERS header");
+        count_col(48, 79, 7, 11, 16'h4208); check(cnt > 15, "F5 C=CANCEL hint grey");
+        count_col(0, 3, 14, 18, 16'hFFE0);  check(cnt == 0,  "F5 no cursor on slot 1 row");
+        count_col(0, 7, 20, 24, 16'hFFE0);  check(cnt > 5,   "F5 cursor on slot 2 row (ord_sel 1)");
+        count_col(12, 95, 14, 18, 16'hFFFF); check(cnt > 40, "F5 plain order white");
+        count_col(12, 95, 20, 24, 16'hF800); check(cnt > 40, "F5 stop-loss leg red");
+        count_col(12, 95, 26, 30, 16'h07E0); check(cnt > 40, "F5 take-profit leg green");
+        count_col(12, 15, 32, 36, 16'h4208); check(cnt == 3,  "F5 empty slot shows a grey dash");
+        count_col(16, 95, 32, 59, 16'hFFFF); check(cnt == 0,  "F5 empty slots have no text");
+        dump("ticket_frame_orders.hex");
+        flip_check("F5 FLIP_180: whole page rotated 180 degrees");
 
         if (n_fail == 0) $display("PASS: tb_ticket_screen (%0d checks)", n_pass);
         else             $display("FAIL: tb_ticket_screen (%0d failed, %0d passed)", n_fail, n_pass);

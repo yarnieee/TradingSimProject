@@ -9,6 +9,8 @@
 //   2. qty == 0                                     RJ_BAD_QTY
 //   3. new LMT/STP with trig == 0                   RJ_BAD_TRIG
 //   4. new LMT/STP with no free slot                RJ_BOOK_FULL
+//      new BUY with SL/TP and fewer free slots than
+//      it needs (2 for the SL/TP pair, +1 if pending) RJ_BOOK_FULL
 //   5. BUY and cost_px*qty + FEE > cash             RJ_NO_CASH
 //   6. BUY and pos + qty > POS_MAX                  RJ_BAD_QTY   [ASSUMPTION] see below
 //   7. SELL and qty > pos[stock]                    RJ_NO_POS
@@ -47,10 +49,15 @@ module order_validate #(
     input  wire [9:0]  pos2,
     input  wire [9:0]  pos3,
     input  wire        book_full,
+    input  wire [1:0]  brk,          // SL/TP setting (`BRK_*); used on BUYs only
+    input  wire [3:0]  free_cnt,     // free book slots, 0..8
     output reg         ok,
     output reg  [2:0]  reject_code
 );
     wire        new_pending = (otype != `OT_MKT) && !retest;
+    // a new BUY with SL/TP needs room for the SL/TP pair (and for itself if pending)
+    wire        brk_buy     = (brk != `BRK_OFF) && (side == `SIDE_BUY) && !retest;
+    wire [3:0]  brk_need    = new_pending ? 4'd3 : 4'd2;
     wire [15:0] cost_px     = new_pending ? trig : px_exec;
 
     // 16 x 8 -> 24-bit, one DSP48
@@ -85,6 +92,8 @@ module order_validate #(
         else if (new_pending && trig == 16'd0)
             reject_code = `RJ_BAD_TRIG;
         else if (new_pending && book_full)
+            reject_code = `RJ_BOOK_FULL;
+        else if (brk_buy && free_cnt < brk_need)
             reject_code = `RJ_BOOK_FULL;
         else if (side == `SIDE_BUY && no_cash_buy)
             reject_code = `RJ_NO_CASH;

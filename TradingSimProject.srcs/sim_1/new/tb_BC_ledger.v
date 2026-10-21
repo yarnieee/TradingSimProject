@@ -114,8 +114,8 @@ module tb_BC_ledger;
         begin btn_pulse = 5'b00001 << k; step(1); btn_pulse = 0; step(2); end
     endtask
     task focus_to;
-        input [1:0] f; integer k;
-        begin for (k = 0; k < 3 && u_b.u_entry.focus != f; k = k + 1) press(K_RIGHT); end
+        input [2:0] f; integer k;
+        begin for (k = 0; k < 6 && u_b.u_entry.focus != f; k = k + 1) press(K_RIGHT); end
     endtask
     task set_side;
         input s;

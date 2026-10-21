@@ -8,6 +8,9 @@
 //
 // Run order is 1-7, 9-12, 8, 13 so the book is empty where a scenario needs
 // it: scenario 8 fills the book, and 13 (reset mid-scan) is what clears it.
+// 14-15: orders from Matthew's confirm screen, closed stocks.
+// 16-21: stop-loss / take-profit, cancelling from the ORDERS view, and the
+// ticket's own stock selector.
 module tb_B_order_top;
     reg clk = 0;
     always #5 clk = ~clk;
@@ -166,19 +169,40 @@ module tb_B_order_top;
     endtask
 
     // ------------------------------------------------------------ UI-level helpers
-    // Buttons only (no mouse). Focus: 0 qty, 1 trig, 2 submit.
+    // Buttons only (no mouse). Focus: 0 qty, 1 trig, 2 submit, 3 SL/TP, 4 ORDERS, 5 stock.
+    localparam F_QTY = 0, F_TRG = 1, F_SUB = 2, F_BRK = 3, F_ORD = 4, F_STK = 5;
     task focus_to;
-        input [1:0] f;
+        input [2:0] f;
         integer k;
         begin
-            for (k = 0; k < 3 && u_dut.u_entry.focus != f; k = k + 1) press(K_RIGHT);
+            for (k = 0; k < 6 && u_dut.u_entry.focus != f; k = k + 1) press(K_RIGHT);
+        end
+    endtask
+
+    task set_brk;                  // up/down on the SL/TP field
+        input [1:0] b;
+        integer k;
+        begin
+            focus_to(F_BRK);
+            for (k = 0; k < 4 && u_dut.u_entry.brk != b; k = k + 1) press(K_UP);
+        end
+    endtask
+
+    task cancel_slot;              // ORDERS view: move the cursor, centre cancels
+        input [2:0] slot;
+        integer k;
+        begin
+            focus_to(F_ORD);
+            for (k = 0; k < 8 && u_dut.u_entry.ord_sel != slot; k = k + 1) press(K_DOWN);
+            press(K_CENTER);
+            step(3);
         end
     endtask
 
     task set_side;                 // centre on the qty field toggles BUY/SELL
         input s;
         begin
-            focus_to(0);
+            focus_to(F_QTY);
             if (u_dut.u_entry.side != s) press(K_CENTER);
         end
     endtask
@@ -187,7 +211,7 @@ module tb_B_order_top;
         input [1:0] t;
         integer k;
         begin
-            focus_to(1);
+            focus_to(F_TRG);
             for (k = 0; k < 3 && u_dut.u_entry.otype != t; k = k + 1) press(K_CENTER);
         end
     endtask
@@ -196,7 +220,7 @@ module tb_B_order_top;
         input integer q;
         integer k;
         begin
-            focus_to(0);
+            focus_to(F_QTY);
             for (k = 0; k < 300 && u_dut.u_entry.qty != q; k = k + 1)
                 press(q > u_dut.u_entry.qty ? K_UP : K_DOWN);
             if (u_dut.u_entry.qty != q) $display("NOTE: set_qty(%0d) stopped at %0d", q, u_dut.u_entry.qty);
@@ -207,7 +231,7 @@ module tb_B_order_top;
         input integer t;
         integer k;
         begin
-            focus_to(1);
+            focus_to(F_TRG);
             for (k = 0; k < 3000 && u_dut.u_entry.trig != t; k = k + 1)
                 press(t > u_dut.u_entry.trig ? K_UP : K_DOWN);
             if (u_dut.u_entry.trig != t) $display("NOTE: set_trig(%0d) stopped at %0d", t, u_dut.u_entry.trig);
@@ -216,7 +240,7 @@ module tb_B_order_top;
 
     task submit;
         begin
-            focus_to(2);
+            focus_to(F_SUB);
             press(K_CENTER);
         end
     endtask
@@ -393,8 +417,8 @@ module tb_B_order_top;
         page_R = `PG_R_TICKET;
         check(u_dut.u_entry.focus == 1 && u_dut.u_entry.otype == `OT_MKT, "S11 buttons ignored on Portfolio page");
         mark;
-        focus_to(0); press(K_CENTER);                  // qty field: BUY -> SELL
-        focus_to(1); press(K_CENTER); press(K_CENTER); // trig field: MKT -> LMT -> STP
+        focus_to(F_QTY); press(K_CENTER);                  // qty field: BUY -> SELL
+        focus_to(F_TRG); press(K_CENTER); press(K_CENTER); // trig field: MKT -> LMT -> STP
         submit; settle;
         check(u_dut.u_entry.side == `SIDE_SELL && u_dut.u_entry.otype == `OT_STP, "S11 side SELL, type STP");
         check(pending_count == 1 && u_dut.u_book.valid[0] && u_dut.u_book.s_side[0] == `SIDE_SELL
@@ -475,6 +499,104 @@ module tb_B_order_top;
         order(`SIDE_BUY, `OT_MKT, 1, 0);
         check(n_rej == b_rej + 1 && last_rej == `RJ_NOT_LIVE && n_fill == b_fill, "S15 MKT buy on a 0 price -> RJ_NOT_LIVE");
         set_stock(0);
+
+        // ------------------------------------------------ 16
+        scenario("16 MKT BUY 10 with SL/TP 5%, then the stop-loss fills");
+        set_stock(0); set_price(0, 10000);
+        set_brk(`BRK_5);
+        check(u_dut.u_entry.brk == `BRK_5, "S16 SL/TP field set to 5% with the buttons");
+        mark;
+        order(`SIDE_BUY, `OT_MKT, 10, 0);
+        // fill at ask 100.05; distance 10005 * 3280 >> 16 = 500 -> SL 95.05, TP 105.05
+        check(n_fill == b_fill + 1 && f_price[b_fill] == 10005, "S16 buy fills at 100.05");
+        check(pending_count == 2, "S16 SL/TP pair placed");
+        check(u_dut.u_book.s_type[0] == `OT_STP && u_dut.u_book.s_side[0] == `SIDE_SELL
+              && u_dut.u_book.s_qty[0] == 10 && u_dut.u_book.s_trig[0] == 9505, "S16 slot 0: stop-loss STP SELL 10 @ 95.05");
+        check(u_dut.u_book.s_type[1] == `OT_LMT && u_dut.u_book.s_side[1] == `SIDE_SELL
+              && u_dut.u_book.s_qty[1] == 10 && u_dut.u_book.s_trig[1] == 10505, "S16 slot 1: take-profit LMT SELL 10 @ 105.05");
+        b_pos0 = pos0;
+        mark;
+        set_price(0, 9510);                            // bid 95.05: stop-loss
+        do_tick; settle;
+        check(n_fill == b_fill + 1 && f_side[b_fill] == `SIDE_SELL && f_qty[b_fill] == 10
+              && f_price[b_fill] == 9505, "S16 stop-loss sells 10 at 95.05");
+        check(pending_count == 0 && pos0 == b_pos0 - 10, "S16 take-profit cancelled with it, position closed");
+
+        // ------------------------------------------------ 17
+        scenario("17 SL/TP again, this time the take-profit fills");
+        set_price(0, 10000);
+        mark;
+        order(`SIDE_BUY, `OT_MKT, 10, 0);
+        check(pending_count == 2, "S17 pair placed");
+        mark;
+        set_price(0, 10510);                           // bid 105.05: take-profit
+        do_tick; settle;
+        check(n_fill == b_fill + 1 && f_side[b_fill] == `SIDE_SELL && f_price[b_fill] == 10505, "S17 take-profit sells at 105.05");
+        check(pending_count == 0, "S17 stop-loss cancelled with it");
+        do_tick; settle;
+        check(n_fill == b_fill + 1, "S17 nothing else fills on the next tick");
+
+        // ------------------------------------------------ 18
+        scenario("18 cancel pending orders from the ORDERS view");
+        set_brk(`BRK_OFF);
+        order(`SIDE_BUY, `OT_LMT, 1, 5000);           // slot 0
+        order(`SIDE_BUY, `OT_LMT, 2, 5000);           // slot 1
+        check(pending_count == 2, "S18 two orders resting");
+        mark;
+        cancel_slot(1);
+        check(pending_count == 1 && u_dut.u_book.valid[0] && !u_dut.u_book.valid[1]
+              && u_dut.u_book.s_qty[0] == 1, "S18 slot 1 cancelled, slot 0 kept");
+        cancel_slot(1);                                // empty slot: nothing happens
+        check(pending_count == 1 && n_rej == b_rej, "S18 cancelling an empty slot does nothing");
+        press(K_UP);                                   // cursor to slot 0
+        press(K_CENTER); step(3);
+        check(pending_count == 0 && n_fill == b_fill && n_rej == b_rej, "S18 slot 0 cancelled, no fill or reject");
+
+        // ------------------------------------------------ 19
+        scenario("19 SL/TP 2% on a pending LMT BUY");
+        set_price(0, 10000);
+        set_brk(`BRK_2);
+        mark;
+        order(`SIDE_BUY, `OT_LMT, 4, 9000);
+        check(pending_count == 1 && n_fill == b_fill, "S19 limit buy resting");
+        set_price(0, 8990);                            // ask 89.95 <= 90.00
+        do_tick; settle;
+        // fill at 89.95; distance 8995 * 1312 >> 16 = 180 -> SL 88.15, TP 91.75
+        check(n_fill == b_fill + 1 && f_price[b_fill] == 8995, "S19 limit buy fills at 89.95");
+        check(pending_count == 2 && u_dut.u_book.s_trig[0] == 8815 && u_dut.u_book.s_trig[1] == 9175,
+              "S19 pair placed: SL 88.15 (reuses the buy's slot), TP 91.75");
+        mark;
+        cancel_slot(0);                                // cancel the stop-loss...
+        check(pending_count == 0 && n_fill == b_fill, "S19 ...and the take-profit goes with it");
+
+        // ------------------------------------------------ 20
+        scenario("20 the ticket picks its own stock");
+        set_brk(`BRK_OFF);
+        focus_to(F_STK);
+        press(K_UP);                                   // AMD -> MCD
+        check(u_dut.u_entry.stock == 1 && sel_stock == 0, "S20 ticket on MCD, Matthew's selection still AMD");
+        check(u_dut.u_entry.trig == 4520, "S20 trig re-centred on MCD's price");
+        mark;
+        order(`SIDE_BUY, `OT_MKT, 3, 0);
+        check(n_fill == b_fill + 1 && f_stock[b_fill] == 1 && f_price[b_fill] == 4525 && pos1 == 3,
+              "S20 MKT BUY 3 MCD at 45.25");
+        set_stock(2);
+        check(u_dut.u_entry.stock == 2, "S20 Matthew picking a stock moves the ticket to it");
+        focus_to(F_STK); press(K_DOWN); press(K_DOWN); press(K_DOWN);
+        check(u_dut.u_entry.stock == 3, "S20 down wraps 2 -> 1 -> 0 -> 3");
+        set_stock(0);
+
+        // ------------------------------------------------ 21
+        scenario("21 Matthew's market order takes the ticket's SL/TP");
+        set_price(0, 10000);
+        set_brk(`BRK_10);
+        page_R = `PG_R_PORTFOLIO;
+        mark;
+        send_ord(`SIDE_BUY, 2);
+        // fill at 100.05; distance 10005 * 6560 >> 16 = 1001 -> SL 90.04, TP 110.06
+        check(n_fill == b_fill + 1 && pending_count == 2, "S21 buy fills, pair placed");
+        check(u_dut.u_book.s_trig[0] == 9004 && u_dut.u_book.s_trig[1] == 11006, "S21 SL 90.04, TP 110.06");
+        page_R = `PG_R_TICKET;
 
         // ------------------------------------------------ done
         $display("     final cash %0d, pos %0d/%0d/%0d/%0d, %0d fills, %0d rejects",

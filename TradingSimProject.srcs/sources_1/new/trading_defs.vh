@@ -20,6 +20,13 @@
 `define OT_LMT 2'd1
 `define OT_STP 2'd2
 
+// ---------------------------------------------------------------- stop-loss / take-profit (Douglas)
+// Distance of the automatic stop-loss and take-profit from a buy's fill price.
+`define BRK_OFF 2'd0
+`define BRK_2   2'd1   // 2%
+`define BRK_5   2'd2   // 5%
+`define BRK_10  2'd3   // 10%
+
 // ---------------------------------------------------------------- reject codes
 `define RJ_NONE      3'd0
 `define RJ_NO_CASH   3'd1   // buy cost + fee > cash
@@ -49,9 +56,9 @@
 `define BTN_D 4
 
 // ---------------------------------------------------------------- font
-// [TEAM][ASSUMPTION] Character codes for the shared font ROM (Matthew owns it).
+// [TEAM][ASSUMPTION] Character codes of the 3x5 font (font_3x5.v).
 // Digits 0..9 are codes 0..9, so a BCD digit d is char {2'b00, d}.
-// Letters A..Z are codes 10..35.
+// Letters A..Z are codes 10..35. 48..62 were added on 21 Oct; nothing earlier changed.
 `define CH_W      6         // char code width
 `define CH_0      6'd0
 `define CH_A      6'd10
@@ -67,5 +74,20 @@
 `define CH_LBR    6'd45
 `define CH_RBR    6'd46
 `define CH_GT     6'd47
+`define CH_LT     6'd48
+`define CH_EQ     6'd49
+`define CH_LPAR   6'd50
+`define CH_RPAR   6'd51
+`define CH_COMMA  6'd52
+`define CH_EXCL   6'd53
+`define CH_QUEST  6'd54
+`define CH_STAR   6'd55
+`define CH_HASH   6'd56
+`define CH_UNDER  6'd57
+`define CH_APOS   6'd58
+`define CH_AMP    6'd59
+`define CH_UP     6'd60   // up arrow
+`define CH_DOWN   6'd61   // down arrow
+`define CH_BLOCK  6'd62   // filled cell
 
 `endif

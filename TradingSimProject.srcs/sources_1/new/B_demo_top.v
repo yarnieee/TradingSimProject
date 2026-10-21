@@ -10,7 +10,7 @@
 //   btnU/D/L/R/C             the five ticket buttons (debounced here; Matthew's job in the team build)
 //   sw[15]                   reset (also a short power-on reset)
 //   sw[1:0]                  fake market: 0 flat, 1 up ~1%/tick, 2 down ~1%/tick, 3 gap down 1/8
-//   sw[3:2]                  selected stock (0 ABC, 1 TEK, 2 NRG, 3 MEM)
+//   sw[3:2]                  selected stock (0 AMD, 1 MCD, 2 ST3, 3 ST4); the ticket can also change it
 //   led[9:0]                 position in the selected stock
 //   led[13:10]               pending orders in the book
 //   led[14]                  flashes on a reject

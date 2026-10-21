@@ -3,12 +3,14 @@
 `include "trading_defs.vh"
 
 // Integration_Top: everyone's part in one build (branch-team-integration, 0_Integrated_Top/).
-// One block per person:
+// One block per person. Module names follow the team doc's rule
+// (A_/B_/C_/D_<description>_top); instance names say whose part it is.
 //
-//   yian_market      A_top         Yi An    2 stocks (AMD, MCD), one trading day every 2 s
-//   douglas_orders   B_order_top   Douglas  validates and fills orders, order book, ticket page
-//   tricia_ledger    ledger        Tricia   cash, positions, cost basis, ledger_busy handshake
-//   matthew_display  matthew_top   Matthew  buttons, game screens, 7-seg, both OLEDs
+//   instance         module          owner    does
+//   yian_market      A_top           Yi An    2 stocks (AMD, MCD), one trading day every 2 s
+//   douglas_orders   B_order_top     Douglas  validates and fills orders, order book, ticket page
+//   tricia_ledger    ledger          Tricia   cash, positions, cost basis, ledger_busy handshake
+//   matthew_display  D_display_top   Matthew  buttons, game screens, 7-seg, both OLEDs
 //
 // Board:
 //   sw[0] (rst)   reset, as in Matthew's constraints
@@ -50,7 +52,7 @@ module Integration_Top #(
     wire [15:0] ticket_pixel;
     wire [6:0]  xL;
     wire [5:0]  yL;
-    matthew_top #(.DEBOUNCE_CTR(DEBOUNCE_CTR)) matthew_display (
+    D_display_top #(.DEBOUNCE_CTR(DEBOUNCE_CTR)) matthew_display (
         .clk(clk), .rst(sys_reset),
         .btnU(btnU), .btnD(btnD), .btnL(btnL), .btnR(btnR), .btnC(btnC),
         .left_pixel(ticket_pixel), .left_x(xL), .left_y(yL),

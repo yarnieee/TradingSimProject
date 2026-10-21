@@ -2,7 +2,7 @@
 `default_nettype none
 `include "trading_defs.vh"
 
-// matthew_top: Matthew's part in one block. Buttons, game FSM, quantity on the
+// D_display_top: Matthew's part (Component D) in one block. Buttons, game FSM, quantity on the
 // 7-seg, and both OLEDs:
 //   JB (right)  Matthew's game screens (OLED_Renderer)
 //   JA (left)   whatever page comes in on left_pixel (now: Douglas's order ticket)
@@ -11,7 +11,7 @@
 // OUTPUTS section works out, from screen_state and the buttons, the signals the
 // plan has game_fsm output (sel_stock, the order, game_state); it goes away
 // once game_fsm outputs them itself.
-module matthew_top #(
+module D_display_top #(
     parameter DEBOUNCE_CTR = 32'd1_999_999      // 20 ms
 ) (
     input  wire        clk,

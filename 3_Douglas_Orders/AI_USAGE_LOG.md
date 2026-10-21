@@ -199,3 +199,9 @@ plus the order signals worked out from his screens (`sel_stock`, the order pulse
 **Asked for:** the READMEs had too much detail. **Done by the AI:** rewrote `README.md`,
 `3_Douglas_Orders/README.md` and `9_Not_Used/README.md` to the essentials (folders, how to open
 and test in Vivado, board use, known issues).
+
+## 2026-10-21: naming follows the team doc
+
+**Asked for:** follow the doc's naming convention and remove the confusion. **Done by the AI:**
+renamed the AI-written `matthew_top` to `D_display_top` (the doc's name for Matthew's top
+module); README lists the rule and the two top modules their owners still need to rename.

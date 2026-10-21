@@ -11,10 +11,14 @@ The team build: everyone's parts joined in one Vivado project for the Basys3.
 | `2_YiAn_Market_Engine/` | Yi An | `A_top.v` |
 | `3_Douglas_Orders/` | Douglas | `B_order_top.v` |
 | `4_Tricia_Ledger/` | Tricia | `ledger.v` |
-| `5_Matthew_Display/` | Matthew | `matthew_top.v` |
+| `5_Matthew_Display/` | Matthew | `D_display_top.v` |
 | `9_Not_Used/` | | old files, not in the build |
 
 Each person's folder: top module, `submodules/`, `tb/` (tests).
+
+Naming (team doc): top modules are `A_`/`B_`/`C_`/`D_<description>_top` (A Yi An, B Douglas,
+C Tricia, D Matthew). Still to rename by their owners: `A_top` to `A_market_top`, `ledger` to
+`C_portfolio_top` (the names in the doc's Module I/O map).
 
 ## Open in Vivado
 

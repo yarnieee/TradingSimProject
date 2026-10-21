@@ -1,8 +1,9 @@
 `timescale 1ns / 1ps
 `include "trading_defs.vh"
 
-// tb_order_validate: every reject code, the check order, and the price rule
-// (trigger price for new pending orders, execution price otherwise).
+// tb_order_validate: every reject code, the check order, the price rule
+// (trigger price for new pending orders, execution price otherwise), and the
+// book room an SL/TP buy needs.
 module tb_order_validate;
     reg        game_live;
     reg        mkt_open;
@@ -16,6 +17,8 @@ module tb_order_validate;
     reg [31:0] cash;
     reg [9:0]  pos0, pos1, pos2, pos3;
     reg        book_full;
+    reg [1:0]  brk;
+    reg [3:0]  free_cnt;
     wire       ok;
     wire [2:0] code;
 
@@ -23,7 +26,7 @@ module tb_order_validate;
         .game_live(game_live), .mkt_open(mkt_open), .retest(retest), .stock(stock), .side(side),
         .otype(otype), .qty(qty), .trig(trig), .px_exec(px_exec), .cash(cash),
         .pos0(pos0), .pos1(pos1), .pos2(pos2), .pos3(pos3),
-        .book_full(book_full), .ok(ok), .reject_code(code)
+        .book_full(book_full), .brk(brk), .free_cnt(free_cnt), .ok(ok), .reject_code(code)
     );
 
     integer n_pass = 0, n_fail = 0;
@@ -47,7 +50,7 @@ module tb_order_validate;
         begin
             game_live = 1; mkt_open = 1; retest = 0; stock = 0; side = `SIDE_BUY; otype = `OT_MKT;
             qty = 10; trig = 0; px_exec = 12305; cash = 1000000;
-            pos0 = 0; pos1 = 0; pos2 = 0; pos3 = 0; book_full = 0;
+            pos0 = 0; pos1 = 0; pos2 = 0; pos3 = 0; book_full = 0; brk = `BRK_OFF; free_cnt = 8;
         end
     endtask
 
@@ -75,6 +78,15 @@ module tb_order_validate;
         base; otype = `OT_MKT; book_full = 1; expect_code(`RJ_NONE, "mkt ignores book full");
         base; otype = `OT_LMT; trig = 0; book_full = 1; retest = 1; expect_code(`RJ_NONE, "retest skips trig and full");
         base; otype = `OT_LMT; trig = 12000; book_full = 1; cash = 0; expect_code(`RJ_BOOK_FULL, "book full beats no cash");
+
+        // 4b. SL/TP on a buy needs 2 free slots, 3 if the buy itself is pending
+        base; brk = `BRK_5; free_cnt = 2; expect_code(`RJ_NONE, "sltp mkt buy, 2 free");
+        base; brk = `BRK_5; free_cnt = 1; expect_code(`RJ_BOOK_FULL, "sltp mkt buy, 1 free");
+        base; brk = `BRK_2; otype = `OT_LMT; trig = 12000; free_cnt = 3; expect_code(`RJ_NONE, "sltp lmt buy, 3 free");
+        base; brk = `BRK_2; otype = `OT_LMT; trig = 12000; free_cnt = 2; expect_code(`RJ_BOOK_FULL, "sltp lmt buy, 2 free");
+        base; brk = `BRK_10; side = `SIDE_SELL; pos0 = 10; free_cnt = 0; expect_code(`RJ_NONE, "sltp ignored on a sell");
+        base; brk = `BRK_10; otype = `OT_LMT; retest = 1; free_cnt = 0; expect_code(`RJ_NONE, "sltp not checked on retest");
+        base; brk = `BRK_5; free_cnt = 1; cash = 0; expect_code(`RJ_BOOK_FULL, "sltp room beats no cash");
 
         // 5. buy cash: cost 123050 + fee 100 = 123150
         base; cash = 123150; expect_code(`RJ_NONE, "cash exactly enough");

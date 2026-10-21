@@ -81,13 +81,13 @@ module tb_B_demo_top;
         repeat (100) @(posedge clk);
 
         // ---------------- debounce: one bouncy press = one pulse
-        press(2); press(3);                       // L then R: focus qty -> submit -> qty
+        press(2); press(3);                       // L then R: focus qty -> stock -> qty
         check(dut.u_b.u_entry.focus == 0, "bouncy L then R returns focus to qty");
 
         // ---------------- market buy 3 TEK
         press(1); press(1);                       // qty 1 -> 3
         check(dut.u_b.u_entry.qty == 3, "two U presses: qty 3 (one pulse each despite bounce)");
-        press(3); press(3);                       // focus submit
+        press(3); press(3); press(3);             // focus trig, SL/TP, submit
         press(0);                                 // submit
         repeat (2000) @(posedge clk);
         check(led[9:0] == 3, "led[9:0] shows TEK position 3 after the buy");
@@ -95,10 +95,10 @@ module tb_B_demo_top;
         check(n_pulse_c == 1, "centre button gave exactly one pulse");
 
         // ---------------- sell 5 with only 3 held: rejected
-        press(3);                                 // focus qty (wraps)
+        press(3); press(3); press(3);             // focus orders, stock, qty (wraps)
         press(0);                                 // centre on qty: BUY -> SELL
         press(1); press(1);                       // qty 3 -> 5
-        press(3); press(3); press(0);             // submit
+        press(3); press(3); press(3); press(0);   // focus submit, submit
         repeat (2000) @(posedge clk);
         check(led[14] == 1'b1 && led[9:0] == 3, "sell 5 of 3: led[14] reject flash, position still 3");
         check(dut.u_b.u_screen.rej_code == 3'd2, "ticket shows reject NO POS");

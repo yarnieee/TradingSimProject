@@ -2,7 +2,8 @@
 `include "trading_defs.vh"
 
 // tb_exec_engine: exec_engine against stub_ledger, with the testbench driving
-// the submit port and playing order_book on the trigger port.
+// the submit port and playing order_book on the trigger port. E9-E13 cover
+// stop-loss / take-profit: the pair placed after a BUY fill, and its prices.
 module tb_exec_engine;
     reg clk = 0;
     always #5 clk = ~clk;
@@ -16,13 +17,16 @@ module tb_exec_engine;
     reg [1:0]  sub_type = 0;
     reg [7:0]  sub_qty = 0;
     reg [15:0] sub_trig = 0;
+    reg [1:0]  sub_brk = 0;
     reg        book_full = 0;
+    reg [3:0]  free_cnt = 8;
     reg        trq = 0;
     reg [1:0]  trq_stock = 0;
     reg        trq_side = 0;
     reg [1:0]  trq_type = 0;
     reg [7:0]  trq_qty = 0;
     reg [15:0] trq_px = 0;
+    reg [1:0]  trq_brk = 0;
 
     wire        trq_ack, ins, placed, fill, reject, ledger_busy;
     wire [1:0]  ins_stock, fill_stock;
@@ -31,6 +35,11 @@ module tb_exec_engine;
     wire [7:0]  ins_qty, fill_qty;
     wire [15:0] ins_trig, fill_price, fill_fee;
     wire [2:0]  reject_code;
+    wire [1:0]  ins_brk;
+    wire        ins_pair;
+    wire [1:0]  pair_stock;
+    wire [7:0]  pair_qty;
+    wire [15:0] pair_sl, pair_tp;
     wire [31:0] cash;
     wire [9:0]  pos0, pos1, pos2, pos3;
 
@@ -40,12 +49,14 @@ module tb_exec_engine;
         .cash(cash), .pos0(pos0), .pos1(pos1), .pos2(pos2), .pos3(pos3),
         .ledger_busy(ledger_busy),
         .submit_req(submit_req), .sub_stock(sub_stock), .sub_side(sub_side),
-        .sub_type(sub_type), .sub_qty(sub_qty), .sub_trig(sub_trig),
-        .book_full(book_full),
+        .sub_type(sub_type), .sub_qty(sub_qty), .sub_trig(sub_trig), .sub_brk(sub_brk),
+        .book_full(book_full), .free_cnt(free_cnt),
         .trq(trq), .trq_stock(trq_stock), .trq_side(trq_side), .trq_type(trq_type),
-        .trq_qty(trq_qty), .trq_px(trq_px), .trq_ack(trq_ack),
+        .trq_qty(trq_qty), .trq_px(trq_px), .trq_brk(trq_brk), .trq_ack(trq_ack),
         .ins(ins), .ins_stock(ins_stock), .ins_side(ins_side), .ins_type(ins_type),
-        .ins_qty(ins_qty), .ins_trig(ins_trig), .placed(placed),
+        .ins_qty(ins_qty), .ins_trig(ins_trig), .ins_brk(ins_brk), .placed(placed),
+        .ins_pair(ins_pair), .pair_stock(pair_stock), .pair_qty(pair_qty),
+        .pair_sl(pair_sl), .pair_tp(pair_tp),
         .fill(fill), .fill_stock(fill_stock), .fill_side(fill_side),
         .fill_qty(fill_qty), .fill_price(fill_price), .fill_fee(fill_fee),
         .reject(reject), .reject_code(reject_code)
@@ -60,7 +71,11 @@ module tb_exec_engine;
     );
 
     // ------------------------------------------------------------ event log
-    integer n_fill = 0, n_rej = 0, n_ins = 0, n_ack = 0;
+    integer n_fill = 0, n_rej = 0, n_ins = 0, n_ack = 0, n_pair = 0;
+    reg [1:0]  p_stock;
+    reg [7:0]  p_qty;
+    reg [15:0] p_sl, p_tp;
+    integer    pair_t;
     integer fill_t [0:15];
     reg [1:0]  f_stock [0:15];
     reg [15:0] f_price [0:15];
@@ -78,6 +93,11 @@ module tb_exec_engine;
             n_rej = n_rej + 1;
         end
         if (ins)     n_ins = n_ins + 1;
+        if (ins_pair) begin
+            n_pair = n_pair + 1;
+            p_stock = pair_stock; p_qty = pair_qty; p_sl = pair_sl; p_tp = pair_tp;
+            pair_t  = $time;
+        end
         if (trq_ack) begin
             n_ack = n_ack + 1;
             trq <= 1'b0;          // the book drops its request on ack
@@ -131,10 +151,10 @@ module tb_exec_engine;
         end
     endtask
 
-    integer b_fill, b_rej, b_ins, b_ack;
+    integer b_fill, b_rej, b_ins, b_ack, b_pair;
     task mark;
         begin
-            b_fill = n_fill; b_rej = n_rej; b_ins = n_ins; b_ack = n_ack;
+            b_fill = n_fill; b_rej = n_rej; b_ins = n_ins; b_ack = n_ack; b_pair = n_pair;
         end
     endtask
 
@@ -229,6 +249,66 @@ module tb_exec_engine;
         sys_reset = 1; step(1); sys_reset = 0;
         step(100);
         check(n_fill == b_fill + 1 && dut.state == 0 && !dut.hold_v, "E8 reset drops the parked job");
+
+        // ---------------------------------------------------- E9 MKT BUY with SL/TP 5%
+        // fill at ask 123.05; distance = 12305 * 3280 >> 16 = 615 (exact 5% is 615.25)
+        step(60);
+        price0 = 12300;
+        mark; sub_brk = `BRK_5;
+        submit(0, `SIDE_BUY, `OT_MKT, 10, 0);
+        sub_brk = `BRK_OFF;
+        step(20);
+        check(n_fill == b_fill + 1 && n_pair == b_pair + 1, "E9 one fill, then one SL/TP pair");
+        check(pair_t > fill_t[b_fill], "E9 pair comes after the fill");
+        check(p_stock == 0 && p_qty == 10, "E9 pair for AMD, qty 10");
+        check(p_sl == 11690 && p_tp == 12920, "E9 SL 116.90, TP 129.20 (123.05 -/+ 6.15)");
+        step(60);
+
+        // ---------------------------------------------------- E10 SELL ignores SL/TP
+        mark; sub_brk = `BRK_5;
+        submit(0, `SIDE_SELL, `OT_MKT, 1, 0);
+        sub_brk = `BRK_OFF;
+        step(20);
+        check(n_fill == b_fill + 1 && n_pair == b_pair, "E10 sell fills, no pair");
+        step(60);
+
+        // ---------------------------------------------------- E11 no room for the pair: reject up front
+        mark; sub_brk = `BRK_5; free_cnt = 1;
+        submit(0, `SIDE_BUY, `OT_MKT, 1, 0);
+        sub_brk = `BRK_OFF;
+        step(20);
+        check(n_rej == b_rej + 1 && last_rej == `RJ_BOOK_FULL && n_fill == b_fill && n_pair == b_pair,
+              "E11 BOOK_FULL, nothing filled");
+        free_cnt = 8;
+
+        // ---------------------------------------------------- E12 triggered pending BUY with 10%
+        // fill at 87.00; distance = 8700 * 6560 >> 16 = 870
+        mark;
+        trq_brk = `BRK_10;
+        book_req(2, `SIDE_BUY, `OT_LMT, 3, 8700);
+        step(20);
+        trq_brk = `BRK_OFF;
+        check(n_fill == b_fill + 1 && n_pair == b_pair + 1, "E12 book fill, then pair");
+        check(p_stock == 2 && p_qty == 3 && p_sl == 7830 && p_tp == 9570, "E12 SL 78.30, TP 95.70");
+        step(60);
+
+        // ---------------------------------------------------- E13 book fills but the pair has no room
+        mark;
+        trq_brk = `BRK_2; free_cnt = 1;
+        book_req(3, `SIDE_BUY, `OT_LMT, 2, 1235);
+        step(20);
+        trq_brk = `BRK_OFF; free_cnt = 8;
+        check(n_fill == b_fill + 1 && n_pair == b_pair && n_rej == b_rej + 1 && last_rej == `RJ_BOOK_FULL,
+              "E13 buy stands, pair rejected BOOK_FULL");
+        step(60);
+
+        // ---------------------------------------------------- E14 2% on a cheap stock
+        // fill at ask 12.35; distance = 1235 * 1312 >> 16 = 24
+        mark; sub_brk = `BRK_2;
+        submit(3, `SIDE_BUY, `OT_MKT, 4, 0);
+        sub_brk = `BRK_OFF;
+        step(20);
+        check(n_pair == b_pair + 1 && p_sl == 1211 && p_tp == 1259, "E14 SL 12.11, TP 12.59");
 
         if (n_fail == 0) $display("PASS: tb_exec_engine (%0d checks)", n_pass);
         else             $display("FAIL: tb_exec_engine (%0d failed, %0d passed)", n_fail, n_pass);

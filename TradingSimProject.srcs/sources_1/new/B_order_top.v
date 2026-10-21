@@ -19,7 +19,8 @@ module B_order_top #(
     parameter POS_MAX         = 1023,
     parameter QTY_INIT        = 1,             // [ASSUMPTION]
     parameter TRIG_STEP       = 5,             // cents per notch [ASSUMPTION]
-    parameter REJ_SHOW_CYCLES = 200_000_000    // 2 s at 100 MHz
+    parameter REJ_SHOW_CYCLES = 200_000_000,   // 2 s at 100 MHz
+    parameter TICKET_FLIP_180 = 0              // 1: ticket page drawn rotated 180 degrees (upside-down OLED)
 ) (
     input  wire        clk,
     input  wire        sys_reset,
@@ -163,7 +164,7 @@ module B_order_top #(
     );
 
     // ------------------------------------------------------------ screen
-    ticket_screen #(.REJ_SHOW_CYCLES(REJ_SHOW_CYCLES)) u_screen (
+    ticket_screen #(.REJ_SHOW_CYCLES(REJ_SHOW_CYCLES), .FLIP_180(TICKET_FLIP_180)) u_screen (
         .clk(clk), .sys_reset(sys_reset), .pix_x(xR), .pix_y(yR),
         .sel_stock(sel_stock), .bid(sel_bid), .ask(sel_ask),
         .side(e_side), .otype(e_type), .qty(e_qty), .trig(e_trig), .focus(e_focus),

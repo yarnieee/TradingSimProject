@@ -18,7 +18,8 @@
 // cells. Numbers come from one sequential BCD converter that refreshes the six
 // displayed values round-robin, about 100 clocks for a full pass.
 module ticket_screen #(
-    parameter REJ_SHOW_CYCLES = 200_000_000    // 2 s at 100 MHz
+    parameter REJ_SHOW_CYCLES = 200_000_000,   // 2 s at 100 MHz
+    parameter FLIP_180        = 0              // 1: rotate the page 180 degrees (OLED mounted upside down)
 ) (
     input  wire        clk,
     input  wire        sys_reset,
@@ -48,6 +49,12 @@ module ticket_screen #(
     input  wire [2:0]  reject_code,
     output reg  [15:0] ticket_pix
 );
+    // ------------------------------------------------------------ orientation
+    // (px, py) is the page position being drawn. With FLIP_180 = 1 the OLED's
+    // pixel (pix_x, pix_y) shows page position (95 - x, 63 - y): the whole page
+    // turned 180 degrees, for a Pmod OLED that sits upside down on its header.
+    wire [6:0] px = FLIP_180 ? 7'd95 - pix_x : pix_x;
+    wire [5:0] py = FLIP_180 ? 6'd63 - pix_y : pix_y;
     // ------------------------------------------------------------ colours (RGB565)
     localparam [15:0] C_BLACK  = 16'h0000,
                       C_WHITE  = 16'hFFFF,
@@ -309,18 +316,18 @@ module ticket_screen #(
         seg = SEG_NONE;
         sx0 = 7'd0;
         sy0 = 6'd0;
-        if      (in_text(pix_x, pix_y, 7'd4,         5'd19, Y_HDR))       begin seg = SEG_HDR;  sx0 = 7'd4;         sy0 = Y_HDR;       end
-        else if (in_text(pix_x, pix_y, 7'd8,         5'd3,  Y_BTN))       begin seg = SEG_BUY;  sx0 = 7'd8;         sy0 = Y_BTN;       end
-        else if (in_text(pix_x, pix_y, 7'd34,        5'd4,  Y_BTN))       begin seg = SEG_SELL; sx0 = 7'd34;        sy0 = Y_BTN;       end
-        else if (in_text(pix_x, pix_y, 7'd72,        5'd3,  Y_BTN))       begin seg = SEG_TYPE; sx0 = 7'd72;        sy0 = Y_BTN;       end
-        else if (in_text(pix_x, pix_y, 7'd0,         5'd8,  `TK_QTY_Y0))  begin seg = SEG_QTY;  sx0 = 7'd0;         sy0 = `TK_QTY_Y0;  end
-        else if (in_text(pix_x, pix_y, 7'd0,         5'd11, `TK_TRG_Y0))  begin seg = SEG_TRG;  sx0 = 7'd0;         sy0 = `TK_TRG_Y0;  end
-        else if (in_text(pix_x, pix_y, 7'd36,        5'd6,  Y_SUB))       begin seg = SEG_SUB;  sx0 = 7'd36;        sy0 = Y_SUB;       end
-        else if (in_text(pix_x, pix_y, 7'd0,         5'd24, `TK_STAT_Y0)) begin seg = SEG_STAT; sx0 = 7'd0;         sy0 = `TK_STAT_Y0; end
+        if      (in_text(px, py, 7'd4,         5'd19, Y_HDR))       begin seg = SEG_HDR;  sx0 = 7'd4;         sy0 = Y_HDR;       end
+        else if (in_text(px, py, 7'd8,         5'd3,  Y_BTN))       begin seg = SEG_BUY;  sx0 = 7'd8;         sy0 = Y_BTN;       end
+        else if (in_text(px, py, 7'd34,        5'd4,  Y_BTN))       begin seg = SEG_SELL; sx0 = 7'd34;        sy0 = Y_BTN;       end
+        else if (in_text(px, py, 7'd72,        5'd3,  Y_BTN))       begin seg = SEG_TYPE; sx0 = 7'd72;        sy0 = Y_BTN;       end
+        else if (in_text(px, py, 7'd0,         5'd8,  `TK_QTY_Y0))  begin seg = SEG_QTY;  sx0 = 7'd0;         sy0 = `TK_QTY_Y0;  end
+        else if (in_text(px, py, 7'd0,         5'd11, `TK_TRG_Y0))  begin seg = SEG_TRG;  sx0 = 7'd0;         sy0 = `TK_TRG_Y0;  end
+        else if (in_text(px, py, 7'd36,        5'd6,  Y_SUB))       begin seg = SEG_SUB;  sx0 = 7'd36;        sy0 = Y_SUB;       end
+        else if (in_text(px, py, 7'd0,         5'd24, `TK_STAT_Y0)) begin seg = SEG_STAT; sx0 = 7'd0;         sy0 = `TK_STAT_Y0; end
     end
 
-    wire [6:0] dx = pix_x - sx0;
-    wire [5:0] dy = pix_y - sy0;
+    wire [6:0] dx = px - sx0;
+    wire [5:0] dy = py - sy0;
     wire [4:0] ci = dx[6:2];       // character index within the segment
     wire [1:0] gx = dx[1:0];       // column within the 4-wide cell
 
@@ -400,16 +407,16 @@ module ticket_screen #(
     wire text_on = (seg != SEG_NONE) && glyph;
 
     // ------------------------------------------------------------ final colour
-    wire in_buy   = in_box (pix_x, pix_y, `TK_BUY_X0,  `TK_BUY_X1,  `TK_BTN_Y0, `TK_BTN_Y1);
-    wire in_sell  = in_box (pix_x, pix_y, `TK_SELL_X0, `TK_SELL_X1, `TK_BTN_Y0, `TK_BTN_Y1);
-    wire in_sub   = in_box (pix_x, pix_y, `TK_SUB_X0,  `TK_SUB_X1,  `TK_SUB_Y0, `TK_SUB_Y1);
-    wire e_buy    = on_edge(pix_x, pix_y, `TK_BUY_X0,  `TK_BUY_X1,  `TK_BTN_Y0, `TK_BTN_Y1);
-    wire e_sell   = on_edge(pix_x, pix_y, `TK_SELL_X0, `TK_SELL_X1, `TK_BTN_Y0, `TK_BTN_Y1);
-    wire e_type   = on_edge(pix_x, pix_y, `TK_TYPE_X0, `TK_TYPE_X1, `TK_BTN_Y0, `TK_BTN_Y1);
-    wire e_sub    = on_edge(pix_x, pix_y, `TK_SUB_X0,  `TK_SUB_X1,  `TK_SUB_Y0, `TK_SUB_Y1);
+    wire in_buy   = in_box (px, py, `TK_BUY_X0,  `TK_BUY_X1,  `TK_BTN_Y0, `TK_BTN_Y1);
+    wire in_sell  = in_box (px, py, `TK_SELL_X0, `TK_SELL_X1, `TK_BTN_Y0, `TK_BTN_Y1);
+    wire in_sub   = in_box (px, py, `TK_SUB_X0,  `TK_SUB_X1,  `TK_SUB_Y0, `TK_SUB_Y1);
+    wire e_buy    = on_edge(px, py, `TK_BUY_X0,  `TK_BUY_X1,  `TK_BTN_Y0, `TK_BTN_Y1);
+    wire e_sell   = on_edge(px, py, `TK_SELL_X0, `TK_SELL_X1, `TK_BTN_Y0, `TK_BTN_Y1);
+    wire e_type   = on_edge(px, py, `TK_TYPE_X0, `TK_TYPE_X1, `TK_BTN_Y0, `TK_BTN_Y1);
+    wire e_sub    = on_edge(px, py, `TK_SUB_X0,  `TK_SUB_X1,  `TK_SUB_Y0, `TK_SUB_Y1);
 
     always @* begin
-        if (pix_y < 6'd6)                               ticket_pix = C_BLACK;   // D's tab bar
+        if (py < 6'd6)                               ticket_pix = C_BLACK;   // D's tab bar
         else if (text_on)                               ticket_pix = tcol;
         else if (in_buy  && side == `SIDE_BUY)          ticket_pix = C_GREEN;
         else if (in_sell && side == `SIDE_SELL)         ticket_pix = C_RED;

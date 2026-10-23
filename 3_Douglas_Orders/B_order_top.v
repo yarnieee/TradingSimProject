@@ -30,7 +30,7 @@
 //   game_state     [1:0]  Matthew: D_display_top          orders and book scans only while PLAYING
 //                         (PLAYING except title / game-end screens)
 //   price0..3      [15:0] Yi An: A_top                  bid/ask, order checks, book triggers
-//                         now: price0 = AMD, price1 = MCD, price2/3 = 0 (closed)
+//                         now: price0 = AMD, price1 = MCD; slots 2/3 are unavailable
 //                         plan: A_top outputs price0..3 itself
 //   tick           1      Yi An: A_top                  starts a book scan (one pulse per trading day)
 //                         now: made in Integration_Top from AMD's date changing

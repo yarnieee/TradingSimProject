@@ -61,7 +61,7 @@ module tb_integration;
 
     // place an order through Matthew's screens, starting from PORTFOLIO
     task trade;
-        input integer stock;   // 0..3 in Matthew's stock list
+        input integer stock;   // 0=AMD, 1=MCD
         input         sell;
         input integer qty;     // 0..9 (ones digit only, enough here)
         integer k;
@@ -114,12 +114,6 @@ module tb_integration;
         trade(1, 1, 2);
         check(dut.sel_stock == 1, "Matthew -> Douglas: MCD selected");
         check(n_rej == r0 + 1 && last_rej == `RJ_NO_POS && n_fill == f0, "Douglas: sell MCD with none held -> NO POS");
-        press(C);
-
-        // ---------------- stock 3 has no data from Yi An: closed
-        r0 = n_rej;
-        trade(2, 0, 1);
-        check(n_rej == r0 + 1 && last_rej == `RJ_NOT_LIVE, "Douglas: stock 3 has no price -> NOT LIVE");
         press(C);
 
         // ---------------- quantity 0 (confirm without setting it)

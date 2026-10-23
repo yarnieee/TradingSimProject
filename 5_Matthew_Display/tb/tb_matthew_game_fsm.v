@@ -10,9 +10,11 @@ module tb_matthew_game_fsm;
     reg U = 0, D = 0, L = 0, R = 0, C = 0;
     wire [3:0]  screen_state;
     wire [13:0] quantity;
+    wire [2:0]  selected_stock;
 
     game_fsm dut (.clk(clk), .rst(rst), .btnU(U), .btnD(D), .btnL(L), .btnR(R), .btnC(C),
-                  .screen_state(screen_state), .quantity(quantity));
+                  .screen_state(screen_state), .quantity(quantity),
+                  .selected_stock(selected_stock));
 
     localparam TITLE = 0, PORTFOLIO = 1, STOCKS = 2, SPECIFIC = 3, BUY = 4, SELL = 5,
                QUANTITY = 6, CONFIRM = 7;
@@ -65,12 +67,14 @@ module tb_matthew_game_fsm;
         check(screen_state == PORTFOLIO, "stocks: L selects back, C returns to portfolio");
         press(BR); press(BC);
         press(BD); press(BC);
-        check(screen_state == SPECIFIC, "stocks --D, C--> stock 1's screen");
+        check(screen_state == SPECIFIC && selected_stock == 0,
+              "stocks --D, C--> AMD screen with stock code 0");
 
         press(BU); press(BR); press(BC);
         check(screen_state == STOCKS, "specific: U, R selects back-to-stocks");
-        press(BD); press(BC);
-        check(screen_state == SPECIFIC, "stocks --C--> specific again");
+        press(BD); press(BD); press(BC);
+        check(screen_state == SPECIFIC && selected_stock == 1,
+              "stocks --D, D, C--> MCD screen with stock code 1");
         press(BU); press(BC);
         check(screen_state == PORTFOLIO, "specific: U selects back-to-portfolio");
 

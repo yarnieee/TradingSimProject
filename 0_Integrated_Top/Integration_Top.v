@@ -45,6 +45,21 @@ module Integration_Top #(
         sys_reset <= rst_s0;
     end
 
+    // ================================================================ shared data buses
+    // The market and ledger values are routed through this top level to the
+    // display as well as to the order engine.
+    wire [1:0]   market_state;
+    wire         amd_ready, mcd_ready;
+    wire [15:0]  amd_close, mcd_close;
+    wire [31:0]  amd_date;
+    wire [479:0] amd_samples_30, mcd_samples_30;
+    wire [31:0]  cash;
+    wire [9:0]   pos0, pos1, pos2, pos3;
+    wire [15:0]  price0, price1, price2, price3;
+    reg          tick;
+    wire [31:0]  portfolio_value;
+    wire [959:0] portfolio_samples_30;
+
     // ================================================================ MATTHEW: buttons, screens, 7-seg, both OLEDs
     wire [3:0]  screen_state;
     wire [13:0] quantity;
@@ -61,15 +76,17 @@ module Integration_Top #(
         .btnU(btnU), .btnD(btnD), .btnL(btnL), .btnR(btnR), .btnC(btnC),
         .left_pixel(ticket_pixel), .left_x(xL), .left_y(yL),
         .screen_state(screen_state), .quantity(quantity), .sel_stock(sel_stock),
+        .price0(price0), .price1(price1),
+        .stock0_samples_30(amd_samples_30),
+        .stock1_samples_30(mcd_samples_30),
+        .portfolio_cash(cash), .portfolio_pos0(pos0), .portfolio_pos1(pos1),
+        .portfolio_value(portfolio_value),
+        .portfolio_samples_30(portfolio_samples_30),
         .ord_req(ord_req), .ord_side(ord_side), .game_state(game_state),
         .JA(JA), .JB(JB), .an(an), .seg(seg)
     );
 
     // ================================================================ YI AN: market engine
-    wire [1:0]  market_state;
-    wire        amd_ready, mcd_ready;
-    wire [15:0] amd_close, mcd_close;
-    wire [31:0] amd_date;
     // Yi An's A_top asks for "storage/data/AMD_seed.mem". In this repo the files are
     // in 2_YiAn_Market_Engine/data/ and are added to the Vivado project, so point
     // both stocks at the plain file names. [ASSUMPTION: Vivado finds .mem files
@@ -77,28 +94,27 @@ module Integration_Top #(
     defparam yian_market.amd_stock_inst.SEED_FILE = "AMD_seed.mem";
     defparam yian_market.mcd_stock_inst.SEED_FILE = "MCD_seed.mem";
 
-    // Only the current prices are used here. The history outputs (for the chart
-    // page) are left unconnected, so synthesis removes them.
+    // Current prices and 30-point histories are both kept for the display and
+    // the order engine.
     A_top #(.DAY_MAX_COUNT(DAY_MAX_COUNT)) yian_market (
         .clk(clk), .rst(sys_reset),
         .market_state(market_state),
         .amd_ready(amd_ready), .mcd_ready(mcd_ready),
         .amd_current_close(amd_close), .amd_current_volume(), .amd_current_date(amd_date),
         .mcd_current_close(mcd_close), .mcd_current_volume(), .mcd_current_date(),
-        .amd_samples_30(), .amd_samples_180(), .amd_mean_30(), .amd_mean_180(),
-        .mcd_samples_30(), .mcd_samples_180(), .mcd_mean_30(), .mcd_mean_180()
+        .amd_samples_30(amd_samples_30), .amd_samples_180(), .amd_mean_30(), .amd_mean_180(),
+        .mcd_samples_30(mcd_samples_30), .mcd_samples_180(), .mcd_mean_30(), .mcd_mean_180()
     );
 
     // Price bus for Douglas. Replace when A_top outputs price0..3 and tick.
     // A_top updates both stocks on the same internal day tick, and the date
     // always moves on a trading day, so a date change marks the tick.
     // Stocks 2 and 3 have no data yet: price 0, which B_order_top treats as closed.
-    wire [15:0] price0 = amd_ready ? amd_close : 16'd0;
-    wire [15:0] price1 = mcd_ready ? mcd_close : 16'd0;
-    wire [15:0] price2 = 16'd0;
-    wire [15:0] price3 = 16'd0;
+    assign price0 = amd_ready ? amd_close : 16'd0;
+    assign price1 = mcd_ready ? mcd_close : 16'd0;
+    assign price2 = 16'd0;
+    assign price3 = 16'd0;
     reg  [31:0] amd_date_d;
-    reg         tick;
     always @(posedge clk) begin
         if (sys_reset) begin
             amd_date_d <= 32'd0;
@@ -110,8 +126,7 @@ module Integration_Top #(
     end
 
     // ================================================================ TRICIA: ledger
-    wire [31:0] cash, cb0, cb1, cb2, cb3;
-    wire [9:0]  pos0, pos1, pos2, pos3;
+    wire [31:0] cb0, cb1, cb2, cb3;
     wire signed [31:0] realised;
     wire        ledger_busy, ledger_err;
     wire        fill, fill_side, reject;
@@ -125,6 +140,16 @@ module Integration_Top #(
         .cash(cash), .pos0(pos0), .pos1(pos1), .pos2(pos2), .pos3(pos3),
         .cb0(cb0), .cb1(cb1), .cb2(cb2), .cb3(cb3),
         .realised(realised), .ledger_busy(ledger_busy), .err(ledger_err)
+    );
+
+    // Portfolio history is sampled on the same simulated trading-day tick
+    // that drives the order book. It uses live cash, positions, and prices.
+    portfolio_history portfolio_history_inst (
+        .clk(clk), .rst(sys_reset), .tick(tick),
+        .cash(cash), .pos0(pos0), .pos1(pos1),
+        .price0(price0), .price1(price1),
+        .portfolio_value(portfolio_value),
+        .portfolio_samples(portfolio_samples_30)
     );
 
     // ================================================================ DOUGLAS: orders, ticket page

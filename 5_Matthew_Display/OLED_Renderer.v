@@ -7,13 +7,25 @@ module OLED_Renderer (
     input  [2:0]  selected_stock,
     input  [13:0] quantity,
     input  [3:0]  menu_selection,
+    input  [479:0] stock_samples,
+    input  [959:0] portfolio_samples,
+    input  [31:0] portfolio_cash,
+    input  [9:0]  portfolio_pos0,
+    input  [9:0]  portfolio_pos1,
+    input  [31:0] portfolio_value,
+    input  [15:0] selected_price,
     output reg [15:0] pixel_data
 );
 
     wire text_pixel;
+    wire info_pixel;
     wire menu_text_pixel;
     wire menu_pixel_active;
     wire [15:0] menu_pixel_color;
+    wire chart_pixel_active;
+    wire [15:0] chart_pixel_color;
+    wire [1:0] chart_mode = (screen_state == 4'd3) ? 2'b01 :
+                             (screen_state == 4'd1) ? 2'b10 : 2'b00;
 
     text_layer text_layer_inst (
         .pixel_index(pixel_index),
@@ -21,6 +33,27 @@ module OLED_Renderer (
         .selected_stock(selected_stock),
         .quantity(quantity),
         .text_pixel(text_pixel)
+    );
+
+    portfolio_info_layer portfolio_info_layer_inst (
+        .pixel_index(pixel_index),
+        .screen_state(screen_state),
+        .cash(portfolio_cash),
+        .pos0(portfolio_pos0),
+        .pos1(portfolio_pos1),
+        .portfolio_value(portfolio_value),
+        .selected_price(selected_price),
+        .text_pixel(info_pixel)
+    );
+
+    chart_renderer chart_renderer_inst (
+        .pixel_x(pixel_index % 96),
+        .pixel_y(pixel_index / 96),
+        .chart_mode(chart_mode),
+        .stock_samples(stock_samples),
+        .portfolio_samples(portfolio_samples),
+        .pixel_active(chart_pixel_active),
+        .pixel_color(chart_pixel_color)
     );
 
     menu_button_text menu_button_text_inst (
@@ -41,10 +74,14 @@ module OLED_Renderer (
     always @(*) begin
         if (menu_text_pixel)
             pixel_data = 16'hFFFF;
+        else if (info_pixel)
+            pixel_data = 16'hFFE0;
         else if (menu_pixel_active)
             pixel_data = menu_pixel_color;
+        else if (chart_pixel_active)
+            pixel_data = chart_pixel_color;
         else if (text_pixel)
-            pixel_data = 16'hFFFF;
+            pixel_data = 16'h07FF;
         else
             pixel_data = 16'h0000;
     end
@@ -68,6 +105,13 @@ module OLED_Button_Renderer (
     input  [2:0]  selected_stock,
     input  [13:0] quantity,
     input  [3:0]  menu_selection,
+    input  [479:0] stock_samples,
+    input  [959:0] portfolio_samples,
+    input  [31:0] portfolio_cash,
+    input  [9:0]  portfolio_pos0,
+    input  [9:0]  portfolio_pos1,
+    input  [31:0] portfolio_value,
+    input  [15:0] selected_price,
     input         btnU,
     input         btnD,
     input         btnL,
@@ -82,9 +126,14 @@ module OLED_Button_Renderer (
     wire [5:0] display_y = 6'd63 - memory_y;
     wire [12:0] flipped_pixel_index = (display_y * 13'd96) + display_x;
     wire text_pixel;
+    wire info_pixel;
     wire menu_text_pixel;
     wire menu_pixel_active;
     wire [15:0] menu_pixel_color;
+    wire chart_pixel_active;
+    wire [15:0] chart_pixel_color;
+    wire [1:0] chart_mode = (screen_state == 4'd3) ? 2'b01 :
+                             (screen_state == 4'd1) ? 2'b10 : 2'b00;
 
     text_layer text_layer_inst (
         .pixel_index(flipped_pixel_index),
@@ -92,6 +141,27 @@ module OLED_Button_Renderer (
         .selected_stock(selected_stock),
         .quantity(quantity),
         .text_pixel(text_pixel)
+    );
+
+    portfolio_info_layer portfolio_info_layer_inst (
+        .pixel_index(flipped_pixel_index),
+        .screen_state(screen_state),
+        .cash(portfolio_cash),
+        .pos0(portfolio_pos0),
+        .pos1(portfolio_pos1),
+        .portfolio_value(portfolio_value),
+        .selected_price(selected_price),
+        .text_pixel(info_pixel)
+    );
+
+    chart_renderer chart_renderer_inst (
+        .pixel_x(display_x),
+        .pixel_y(display_y),
+        .chart_mode(chart_mode),
+        .stock_samples(stock_samples),
+        .portfolio_samples(portfolio_samples),
+        .pixel_active(chart_pixel_active),
+        .pixel_color(chart_pixel_color)
     );
 
     menu_button_text menu_button_text_inst (
@@ -114,10 +184,14 @@ module OLED_Button_Renderer (
         // indicators so the indicators remain visible while pressed.
         if (menu_text_pixel)
             pixel_data = 16'hFFFF;
+        else if (info_pixel)
+            pixel_data = 16'hFFE0;
         else if (menu_pixel_active)
             pixel_data = menu_pixel_color;
+        else if (chart_pixel_active)
+            pixel_data = chart_pixel_color;
         else if (text_pixel)
-            pixel_data = 16'hFFFF;
+            pixel_data = 16'h07FF;
         else
             pixel_data = 16'h0000;
 
@@ -317,10 +391,10 @@ module menu_buttons (
                 if (button_border)
                     pixel_color = 16'hFFE0; // yellow border
                 else
-                    pixel_color = 16'h001F; // blue highlight
+                    pixel_color = 16'hF81F; // neon magenta highlight
             end else begin
                 if (button_border)
-                    pixel_color = 16'hFFFF; // white outline
+                    pixel_color = 16'h07FF; // neon cyan outline
                 else
                     pixel_color = 16'h0000; // black interior
             end

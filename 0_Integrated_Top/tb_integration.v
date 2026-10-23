@@ -89,6 +89,10 @@ module tb_integration;
         repeat (DAY + 100) @(posedge clk);              // one day ticks over
         check(dut.price0 != 0 && dut.price1 != 0, "Yi An: AMD and MCD have prices (if not: AMD_seed.mem / MCD_seed.mem not found)");
         check(n_tick >= 1, "Yi An -> Douglas: a tick reached the order engine after a trading day");
+        check(dut.portfolio_value == 32'd1_000_000,
+              "Display data path: portfolio starts at the ledger's cash value");
+        check(dut.portfolio_samples_30[31:0] == dut.portfolio_value,
+              "Display data path: portfolio history is initialized");
         $display("     AMD %0d c, MCD %0d c", dut.price0, dut.price1);
         // Yi An's own price maths (stock.v, calculate_next_close), reported but not counted
         if (dut.price0 == 16'hFFFF || dut.price1 == 16'hFFFF || dut.price0 < 100 || dut.price1 < 100)

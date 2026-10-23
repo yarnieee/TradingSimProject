@@ -30,6 +30,15 @@ module D_display_top #(
     output wire [3:0]  screen_state,
     output wire [13:0] quantity,
     output wire [1:0]  sel_stock,
+    input  wire [15:0] price0,
+    input  wire [15:0] price1,
+    input  wire [479:0] stock0_samples_30,
+    input  wire [479:0] stock1_samples_30,
+    input  wire [31:0] portfolio_cash,
+    input  wire [9:0]  portfolio_pos0,
+    input  wire [9:0]  portfolio_pos1,
+    input  wire [31:0] portfolio_value,
+    input  wire [959:0] portfolio_samples_30,
     output wire        ord_req,
     output wire        ord_side,
     output wire [1:0]  game_state,
@@ -94,6 +103,10 @@ module D_display_top #(
 
     assign sel_stock = selected_stock[1:0];
 
+    wire [15:0] selected_price = (selected_stock == 3'd0) ? price0 : price1;
+    wire [479:0] selected_samples_30 = (selected_stock == 3'd0) ?
+                                       stock0_samples_30 : stock1_samples_30;
+
     quantity_7seg quantity_7seg_inst (
         .clk(clk),
         .rst(rst),
@@ -145,6 +158,13 @@ module D_display_top #(
         .selected_stock(selected_stock),
         .quantity(quantity),
         .menu_selection(menu_selection),
+        .stock_samples(selected_samples_30),
+        .portfolio_samples(portfolio_samples_30),
+        .portfolio_cash(portfolio_cash),
+        .portfolio_pos0(portfolio_pos0),
+        .portfolio_pos1(portfolio_pos1),
+        .portfolio_value(portfolio_value),
+        .selected_price(selected_price),
         .pixel_data(pixel_data_R)
     );
 
@@ -184,6 +204,13 @@ module D_display_top #(
         .selected_stock(selected_stock),
         .quantity(quantity),
         .menu_selection(menu_selection),
+        .stock_samples(selected_samples_30),
+        .portfolio_samples(portfolio_samples_30),
+        .portfolio_cash(portfolio_cash),
+        .portfolio_pos0(portfolio_pos0),
+        .portfolio_pos1(portfolio_pos1),
+        .portfolio_value(portfolio_value),
+        .selected_price(selected_price),
         .btnU(btnU_db),
         .btnD(btnD_db),
         .btnL(btnL_db),

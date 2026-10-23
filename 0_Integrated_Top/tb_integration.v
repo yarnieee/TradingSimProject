@@ -66,8 +66,8 @@ module tb_integration;
         input integer qty;     // 0..9 (ones digit only, enough here)
         integer k;
         begin
-            press(R); press(C);                         // portfolio -> stocks (cursor 0)
-            for (k = 0; k < stock; k = k + 1) press(D); // pick the stock
+            press(R); press(C);                         // portfolio -> stocks (Stocks selected)
+            for (k = 0; k <= stock; k = k + 1) press(D); // Stocks -> selected stock
             press(C);                                   // -> specific
             if (sell) press(R);                         // sell instead of buy
             press(C);                                   // -> buy / sell screen

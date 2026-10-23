@@ -69,13 +69,13 @@ module tb_matthew_game_fsm;
 
         press(BU); press(BR); press(BC);
         check(screen_state == STOCKS, "specific: U, R selects back-to-stocks");
-        press(BC);
+        press(BD); press(BC);
         check(screen_state == SPECIFIC, "stocks --C--> specific again");
         press(BU); press(BC);
         check(screen_state == PORTFOLIO, "specific: U selects back-to-portfolio");
 
         // buy path with the quantity editor
-        press(BR); press(BC); press(BC);               // stocks, stock 0
+        press(BR); press(BC); press(BD); press(BC);    // stocks, stock 0
         press(BC);
         check(screen_state == BUY, "specific --C--> buy screen (default item)");
         press(BR); press(BC);
@@ -99,10 +99,10 @@ module tb_matthew_game_fsm;
         press(BR); press(BR); press(BC);
         check(screen_state == CONFIRM, "buy --R, R, C--> confirm");
         press(BC);
-        check(screen_state == PORTFOLIO, "confirm --C--> portfolio");
+        check(screen_state == PORTFOLIO && quantity == 0, "confirm --C--> portfolio and reset quantity");
 
         // sell path
-        press(BR); press(BC); press(BC);               // stocks, stock 0
+        press(BR); press(BC); press(BD); press(BC);    // stocks, stock 0
         press(BR); press(BC);
         check(screen_state == SELL, "specific --R, C--> sell screen");
         press(BR); press(BC);

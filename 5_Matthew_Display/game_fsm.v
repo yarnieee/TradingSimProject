@@ -11,7 +11,10 @@ module game_fsm (
     input        btnR,
     input        btnC,
     output reg [3:0]  screen_state,
-    output reg [13:0] quantity
+    output reg [13:0] quantity,
+    output reg [2:0]  selected_stock,
+    output reg [1:0]  quantity_cursor,
+    output     [3:0]  menu_selection
 );
 
     localparam TITLE       = 4'd0;
@@ -31,25 +34,40 @@ module game_fsm (
     reg [13:0] next_quantity;
     reg        quantity_return_state;
     reg        next_quantity_return_state;
-    reg [1:0] quantity_cursor;
     reg [1:0] next_quantity_cursor;
 
     // Menu cursors are intentionally kept separate for each screen.
     reg [1:0] portfolio_cursor;
     reg [1:0] next_portfolio_cursor;
-    reg [2:0] stocks_cursor;       // 0..3 stocks, 4 = back to portfolio
+    reg [2:0] stocks_cursor;       // 0 Portfolio, 1 Stocks, 2..5 stock list
     reg [2:0] next_stocks_cursor;
-    reg [1:0] specific_cursor;     // 0 buy, 1 sell, 2 portfolio, 3 stocks
-    reg [1:0] next_specific_cursor;
-    reg [1:0] buy_cursor;          // 0 back, 1 quantity, 2 confirmation
+    reg [2:0] specific_cursor;     // 0 buy, 1 sell, 2 back, 3 portfolio, 4 stocks
+    reg [2:0] next_specific_cursor;
+    reg [1:0] buy_cursor;          // 0 cancel, 1 quantity, 2 confirmation
     reg [1:0] next_buy_cursor;
-    reg [1:0] sell_cursor;         // 0 back, 1 quantity, 2 confirmation
+    reg [1:0] sell_cursor;         // 0 cancel, 1 quantity, 2 confirmation
     reg [1:0] next_sell_cursor;
+
+    reg [2:0] next_selected_stock;
+
+    // Selection exposed to the display layer. The encoding depends on the
+    // current screen and is documented by each screen's transition logic.
+    assign menu_selection = (screen_state == PORTFOLIO) ?
+                            {2'b00, portfolio_cursor[0]} :
+                            (screen_state == STOCKS) ?
+                            {1'b0, stocks_cursor} :
+                            (screen_state == SPECIFIC) ?
+                            {1'b0, specific_cursor} :
+                            (screen_state == BUY_STOCK) ?
+                            {2'b00, buy_cursor} :
+                            (screen_state == SELL_STOCK) ?
+                            {2'b00, sell_cursor} : 4'd0;
 
     always @(*) begin
         next_state = screen_state;
         next_quantity = quantity;
         next_quantity_return_state = quantity_return_state;
+        next_selected_stock = selected_stock;
         next_quantity_cursor = quantity_cursor;
         next_portfolio_cursor = portfolio_cursor;
         next_stocks_cursor = stocks_cursor;
@@ -69,57 +87,76 @@ module game_fsm (
                 if (btnR) next_portfolio_cursor = 1;
                 if (btnL) next_portfolio_cursor = 0;
 
-                if (btnC && (portfolio_cursor == 1)) begin
-                    next_state = STOCKS;
-                    next_stocks_cursor = 0;
+                if (btnC) begin
+                    if (portfolio_cursor == 0) begin
+                        // Portfolio is already the active state.
+                        next_state = PORTFOLIO;
+                    end else begin
+                        next_state = STOCKS;
+                        next_stocks_cursor = 1;
+                    end
                 end
             end
 
             STOCKS: begin
-                // U/D select one of four stock entries. L selects back.
-                if (btnU) begin
-                    if (stocks_cursor == 0 || stocks_cursor == 4)
-                        next_stocks_cursor = 3;
-                    else
-                        next_stocks_cursor = stocks_cursor - 1'b1;
-                end
+                // 0=Portfolio, 1=Stocks, 2=AMD, 3=AVGO, 4=NVDIA, 5=GME.
+                if (btnL && (stocks_cursor == 1))
+                    next_stocks_cursor = 0;
+                if (btnR && (stocks_cursor == 0))
+                    next_stocks_cursor = 1;
 
                 if (btnD) begin
-                    if (stocks_cursor == 3)
-                        next_stocks_cursor = 4;
-                    else
-                        next_stocks_cursor = stocks_cursor + 1'b1;
+                    case (stocks_cursor)
+                        1: next_stocks_cursor = 2;
+                        2: next_stocks_cursor = 3;
+                        3: next_stocks_cursor = 4;
+                        4: next_stocks_cursor = 5;
+                        default: next_stocks_cursor = stocks_cursor;
+                    endcase
                 end
 
-                if (btnL) next_stocks_cursor = 4;
-                if (btnR) next_stocks_cursor = 0;
+                if (btnU) begin
+                    case (stocks_cursor)
+                        2: next_stocks_cursor = 1;
+                        3: next_stocks_cursor = 2;
+                        4: next_stocks_cursor = 3;
+                        5: next_stocks_cursor = 4;
+                        default: next_stocks_cursor = stocks_cursor;
+                    endcase
+                end
 
                 if (btnC) begin
-                    if (stocks_cursor == 4) begin
+                    if (stocks_cursor == 0) begin
                         next_state = PORTFOLIO;
                         next_portfolio_cursor = 0;
-                    end else begin
+                    end else if (stocks_cursor >= 2) begin
                         next_state = SPECIFIC;
                         next_specific_cursor = 0;
+                        next_selected_stock = stocks_cursor - 2;
                     end
                 end
             end
 
             SPECIFIC: begin
-                // Default selection is buy. R selects sell. U selects the
-                // portfolio-back option, then R selects the stocks-back option.
-                if (btnU) next_specific_cursor = 2;
+                // 0=Buy, 1=Sell, 2=Back, 3=Portfolio, 4=Stocks.
+                // Action buttons are on one row; U enters the top navigation.
+                if (btnU && (specific_cursor <= 2))
+                    next_specific_cursor = 3;
                 if (btnR) begin
                     if (specific_cursor == 0)
                         next_specific_cursor = 1;
-                    else if (specific_cursor == 2)
-                        next_specific_cursor = 3;
+                    else if (specific_cursor == 1)
+                        next_specific_cursor = 2;
+                    else if (specific_cursor == 3)
+                        next_specific_cursor = 4;
                 end
                 if (btnL) begin
                     if (specific_cursor == 1)
                         next_specific_cursor = 0;
-                    else if (specific_cursor == 3)
-                        next_specific_cursor = 2;
+                    else if (specific_cursor == 2)
+                        next_specific_cursor = 1;
+                    else if (specific_cursor == 4)
+                        next_specific_cursor = 3;
                 end
 
                 if (btnC) begin
@@ -133,11 +170,16 @@ module game_fsm (
                             next_sell_cursor = 0;
                         end
                         2: begin
+                            next_state = STOCKS;
+                            next_stocks_cursor = 1;
+                        end
+                        3: begin
                             next_state = PORTFOLIO;
                             next_portfolio_cursor = 0;
                         end
-                        3: begin
+                        4: begin
                             next_state = STOCKS;
+                            next_stocks_cursor = 1;
                         end
                         default: next_state = SPECIFIC;
                     endcase
@@ -158,7 +200,6 @@ module game_fsm (
                         end
                         1: begin
                             next_state = QUANTITY;
-                            next_quantity = 0;
                             next_quantity_return_state = RETURN_BUY;
                             next_quantity_cursor = 0;
                         end
@@ -184,7 +225,6 @@ module game_fsm (
                         end
                         1: begin
                             next_state = QUANTITY;
-                            next_quantity = 0;
                             next_quantity_return_state = RETURN_SELL;
                             next_quantity_cursor = 0;
                         end
@@ -242,6 +282,7 @@ module game_fsm (
                 if (btnC) begin
                     next_state = PORTFOLIO;
                     next_portfolio_cursor = 0;
+                    next_quantity = 0;
                 end
             end
 
@@ -258,6 +299,7 @@ module game_fsm (
         if (rst) begin
             screen_state <= TITLE;
             quantity <= 0;
+            selected_stock <= 0;
             quantity_return_state <= RETURN_BUY;
             quantity_cursor <= 0;
             portfolio_cursor <= 0;
@@ -268,6 +310,7 @@ module game_fsm (
         end else begin
             screen_state <= next_state;
             quantity <= next_quantity;
+            selected_stock <= next_selected_stock;
             quantity_return_state <= next_quantity_return_state;
             quantity_cursor <= next_quantity_cursor;
             portfolio_cursor <= next_portfolio_cursor;

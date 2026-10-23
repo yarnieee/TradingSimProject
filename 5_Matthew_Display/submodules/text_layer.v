@@ -5,6 +5,8 @@
 module text_layer (
     input  [12:0] pixel_index,
     input  [3:0]  screen_state,
+    input  [2:0]  selected_stock,
+    input  [13:0] quantity,
     output reg    text_pixel
 );
 
@@ -38,8 +40,82 @@ module text_layer (
         .pixel_on(glyph_pixel)
     );
 
+    function [3:0] stock_name_length;
+        input [2:0] stock;
+        begin
+            case (stock)
+                3'd0: stock_name_length = 3;
+                3'd1: stock_name_length = 4;
+                3'd2: stock_name_length = 5;
+                3'd3: stock_name_length = 3;
+                default: stock_name_length = 3;
+            endcase
+        end
+    endfunction
+
+    function [7:0] stock_name_char;
+        input [2:0] stock;
+        input [2:0] position;
+        begin
+            stock_name_char = 8'h20;
+            case (stock)
+                3'd0: begin
+                    case (position)
+                        0: stock_name_char = 8'h41; // A
+                        1: stock_name_char = 8'h4D; // M
+                        2: stock_name_char = 8'h44; // D
+                        default: stock_name_char = 8'h20;
+                    endcase
+                end
+                3'd1: begin
+                    case (position)
+                        0: stock_name_char = 8'h41; // A
+                        1: stock_name_char = 8'h56; // V
+                        2: stock_name_char = 8'h47; // G
+                        3: stock_name_char = 8'h4F; // O
+                        default: stock_name_char = 8'h20;
+                    endcase
+                end
+                3'd2: begin
+                    case (position)
+                        0: stock_name_char = 8'h4E; // N
+                        1: stock_name_char = 8'h56; // V
+                        2: stock_name_char = 8'h44; // D
+                        3: stock_name_char = 8'h49; // I
+                        4: stock_name_char = 8'h41; // A
+                        default: stock_name_char = 8'h20;
+                    endcase
+                end
+                3'd3: begin
+                    case (position)
+                        0: stock_name_char = 8'h47; // G
+                        1: stock_name_char = 8'h4D; // M
+                        2: stock_name_char = 8'h45; // E
+                        default: stock_name_char = 8'h20;
+                    endcase
+                end
+                default: stock_name_char = 8'h20;
+            endcase
+        end
+    endfunction
+
+    function [3:0] quantity_digit;
+        input [13:0] value;
+        input [1:0] index;
+        begin
+            case (index)
+                2'd0: quantity_digit = value / 1000;
+                2'd1: quantity_digit = (value / 100) % 10;
+                2'd2: quantity_digit = (value / 10) % 10;
+                default: quantity_digit = value % 10;
+            endcase
+        end
+    endfunction
+
     function [4:0] text_length;
         input [3:0] state;
+        input [2:0] stock;
+        input [13:0] value;
         input       line;
         begin
             text_length = 0;
@@ -54,24 +130,41 @@ module text_layer (
                     if (line == 0) text_length = 13;
                 end
                 SPECIFIC: begin
-                    if (line == 0) text_length = 14;
-                    else          text_length = 6;
+                    if (line == 0) begin
+                        case (stock)
+                            3'd0: text_length = 9;  // AMD stock
+                            3'd1: text_length = 10; // AVGO stock
+                            3'd2: text_length = 11; // NVDIA stock
+                            3'd3: text_length = 9;  // GME stock
+                            default: text_length = 9;
+                        endcase
+                    end else begin
+                        text_length = 0;
+                    end
                 end
                 BUY_STOCK: begin
-                    if (line == 0) text_length = 12;
-                    else          text_length = 12;
+                    if (line == 0)
+                        text_length = 10 + stock_name_length(stock);
+                    else
+                        text_length = 10; // buy screen
                 end
                 SELL_STOCK: begin
-                    if (line == 0) text_length = 13;
-                    else          text_length = 12;
+                    if (line == 0)
+                        text_length = 11 + stock_name_length(stock);
+                    else
+                        text_length = 11; // sell screen
                 end
                 QUANTITY: begin
-                    if (line == 0) text_length = 8;
-                    else          text_length = 6;
+                    if (line == 0)
+                        text_length = 4 + stock_name_length(stock);
+                    else
+                        text_length = 8; // quantity
                 end
                 CONFIRM: begin
-                    if (line == 0) text_length = 12;
-                    else          text_length = 6;
+                    if (line == 0)
+                        text_length = 9 + stock_name_length(stock);
+                    else
+                        text_length = 12; // confirmation
                 end
                 GAME_END: begin
                     if (line == 0) text_length = 8;
@@ -84,6 +177,8 @@ module text_layer (
 
     function [7:0] text_char;
         input [3:0] state;
+        input [2:0] stock;
+        input [13:0] value;
         input       line;
         input [4:0] position;
         begin
@@ -126,107 +221,185 @@ module text_layer (
                     endcase
                 end
                 SPECIFIC: begin
-                    if (line == 0) begin
-                        case (position)
-                            0: text_char = 8'h73; 1: text_char = 8'h70;
-                            2: text_char = 8'h65; 3: text_char = 8'h63;
-                            4: text_char = 8'h69; 5: text_char = 8'h66;
-                            6: text_char = 8'h69; 7: text_char = 8'h63;
-                            8: text_char = 8'h20; 9: text_char = 8'h73;
-                            10: text_char = 8'h74; 11: text_char = 8'h6f;
-                            12: text_char = 8'h63; 13: text_char = 8'h6b;
-                            default: text_char = 8'h20;
-                        endcase
-                    end else begin
-                        case (position)
-                            0: text_char = 8'h73; 1: text_char = 8'h63;
-                            2: text_char = 8'h72; 3: text_char = 8'h65;
-                            4: text_char = 8'h65; 5: text_char = 8'h6e;
-                            default: text_char = 8'h20;
-                        endcase
-                    end
+                    case (stock)
+                        3'd0: begin
+                            case (position)
+                                0: text_char = 8'h41; // A
+                                1: text_char = 8'h4D; // M
+                                2: text_char = 8'h44; // D
+                                3: text_char = 8'h20;
+                                4: text_char = 8'h73; 5: text_char = 8'h74;
+                                6: text_char = 8'h6F; 7: text_char = 8'h63;
+                                8: text_char = 8'h6B;
+                                default: text_char = 8'h20;
+                            endcase
+                        end
+                        3'd1: begin
+                            case (position)
+                                0: text_char = 8'h41; // A
+                                1: text_char = 8'h56; // V
+                                2: text_char = 8'h47; // G
+                                3: text_char = 8'h4F; // O
+                                4: text_char = 8'h20;
+                                5: text_char = 8'h73; 6: text_char = 8'h74;
+                                7: text_char = 8'h6F; 8: text_char = 8'h63;
+                                9: text_char = 8'h6B;
+                                default: text_char = 8'h20;
+                            endcase
+                        end
+                        3'd2: begin
+                            case (position)
+                                0: text_char = 8'h4E; // N
+                                1: text_char = 8'h56; // V
+                                2: text_char = 8'h44; // D
+                                3: text_char = 8'h49; // I
+                                4: text_char = 8'h41; // A
+                                5: text_char = 8'h20;
+                                6: text_char = 8'h73; 7: text_char = 8'h74;
+                                8: text_char = 8'h6F; 9: text_char = 8'h63;
+                                10: text_char = 8'h6B;
+                                default: text_char = 8'h20;
+                            endcase
+                        end
+                        3'd3: begin
+                            case (position)
+                                0: text_char = 8'h47; // G
+                                1: text_char = 8'h4D; // M
+                                2: text_char = 8'h45; // E
+                                3: text_char = 8'h20;
+                                4: text_char = 8'h73; 5: text_char = 8'h74;
+                                6: text_char = 8'h6F; 7: text_char = 8'h63;
+                                8: text_char = 8'h6B;
+                                default: text_char = 8'h20;
+                            endcase
+                        end
+                        default: text_char = 8'h20;
+                    endcase
                 end
                 BUY_STOCK: begin
                     if (line == 0) begin
+                        if (position == 0)
+                            text_char = 8'h62; // b
+                        else if (position == 1)
+                            text_char = 8'h75; // u
+                        else if (position == 2)
+                            text_char = 8'h79; // y
+                        else if (position == 3)
+                            text_char = 8'h20;
+                        else if ((position >= 4) &&
+                                 (position < 4 + stock_name_length(stock)))
+                            text_char = stock_name_char(stock, position - 4);
+                        else if (position == 4 + stock_name_length(stock))
+                            text_char = 8'h20;
+                        else begin
+                            case (position - (5 + stock_name_length(stock)))
+                                0: text_char = 8'h73; // s
+                                1: text_char = 8'h74; // t
+                                2: text_char = 8'h6F; // o
+                                3: text_char = 8'h63; // c
+                                4: text_char = 8'h6B; // k
+                                default: text_char = 8'h20;
+                            endcase
+                        end
+                    end else begin
                         case (position)
                             0: text_char = 8'h62; 1: text_char = 8'h75;
                             2: text_char = 8'h79; 3: text_char = 8'h20;
-                            4: text_char = 8'h73; 5: text_char = 8'h70;
-                            6: text_char = 8'h65; 7: text_char = 8'h63;
-                            8: text_char = 8'h69; 9: text_char = 8'h66;
-                            10: text_char = 8'h69; 11: text_char = 8'h63;
-                            default: text_char = 8'h20;
-                        endcase
-                    end else begin
-                        case (position)
-                            0: text_char = 8'h73; 1: text_char = 8'h74;
-                            2: text_char = 8'h6f; 3: text_char = 8'h63;
-                            4: text_char = 8'h6b; 5: text_char = 8'h20;
-                            6: text_char = 8'h73; 7: text_char = 8'h63;
-                            8: text_char = 8'h72; 9: text_char = 8'h65;
-                            10: text_char = 8'h65; 11: text_char = 8'h6e;
+                            4: text_char = 8'h73; 5: text_char = 8'h63;
+                            6: text_char = 8'h72; 7: text_char = 8'h65;
+                            8: text_char = 8'h65; 9: text_char = 8'h6E;
                             default: text_char = 8'h20;
                         endcase
                     end
                 end
                 SELL_STOCK: begin
                     if (line == 0) begin
-                        case (position)
-                            0: text_char = 8'h73; 1: text_char = 8'h65;
-                            2: text_char = 8'h6c; 3: text_char = 8'h6c;
-                            4: text_char = 8'h20; 5: text_char = 8'h73;
-                            6: text_char = 8'h70; 7: text_char = 8'h65;
-                            8: text_char = 8'h63; 9: text_char = 8'h69;
-                            10: text_char = 8'h66; 11: text_char = 8'h69;
-                            12: text_char = 8'h63;
-                            default: text_char = 8'h20;
-                        endcase
+                        if (position == 0)
+                            text_char = 8'h73; // s
+                        else if (position == 1)
+                            text_char = 8'h65; // e
+                        else if (position == 2)
+                            text_char = 8'h6C; // l
+                        else if (position == 3)
+                            text_char = 8'h6C; // l
+                        else if (position == 4)
+                            text_char = 8'h20;
+                        else if ((position >= 5) &&
+                                 (position < 5 + stock_name_length(stock)))
+                            text_char = stock_name_char(stock, position - 5);
+                        else if (position == 5 + stock_name_length(stock))
+                            text_char = 8'h20;
+                        else begin
+                            case (position - (6 + stock_name_length(stock)))
+                                0: text_char = 8'h73; // s
+                                1: text_char = 8'h74; // t
+                                2: text_char = 8'h6F; // o
+                                3: text_char = 8'h63; // c
+                                4: text_char = 8'h6B; // k
+                                default: text_char = 8'h20;
+                            endcase
+                        end
                     end else begin
                         case (position)
-                            0: text_char = 8'h73; 1: text_char = 8'h74;
-                            2: text_char = 8'h6f; 3: text_char = 8'h63;
-                            4: text_char = 8'h6b; 5: text_char = 8'h20;
-                            6: text_char = 8'h73; 7: text_char = 8'h63;
-                            8: text_char = 8'h72; 9: text_char = 8'h65;
-                            10: text_char = 8'h65; 11: text_char = 8'h6e;
+                            0: text_char = 8'h73; 1: text_char = 8'h65;
+                            2: text_char = 8'h6C; 3: text_char = 8'h6C;
+                            4: text_char = 8'h20; 5: text_char = 8'h73;
+                            6: text_char = 8'h63; 7: text_char = 8'h72;
+                            8: text_char = 8'h65; 9: text_char = 8'h65;
+                            10: text_char = 8'h6E;
                             default: text_char = 8'h20;
                         endcase
                     end
                 end
                 QUANTITY: begin
                     if (line == 0) begin
-                        case (position)
-                            0: text_char = 8'h71; 1: text_char = 8'h75;
-                            2: text_char = 8'h61; 3: text_char = 8'h6e;
-                            4: text_char = 8'h74; 5: text_char = 8'h69;
-                            6: text_char = 8'h74; 7: text_char = 8'h79;
-                            default: text_char = 8'h20;
-                        endcase
+                        if (position == 0)
+                            text_char = 8'h71; // q
+                        else if (position == 1)
+                            text_char = 8'h74; // t
+                        else if (position == 2)
+                            text_char = 8'h79; // y
+                        else if (position == 3)
+                            text_char = 8'h20;
+                        else
+                            text_char = stock_name_char(stock, position - 4);
                     end else begin
                         case (position)
-                            0: text_char = 8'h73; 1: text_char = 8'h63;
-                            2: text_char = 8'h72; 3: text_char = 8'h65;
-                            4: text_char = 8'h65; 5: text_char = 8'h6e;
+                            0: text_char = 8'h71; 1: text_char = 8'h75;
+                            2: text_char = 8'h61; 3: text_char = 8'h6E;
+                            4: text_char = 8'h74; 5: text_char = 8'h69;
+                            6: text_char = 8'h74; 7: text_char = 8'h79;
                             default: text_char = 8'h20;
                         endcase
                     end
                 end
                 CONFIRM: begin
                     if (line == 0) begin
-                        case (position)
-                            0: text_char = 8'h63; 1: text_char = 8'h6f;
-                            2: text_char = 8'h6e; 3: text_char = 8'h66;
-                            4: text_char = 8'h69; 5: text_char = 8'h72;
-                            6: text_char = 8'h6d; 7: text_char = 8'h61;
-                            8: text_char = 8'h74; 9: text_char = 8'h69;
-                            10: text_char = 8'h6f; 11: text_char = 8'h6e;
-                            default: text_char = 8'h20;
-                        endcase
+                        if (position < stock_name_length(stock))
+                            text_char = stock_name_char(stock, position);
+                        else if (position == stock_name_length(stock))
+                            text_char = 8'h20;
+                        else if (position == stock_name_length(stock) + 1)
+                            text_char = 8'h71; // q
+                        else if (position == stock_name_length(stock) + 2)
+                            text_char = 8'h74; // t
+                        else if (position == stock_name_length(stock) + 3)
+                            text_char = 8'h79; // y
+                        else if (position == stock_name_length(stock) + 4)
+                            text_char = 8'h20;
+                        else if (position < stock_name_length(stock) + 9)
+                            text_char = 8'h30 + quantity_digit(
+                                value, position - stock_name_length(stock) - 5);
+                        else
+                            text_char = 8'h20;
                     end else begin
                         case (position)
-                            0: text_char = 8'h73; 1: text_char = 8'h63;
-                            2: text_char = 8'h72; 3: text_char = 8'h65;
-                            4: text_char = 8'h65; 5: text_char = 8'h6e;
+                            0: text_char = 8'h63; 1: text_char = 8'h6F;
+                            2: text_char = 8'h6E; 3: text_char = 8'h66;
+                            4: text_char = 8'h69; 5: text_char = 8'h72;
+                            6: text_char = 8'h6D; 7: text_char = 8'h61;
+                            8: text_char = 8'h74; 9: text_char = 8'h69;
+                            10: text_char = 8'h6F; 11: text_char = 8'h6E;
                             default: text_char = 8'h20;
                         endcase
                     end
@@ -264,21 +437,21 @@ module text_layer (
         glyph_x = 0;
         glyph_y = 0;
 
-        // Two-line screens use rows 20..26 and 34..40. Single-line screens
-        // use rows 28..34.
-        if (text_length(screen_state, 1) != 0) begin
-            if ((pixel_y >= 20) && (pixel_y < 27)) begin
+        // Two-line screens use rows 14..20 and 24..30. Single-line screens
+        // use rows 14..20 so the screen description stays at the top.
+        if (text_length(screen_state, selected_stock, quantity, 1) != 0) begin
+            if ((pixel_y >= 14) && (pixel_y < 21)) begin
                 line_select = 0;
-                line_y = 20;
+                line_y = 14;
                 line_active = 1;
-            end else if ((pixel_y >= 34) && (pixel_y < 41)) begin
+            end else if ((pixel_y >= 24) && (pixel_y < 31)) begin
                 line_select = 1;
-                line_y = 34;
+                line_y = 24;
                 line_active = 1;
             end
-        end else if ((pixel_y >= 28) && (pixel_y < 35)) begin
+        end else if ((pixel_y >= 14) && (pixel_y < 21)) begin
             line_select = 0;
-            line_y = 28;
+            line_y = 14;
             line_active = 1;
         end
 
@@ -286,8 +459,10 @@ module text_layer (
             char_position = pixel_x / 6;
             glyph_x = pixel_x % 6;
             glyph_y = pixel_y - line_y;
-            line_length = text_length(screen_state, line_select);
-            char_code = text_char(screen_state, line_select, char_position);
+            line_length = text_length(screen_state, selected_stock,
+                                      quantity, line_select);
+            char_code = text_char(screen_state, selected_stock, quantity,
+                                  line_select, char_position);
         end
 
         text_pixel = glyph_pixel &&

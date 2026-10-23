@@ -16,13 +16,14 @@
 //   sw[0] (rst)   reset, as in Matthew's constraints
 //   buttons       Matthew's game FSM (title > portfolio > stocks > stock > buy/sell > quantity > confirm)
 //   JB (right)    Matthew's game screens
-//   JA (left)     Douglas's order ticket: bid/ask, last fill or reject, pending count
-//                 (temporary, until Yi An's chart page exists for this screen)
+//   JA (left)     Matthew's upside-down mirrored game screen by default.
+//                 Set SHOW_GAME_ON_JA to 0 to use Douglas's order ticket instead.
 //   7-seg         Matthew's quantity
 //   led[7:4]      Matthew's screen_state;  led[15] fill;  led[14] reject;  led[11:8] pending orders
 module Integration_Top #(
     parameter DAY_MAX_COUNT = 199_999_999,      // Yi An: 2 s per trading day
-    parameter DEBOUNCE_CTR  = 32'd1_999_999     // Matthew: 20 ms
+    parameter DEBOUNCE_CTR  = 32'd1_999_999,    // Matthew: 20 ms
+    parameter SHOW_GAME_ON_JA = 1'b1
 ) (
     input  wire        clk,
     input  wire        rst,
@@ -52,7 +53,10 @@ module Integration_Top #(
     wire [15:0] ticket_pixel;
     wire [6:0]  xL;
     wire [5:0]  yL;
-    D_display_top #(.DEBOUNCE_CTR(DEBOUNCE_CTR)) matthew_display (
+    D_display_top #(
+        .DEBOUNCE_CTR(DEBOUNCE_CTR),
+        .SHOW_GAME_ON_JA(SHOW_GAME_ON_JA)
+    ) matthew_display (
         .clk(clk), .rst(sys_reset),
         .btnU(btnU), .btnD(btnD), .btnL(btnL), .btnR(btnR), .btnC(btnC),
         .left_pixel(ticket_pixel), .left_x(xL), .left_y(yL),

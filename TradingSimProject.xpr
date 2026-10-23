@@ -4,7 +4,7 @@
 <!-- Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.                   -->
 <!-- Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.   -->
 
-<Project Product="Vivado" Version="7" Minor="71" Path="C:/Users/Derpy/Desktop/EE2026/Vivado_Projects/TradingSimProject/TradingSimProject.xpr">
+<Project Product="Vivado" Version="7" Minor="71" Path="C:/Users/yiann/Desktop/EE2026/TradingSimProject/TradingSimProject.xpr">
   <DefaultLaunch Dir="$PRUNDIR"/>
   <Configuration>
     <Option Name="Id" Val="1736918a2ef64aa0bbe5bae27913652a"/>
@@ -89,8 +89,25 @@
   <FileSets Version="1" Minor="32">
     <FileSet Name="sources_1" Type="DesignSrcs" RelSrcDir="$PSRCDIR/sources_1" RelGenDir="$PGENDIR/sources_1">
       <Filter Type="Srcs"/>
+      <File Path="$PSRCDIR/sources_1/imports/storage/MCD_seed.mem">
+        <FileInfo>
+          <Attr Name="ImportPath" Val="$PPRDIR/../code snippets/storage/MCD_seed.mem"/>
+          <Attr Name="ImportTime" Val="1792354559"/>
+          <Attr Name="UsedIn" Val="synthesis"/>
+          <Attr Name="UsedIn" Val="simulation"/>
+        </FileInfo>
+      </File>
+      <File Path="$PSRCDIR/sources_1/imports/storage/AMD_seed.mem">
+        <FileInfo>
+          <Attr Name="ImportPath" Val="$PPRDIR/../code snippets/storage/AMD_seed.mem"/>
+          <Attr Name="ImportTime" Val="1792354559"/>
+          <Attr Name="UsedIn" Val="synthesis"/>
+          <Attr Name="UsedIn" Val="simulation"/>
+        </FileInfo>
+      </File>
       <File Path="$PSRCDIR/sources_1/new/OLED_Renderer.v">
         <FileInfo>
+          <Attr Name="AutoDisabled" Val="1"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="implementation"/>
           <Attr Name="UsedIn" Val="simulation"/>
@@ -98,6 +115,7 @@
       </File>
       <File Path="$PSRCDIR/sources_1/imports/new/Oled_Display.v">
         <FileInfo>
+          <Attr Name="AutoDisabled" Val="1"/>
           <Attr Name="ImportPath" Val="$PPRDIR/../FDP2026/FDP2026.srcs/sources_1/new/Oled_Display.v"/>
           <Attr Name="ImportTime" Val="1790433817"/>
           <Attr Name="UsedIn" Val="synthesis"/>
@@ -107,6 +125,7 @@
       </File>
       <File Path="$PSRCDIR/sources_1/imports/new/slower_clk.v">
         <FileInfo>
+          <Attr Name="AutoDisabled" Val="1"/>
           <Attr Name="ImportPath" Val="$PPRDIR/../FDP2026/FDP2026.srcs/sources_1/new/slower_clk.v"/>
           <Attr Name="ImportTime" Val="1790563201"/>
           <Attr Name="UsedIn" Val="synthesis"/>
@@ -116,6 +135,7 @@
       </File>
       <File Path="$PSRCDIR/sources_1/imports/new/Mouse_Control.vhd">
         <FileInfo>
+          <Attr Name="AutoDisabled" Val="1"/>
           <Attr Name="ImportPath" Val="$PPRDIR/../FDP2026/FDP2026.srcs/sources_1/new/Mouse_Control.vhd"/>
           <Attr Name="ImportTime" Val="1790433817"/>
           <Attr Name="UsedIn" Val="synthesis"/>
@@ -124,6 +144,7 @@
       </File>
       <File Path="$PSRCDIR/sources_1/imports/new/Ps2Interface.vhd">
         <FileInfo>
+          <Attr Name="AutoDisabled" Val="1"/>
           <Attr Name="ImportPath" Val="$PPRDIR/../FDP2026/FDP2026.srcs/sources_1/new/Ps2Interface.vhd"/>
           <Attr Name="ImportTime" Val="1790433817"/>
           <Attr Name="UsedIn" Val="synthesis"/>
@@ -132,6 +153,7 @@
       </File>
       <File Path="$PSRCDIR/sources_1/imports/new/My_Top_Module.v">
         <FileInfo>
+          <Attr Name="AutoDisabled" Val="1"/>
           <Attr Name="ImportPath" Val="$PPRDIR/../FDP2026/FDP2026.srcs/sources_1/new/My_Top_Module.v"/>
           <Attr Name="ImportTime" Val="1790937324"/>
           <Attr Name="UsedIn" Val="synthesis"/>
@@ -139,10 +161,180 @@
           <Attr Name="UsedIn" Val="simulation"/>
         </FileInfo>
       </File>
+      <File Path="$PSRCDIR/sources_1/imports/storage/day_ticker.v">
+        <FileInfo>
+          <Attr Name="AutoDisabled" Val="1"/>
+          <Attr Name="ImportPath" Val="$PPRDIR/../code snippets/storage/day_ticker.v"/>
+          <Attr Name="ImportTime" Val="1792354392"/>
+          <Attr Name="UsedIn" Val="synthesis"/>
+          <Attr Name="UsedIn" Val="implementation"/>
+          <Attr Name="UsedIn" Val="simulation"/>
+        </FileInfo>
+      </File>
+      <File Path="$PSRCDIR/sources_1/imports/storage/get_30_values.v">
+        <FileInfo>
+          <Attr Name="AutoDisabled" Val="1"/>
+          <Attr Name="ImportPath" Val="$PPRDIR/../code snippets/storage/get_30_values.v"/>
+          <Attr Name="ImportTime" Val="1792354407"/>
+          <Attr Name="UsedIn" Val="synthesis"/>
+          <Attr Name="UsedIn" Val="implementation"/>
+          <Attr Name="UsedIn" Val="simulation"/>
+        </FileInfo>
+      </File>
+      <File Path="$PSRCDIR/sources_1/imports/storage/lfsr.v">
+        <FileInfo>
+          <Attr Name="AutoDisabled" Val="1"/>
+          <Attr Name="ImportPath" Val="$PPRDIR/../code snippets/storage/lfsr.v"/>
+          <Attr Name="ImportTime" Val="1792354361"/>
+          <Attr Name="UsedIn" Val="synthesis"/>
+          <Attr Name="UsedIn" Val="implementation"/>
+          <Attr Name="UsedIn" Val="simulation"/>
+        </FileInfo>
+      </File>
+      <File Path="$PSRCDIR/sources_1/imports/storage/market_state.v">
+        <FileInfo>
+          <Attr Name="AutoDisabled" Val="1"/>
+          <Attr Name="ImportPath" Val="$PPRDIR/../code snippets/storage/market_state.v"/>
+          <Attr Name="ImportTime" Val="1792354392"/>
+          <Attr Name="UsedIn" Val="synthesis"/>
+          <Attr Name="UsedIn" Val="implementation"/>
+          <Attr Name="UsedIn" Val="simulation"/>
+        </FileInfo>
+      </File>
+      <File Path="$PSRCDIR/sources_1/imports/storage/stock.v">
+        <FileInfo>
+          <Attr Name="AutoDisabled" Val="1"/>
+          <Attr Name="ImportPath" Val="$PPRDIR/../code snippets/storage/stock.v"/>
+          <Attr Name="ImportTime" Val="1792354473"/>
+          <Attr Name="UsedIn" Val="synthesis"/>
+          <Attr Name="UsedIn" Val="implementation"/>
+          <Attr Name="UsedIn" Val="simulation"/>
+        </FileInfo>
+      </File>
+      <File Path="$PSRCDIR/sources_1/imports/storage/lfsr/normalise_lfsr.v">
+        <FileInfo>
+          <Attr Name="AutoDisabled" Val="1"/>
+          <Attr Name="ImportPath" Val="$PPRDIR/../code snippets/storage/lfsr/normalise_lfsr.v"/>
+          <Attr Name="ImportTime" Val="1792354600"/>
+          <Attr Name="UsedIn" Val="synthesis"/>
+          <Attr Name="UsedIn" Val="implementation"/>
+          <Attr Name="UsedIn" Val="simulation"/>
+        </FileInfo>
+      </File>
+      <File Path="$PSRCDIR/sources_1/imports/storage/lfsr/startup_seed.v">
+        <FileInfo>
+          <Attr Name="AutoDisabled" Val="1"/>
+          <Attr Name="ImportPath" Val="$PPRDIR/../code snippets/storage/lfsr/startup_seed.v"/>
+          <Attr Name="ImportTime" Val="1792354392"/>
+          <Attr Name="UsedIn" Val="synthesis"/>
+          <Attr Name="UsedIn" Val="implementation"/>
+          <Attr Name="UsedIn" Val="simulation"/>
+        </FileInfo>
+      </File>
+      <File Path="$PSRCDIR/sources_1/imports/storage/storage/storage_buffer.v">
+        <FileInfo>
+          <Attr Name="AutoDisabled" Val="1"/>
+          <Attr Name="ImportPath" Val="$PPRDIR/../code snippets/storage/storage/storage_buffer.v"/>
+          <Attr Name="ImportTime" Val="1792354305"/>
+          <Attr Name="UsedIn" Val="synthesis"/>
+          <Attr Name="UsedIn" Val="implementation"/>
+          <Attr Name="UsedIn" Val="simulation"/>
+        </FileInfo>
+      </File>
+      <File Path="$PSRCDIR/sources_1/imports/storage/storage/get_latest_values.v">
+        <FileInfo>
+          <Attr Name="AutoDisabled" Val="1"/>
+          <Attr Name="ImportPath" Val="$PPRDIR/../code snippets/storage/storage/get_latest_values.v"/>
+          <Attr Name="ImportTime" Val="1792379432"/>
+          <Attr Name="UsedIn" Val="synthesis"/>
+          <Attr Name="UsedIn" Val="implementation"/>
+          <Attr Name="UsedIn" Val="simulation"/>
+        </FileInfo>
+      </File>
+      <File Path="$PSRCDIR/sources_1/imports/storage/stock/day_ticker.v">
+        <FileInfo>
+          <Attr Name="ImportPath" Val="$PPRDIR/../code snippets/storage/stock/day_ticker.v"/>
+          <Attr Name="ImportTime" Val="1792354392"/>
+          <Attr Name="UsedIn" Val="synthesis"/>
+          <Attr Name="UsedIn" Val="implementation"/>
+          <Attr Name="UsedIn" Val="simulation"/>
+        </FileInfo>
+      </File>
+      <File Path="$PSRCDIR/sources_1/imports/storage/storage/get_30_values.v">
+        <FileInfo>
+          <Attr Name="ImportPath" Val="$PPRDIR/../code snippets/storage/storage/get_30_values.v"/>
+          <Attr Name="ImportTime" Val="1792379306"/>
+          <Attr Name="UsedIn" Val="synthesis"/>
+          <Attr Name="UsedIn" Val="implementation"/>
+          <Attr Name="UsedIn" Val="simulation"/>
+        </FileInfo>
+      </File>
+      <File Path="$PSRCDIR/sources_1/imports/storage/lfsr/lfsr.v">
+        <FileInfo>
+          <Attr Name="ImportPath" Val="$PPRDIR/../code snippets/storage/lfsr/lfsr.v"/>
+          <Attr Name="ImportTime" Val="1792354361"/>
+          <Attr Name="UsedIn" Val="synthesis"/>
+          <Attr Name="UsedIn" Val="implementation"/>
+          <Attr Name="UsedIn" Val="simulation"/>
+        </FileInfo>
+      </File>
+      <File Path="$PSRCDIR/sources_1/imports/storage/stock/market_state.v">
+        <FileInfo>
+          <Attr Name="ImportPath" Val="$PPRDIR/../code snippets/storage/stock/market_state.v"/>
+          <Attr Name="ImportTime" Val="1792354392"/>
+          <Attr Name="UsedIn" Val="synthesis"/>
+          <Attr Name="UsedIn" Val="implementation"/>
+          <Attr Name="UsedIn" Val="simulation"/>
+        </FileInfo>
+      </File>
+      <File Path="$PSRCDIR/sources_1/imports/storage/normalise_lfsr.v">
+        <FileInfo>
+          <Attr Name="ImportPath" Val="$PPRDIR/../code snippets/storage/normalise_lfsr.v"/>
+          <Attr Name="ImportTime" Val="1792354600"/>
+          <Attr Name="UsedIn" Val="synthesis"/>
+          <Attr Name="UsedIn" Val="implementation"/>
+          <Attr Name="UsedIn" Val="simulation"/>
+        </FileInfo>
+      </File>
+      <File Path="$PSRCDIR/sources_1/imports/storage/startup_seed.v">
+        <FileInfo>
+          <Attr Name="ImportPath" Val="$PPRDIR/../code snippets/storage/startup_seed.v"/>
+          <Attr Name="ImportTime" Val="1792354392"/>
+          <Attr Name="UsedIn" Val="synthesis"/>
+          <Attr Name="UsedIn" Val="implementation"/>
+          <Attr Name="UsedIn" Val="simulation"/>
+        </FileInfo>
+      </File>
+      <File Path="$PSRCDIR/sources_1/imports/storage/stock/stock.v">
+        <FileInfo>
+          <Attr Name="ImportPath" Val="$PPRDIR/../code snippets/storage/stock/stock.v"/>
+          <Attr Name="ImportTime" Val="1792379392"/>
+          <Attr Name="UsedIn" Val="synthesis"/>
+          <Attr Name="UsedIn" Val="implementation"/>
+          <Attr Name="UsedIn" Val="simulation"/>
+        </FileInfo>
+      </File>
+      <File Path="$PSRCDIR/sources_1/imports/storage/storage_buffer.v">
+        <FileInfo>
+          <Attr Name="ImportPath" Val="$PPRDIR/../code snippets/storage/storage_buffer.v"/>
+          <Attr Name="ImportTime" Val="1792354305"/>
+          <Attr Name="UsedIn" Val="synthesis"/>
+          <Attr Name="UsedIn" Val="implementation"/>
+          <Attr Name="UsedIn" Val="simulation"/>
+        </FileInfo>
+      </File>
+      <File Path="$PSRCDIR/sources_1/imports/storage/A_top.v">
+        <FileInfo>
+          <Attr Name="ImportPath" Val="$PPRDIR/../code snippets/storage/A_top.v"/>
+          <Attr Name="ImportTime" Val="1792379392"/>
+          <Attr Name="UsedIn" Val="synthesis"/>
+          <Attr Name="UsedIn" Val="implementation"/>
+          <Attr Name="UsedIn" Val="simulation"/>
+        </FileInfo>
+      </File>
       <Config>
         <Option Name="DesignMode" Val="RTL"/>
-        <Option Name="TopModule" Val="My_Top_Module"/>
-        <Option Name="TopAutoSet" Val="TRUE"/>
+        <Option Name="TopModule" Val="A_top"/>
       </Config>
     </FileSet>
     <FileSet Name="constrs_1" Type="Constrs" RelSrcDir="$PSRCDIR/constrs_1" RelGenDir="$PGENDIR/constrs_1">

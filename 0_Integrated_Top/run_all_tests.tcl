@@ -10,6 +10,7 @@ set all_tbs {
     tb_integration
     tb_yian_market
     tb_stock_price
+    tb_normalise_lfsr
     tb_matthew_game_fsm
     tb_ledger
     tb_seq_divider

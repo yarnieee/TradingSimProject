@@ -7,7 +7,7 @@ set proj_dir [file normalize "$repo/../Integration_vivado"]
 
 source [file join $here create_integration_project.tcl]
 
-set only_tbs {tb_stock_price tb_yian_market}
+set only_tbs {tb_stock_price tb_yian_market tb_normalise_lfsr}
 source [file join $here run_all_tests.tcl]
 
 close_project

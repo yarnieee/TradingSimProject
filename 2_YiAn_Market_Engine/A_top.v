@@ -11,7 +11,14 @@ module A_top #(
     parameter integer DAY_MAX_COUNT = 199_999_999,
     parameter integer BUFFER_DEPTH = 180,
     parameter integer AMD_VOLATILITY = 10,
-    parameter integer MCD_VOLATILITY = 10
+    parameter integer MCD_VOLATILITY = 10,
+    // The supplied AMD and MCD seed files end on Friday, 2025-12-19.
+    // Keeping the seed date components as parameters avoids synthesizing
+    // binary divide/modulo hardware merely to find the next trading day.
+    parameter integer INITIAL_YEAR = 2025,
+    parameter integer INITIAL_MONTH = 12,
+    parameter integer INITIAL_DAY = 19,
+    parameter integer INITIAL_WEEKDAY = 6
     )(
     input wire clk,
     input wire rst,
@@ -138,6 +145,10 @@ module A_top #(
     stock #(
         .BUFFER_DEPTH(BUFFER_DEPTH),
         .VOLATILITY(AMD_VOLATILITY),
+        .INITIAL_YEAR(INITIAL_YEAR),
+        .INITIAL_MONTH(INITIAL_MONTH),
+        .INITIAL_DAY(INITIAL_DAY),
+        .INITIAL_WEEKDAY(INITIAL_WEEKDAY),
         .SEED_FILE("storage/data/AMD_seed.mem")
         ) amd_stock_inst (
         .clk(clk),
@@ -157,6 +168,10 @@ module A_top #(
     stock #(
         .BUFFER_DEPTH(BUFFER_DEPTH),
         .VOLATILITY(MCD_VOLATILITY),
+        .INITIAL_YEAR(INITIAL_YEAR),
+        .INITIAL_MONTH(INITIAL_MONTH),
+        .INITIAL_DAY(INITIAL_DAY),
+        .INITIAL_WEEKDAY(INITIAL_WEEKDAY),
         .SEED_FILE("storage/data/MCD_seed.mem")
         ) mcd_stock_inst (
         .clk(clk),

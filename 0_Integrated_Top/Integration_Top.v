@@ -91,9 +91,6 @@ module Integration_Top #(
     // in 2_YiAn_Market_Engine/data/ and are added to the Vivado project, so point
     // both stocks at the plain file names. [ASSUMPTION: Vivado finds .mem files
     // added to the project by name, in synthesis and simulation. Not tested here.]
-    defparam yian_market.amd_stock_inst.SEED_FILE = "AMD_seed.mem";
-    defparam yian_market.mcd_stock_inst.SEED_FILE = "MCD_seed.mem";
-
     // Current prices and 30-point histories are both kept for the display and
     // the order engine.
     A_top #(.DAY_MAX_COUNT(DAY_MAX_COUNT)) yian_market (
@@ -105,6 +102,12 @@ module Integration_Top #(
         .amd_samples_30(amd_samples_30), .amd_samples_180(), .amd_mean_30(), .amd_mean_180(),
         .mcd_samples_30(mcd_samples_30), .mcd_samples_180(), .mcd_mean_30(), .mcd_mean_180()
     );
+
+    // Vivado resolves hierarchical defparams after the referenced instance
+    // has been declared. Keep these overrides after yian_market so the
+    // integration project elaborates consistently across Vivado versions.
+    defparam yian_market.amd_stock_inst.SEED_FILE = "AMD_seed.mem";
+    defparam yian_market.mcd_stock_inst.SEED_FILE = "MCD_seed.mem";
 
     // Price bus for Douglas. Replace when A_top outputs price0..3 and tick.
     // A_top updates both stocks on the same internal day tick, and the date

@@ -40,12 +40,12 @@ module portfolio_history #(
             end
             initialized <= 1'b1;
         end else if (tick) begin
-            for (i = 0; i < SAMPLE_COUNT-1; i = i + 1) begin
-                portfolio_samples[i*32 +: 32]
-                    <= portfolio_samples[(i+1)*32 +: 32];
-            end
-            portfolio_samples[(SAMPLE_COUNT-1)*32 +: 32]
-                <= portfolio_value;
+            // Keep the history in one fixed-width shift.  Using a variable
+            // part-select inside a procedural loop makes Vivado infer a
+            // large run-time mux for every stored bit; explicit slices keep
+            // the same oldest-to-newest ordering with simple wiring.
+            portfolio_samples <= {portfolio_value,
+                                  portfolio_samples[(SAMPLE_COUNT*32)-1:32]};
         end
     end
 

@@ -18,8 +18,9 @@ module tb_yian_market;
 
     wire [1:0]  market_state;
     wire        amd_ready, mcd_ready;
-    wire [15:0] amd_close, mcd_close;
-    wire [31:0] amd_date, mcd_date;
+    wire        stock2_ready, stock3_ready;
+    wire [15:0] amd_close, mcd_close, stock2_close, stock3_close;
+    wire [31:0] amd_date, mcd_date, stock2_date, stock3_date;
 
     localparam DAY = 2000;
     A_top #(.DAY_MAX_COUNT(DAY)) dut (
@@ -28,11 +29,23 @@ module tb_yian_market;
         .amd_current_close(amd_close), .amd_current_volume(), .amd_current_date(amd_date),
         .mcd_current_close(mcd_close), .mcd_current_volume(), .mcd_current_date(mcd_date),
         .amd_samples_30(), .amd_samples_180(), .amd_mean_30(), .amd_mean_180(),
-        .mcd_samples_30(), .mcd_samples_180(), .mcd_mean_30(), .mcd_mean_180()
+        .mcd_samples_30(), .mcd_samples_180(), .mcd_mean_30(), .mcd_mean_180(),
+        .stock0_ready(), .stock0_current_close(), .stock0_current_volume(), .stock0_current_date(),
+        .stock0_samples_30(), .stock0_samples_180(), .stock0_mean_30(), .stock0_mean_180(),
+        .stock1_ready(), .stock1_current_close(), .stock1_current_volume(), .stock1_current_date(),
+        .stock1_samples_30(), .stock1_samples_180(), .stock1_mean_30(), .stock1_mean_180(),
+        .stock2_ready(stock2_ready), .stock2_current_close(stock2_close),
+        .stock2_current_volume(), .stock2_current_date(stock2_date),
+        .stock2_samples_30(), .stock2_samples_180(), .stock2_mean_30(), .stock2_mean_180(),
+        .stock3_ready(stock3_ready), .stock3_current_close(stock3_close),
+        .stock3_current_volume(), .stock3_current_date(stock3_date),
+        .stock3_samples_30(), .stock3_samples_180(), .stock3_mean_30(), .stock3_mean_180()
     );
     // Simulation only: Vivado's simulator copies .mem files flat into its run folder.
     defparam dut.amd_stock_inst.SEED_FILE = "AMD_seed.mem";
     defparam dut.mcd_stock_inst.SEED_FILE = "MCD_seed.mem";
+    defparam dut.stock2_inst.SEED_FILE = "MCD_seed.mem";
+    defparam dut.stock3_inst.SEED_FILE = "MCD_seed.mem";
 
     integer n_pass = 0, n_fail = 0;
     task check;
@@ -57,19 +70,29 @@ module tb_yian_market;
     initial begin
         repeat (5) @(posedge clk);
         rst = 0;
-        wait (amd_ready && mcd_ready);
+        wait (amd_ready && mcd_ready && stock2_ready && stock3_ready);
         @(posedge clk); #1;
         check(amd_close == AMD_LAST_CLOSE && mcd_close == MCD_LAST_CLOSE,
               "starts from the most recent seed row (AMD 21343 c, MCD 31584 c)");
+        check(stock2_close == MCD_LAST_CLOSE && stock3_close == MCD_LAST_CLOSE,
+              "new stock channels start from the placeholder seed row (31584 c)");
         check(amd_date == LAST_DATE, "starting date is 2025-12-19 (the last seed row)");
-        $display("     day 0: %0d  AMD %0d c  MCD %0d c", amd_date, amd_close, mcd_close);
+        check(stock2_date == LAST_DATE && stock3_date == LAST_DATE,
+              "all four stock channels share the same starting trading date");
+        $display("     day 0: %0d  AMD %0d c  MCD %0d c  stock2 %0d c  stock3 %0d c",
+            amd_date, amd_close, mcd_close, stock2_close, stock3_close);
 
         bad_range = 0; bad_jump = 0; bad_date = 0;
         a_prev = amd_close; m_prev = mcd_close; d_prev = amd_date;
         for (day = 1; day <= 60; day = day + 1) begin
             repeat (DAY + 1) @(posedge clk); #1;
-            if (amd_date <= d_prev || mcd_date != amd_date) bad_date = bad_date + 1;
-            if (amd_close < 100 || mcd_close < 100 || amd_close == 16'hFFFF || mcd_close == 16'hFFFF)
+            if (amd_date <= d_prev || mcd_date != amd_date
+                || stock2_date != amd_date || stock3_date != amd_date)
+                bad_date = bad_date + 1;
+            if (amd_close < 100 || mcd_close < 100
+                || stock2_close < 100 || stock3_close < 100
+                || amd_close == 16'hFFFF || mcd_close == 16'hFFFF
+                || stock2_close == 16'hFFFF || stock3_close == 16'hFFFF)
                 bad_range = bad_range + 1;
             // Widen before subtracting so a downward move is not interpreted
             // as a wrapped 16-bit unsigned value.

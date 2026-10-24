@@ -7,7 +7,7 @@
 // (A_/B_/C_/D_<description>_top); instance names say whose part it is.
 //
 //   instance         module          owner    does
-//   yian_market      A_top           Yi An    2 stocks (AMD, MCD), one trading day every 2 s
+//   yian_market      A_top           Yi An    4 stock channels, one trading day every 2 s
 //   douglas_orders   B_order_top     Douglas  validates and fills orders, order book, ticket page
 //   tricia_ledger    ledger          Tricia   cash, positions, cost basis, ledger_busy handshake
 //   matthew_display  D_display_top   Matthew  buttons, game screens, 7-seg, both OLEDs
@@ -108,6 +108,11 @@ module Integration_Top #(
     // integration project elaborates consistently across Vivado versions.
     defparam yian_market.amd_stock_inst.SEED_FILE = "AMD_seed.mem";
     defparam yian_market.mcd_stock_inst.SEED_FILE = "MCD_seed.mem";
+    // Implementation 3 exposes four channels. Until implementation 4 adds
+    // distinct seed files for channels 2 and 3, use the existing MCD data as
+    // a deterministic placeholder for both new channels.
+    defparam yian_market.stock2_inst.SEED_FILE = "MCD_seed.mem";
+    defparam yian_market.stock3_inst.SEED_FILE = "MCD_seed.mem";
 
     // Price bus for Douglas. Replace when A_top outputs price0..3 and tick.
     // A_top updates both stocks on the same internal day tick, and the date

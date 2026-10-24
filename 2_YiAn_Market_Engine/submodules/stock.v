@@ -37,7 +37,8 @@ module stock #(
     localparam integer RECORD_WIDTH = 80;
     localparam integer INDEX_WIDTH = (BUFFER_DEPTH <= 1) ? 1 : $clog2(BUFFER_DEPTH);
 
-    // The generated memory files are derived from AMD.csv and MCD.csv.
+    // The repository's packed seed files provide the four stock histories
+    // (AMD, MCD, NVDA, and GME) consumed by the four A_top channels.
     reg [RECORD_WIDTH-1:0] seed_memory [0:BUFFER_DEPTH-1];
     reg [INDEX_WIDTH-1:0] seed_index;
 

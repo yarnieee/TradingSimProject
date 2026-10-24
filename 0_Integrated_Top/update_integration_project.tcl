@@ -24,6 +24,16 @@ if {$project_name ne "Integration"} {
 }
 
 set source_set [get_filesets sources_1]
+set market_data_sources [glob -nocomplain -types f "$repo/2_YiAn_Market_Engine/data/*.mem"]
+
+foreach source_file $market_data_sources {
+    set source_file [file normalize $source_file]
+    if {[llength [get_files -quiet $source_file]] == 0} {
+        add_files -fileset $source_set -norecurse $source_file
+        puts "Added market seed: $source_file"
+    }
+}
+
 set display_sources [glob -nocomplain -types f "$repo/5_Matthew_Display/submodules/*.v"]
 
 foreach source_file $display_sources {

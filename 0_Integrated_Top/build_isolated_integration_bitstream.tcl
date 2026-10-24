@@ -18,8 +18,6 @@ set source_files [list \
     "$repo/1_Shared_Modules/oled_display.v" \
     "$repo/1_Shared_Modules/slower_clk.v" \
     "$repo/2_YiAn_Market_Engine/A_top.v" \
-    "$repo/2_YiAn_Market_Engine/data/AMD_seed.mem" \
-    "$repo/2_YiAn_Market_Engine/data/MCD_seed.mem" \
     "$repo/2_YiAn_Market_Engine/submodules/day_ticker.v" \
     "$repo/2_YiAn_Market_Engine/submodules/get_30_values.v" \
     "$repo/2_YiAn_Market_Engine/submodules/get_latest_values.v" \
@@ -60,6 +58,10 @@ foreach source_file $source_files {
         error "Required source file is missing: $source_file"
     }
     add_files -fileset [get_filesets sources_1] -norecurse [file normalize $source_file]
+}
+
+foreach seed_file [glob "$repo/2_YiAn_Market_Engine/data/*.mem"] {
+    add_files -fileset [get_filesets sources_1] -norecurse [file normalize $seed_file]
 }
 
 set xdc_file [file normalize "$repo/0_Integrated_Top/Integration.xdc"]

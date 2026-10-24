@@ -10,18 +10,19 @@
 module A_top #(
     parameter integer DAY_MAX_COUNT = 199_999_999,
     parameter integer BUFFER_DEPTH = 180,
+    // Per-stock behavior parameters.  The STOCK2/STOCK3 aliases preserve
+    // the generic names introduced with the four-channel interface.
     parameter integer AMD_VOLATILITY = 10,
-    parameter integer MCD_VOLATILITY = 10,
-    parameter integer STOCK2_VOLATILITY = 10,
-    parameter integer STOCK3_VOLATILITY = 10,
+    parameter integer MCD_VOLATILITY = 8,
+    parameter integer NVDA_VOLATILITY = 14,
+    parameter integer GME_VOLATILITY = 20,
+    parameter integer STOCK2_VOLATILITY = NVDA_VOLATILITY,
+    parameter integer STOCK3_VOLATILITY = GME_VOLATILITY,
     parameter STOCK0_SEED_FILE = "storage/data/AMD_seed.mem",
     parameter STOCK1_SEED_FILE = "storage/data/MCD_seed.mem",
-    // Temporary placeholders until implementation 4 adds four distinct
-    // seed files. The interface and independent random streams already
-    // support four stocks.
-    parameter STOCK2_SEED_FILE = "storage/data/MCD_seed.mem",
-    parameter STOCK3_SEED_FILE = "storage/data/MCD_seed.mem",
-    // The supplied AMD and MCD seed files end on Friday, 2025-12-19.
+    parameter STOCK2_SEED_FILE = "storage/data/NVDA_seed.mem",
+    parameter STOCK3_SEED_FILE = "storage/data/GME_seed.mem",
+    // All four seed files end on Friday, 2025-12-19.
     // Keeping the seed date components as parameters avoids synthesizing
     // binary divide/modulo hardware merely to find the next trading day.
     parameter integer INITIAL_YEAR = 2025,
@@ -49,7 +50,7 @@ module A_top #(
     output wire [15:0] mcd_mean_30,
     output wire [15:0] mcd_mean_180,
     // Generic four-stock interface. stock0/stock1 mirror the legacy AMD/MCD
-    // channels; stock2/stock3 are the new channels for later seed files.
+    // channels; stock2/stock3 use the NVDA/GME seed files below.
     output wire stock0_ready,
     output wire [15:0] stock0_current_close,
     output wire [31:0] stock0_current_volume,

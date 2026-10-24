@@ -108,16 +108,15 @@ module Integration_Top #(
     // integration project elaborates consistently across Vivado versions.
     defparam yian_market.amd_stock_inst.SEED_FILE = "AMD_seed.mem";
     defparam yian_market.mcd_stock_inst.SEED_FILE = "MCD_seed.mem";
-    // Implementation 3 exposes four channels. Until implementation 4 adds
-    // distinct seed files for channels 2 and 3, use the existing MCD data as
-    // a deterministic placeholder for both new channels.
-    defparam yian_market.stock2_inst.SEED_FILE = "MCD_seed.mem";
-    defparam yian_market.stock3_inst.SEED_FILE = "MCD_seed.mem";
+    // Implementation 4 gives every channel its own deterministic seed data.
+    defparam yian_market.stock2_inst.SEED_FILE = "NVDA_seed.mem";
+    defparam yian_market.stock3_inst.SEED_FILE = "GME_seed.mem";
 
     // Price bus for Douglas. Replace when A_top outputs price0..3 and tick.
-    // A_top updates both stocks on the same internal day tick, and the date
+    // A_top updates all four stocks on the same internal day tick, and the date
     // always moves on a trading day, so a date change marks the tick.
-    // Stocks 2 and 3 have no data yet: price 0, which B_order_top treats as closed.
+    // Stocks 2 and 3 are intentionally connected in a later integration step;
+    // their market data is already loaded and simulated inside A_top.
     assign price0 = amd_ready ? amd_close : 16'd0;
     assign price1 = mcd_ready ? mcd_close : 16'd0;
     assign price2 = 16'd0;

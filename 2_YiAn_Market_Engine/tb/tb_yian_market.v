@@ -21,6 +21,8 @@ module tb_yian_market;
     wire        stock2_ready, stock3_ready;
     wire [15:0] amd_close, mcd_close, stock2_close, stock3_close;
     wire [31:0] amd_date, mcd_date, stock2_date, stock3_date;
+    wire [(7*16)-1:0] amd_samples_7, mcd_samples_7;
+    wire [15:0] amd_mean_7, mcd_mean_7;
 
     localparam DAY = 2000;
     A_top #(
@@ -32,7 +34,9 @@ module tb_yian_market;
         .amd_ready(amd_ready), .mcd_ready(mcd_ready),
         .amd_current_close(amd_close), .amd_current_volume(), .amd_current_date(amd_date),
         .mcd_current_close(mcd_close), .mcd_current_volume(), .mcd_current_date(mcd_date),
+        .amd_samples_7(amd_samples_7), .amd_mean_7(amd_mean_7),
         .amd_samples_30(), .amd_samples_180(), .amd_mean_30(), .amd_mean_180(),
+        .mcd_samples_7(mcd_samples_7), .mcd_mean_7(mcd_mean_7),
         .mcd_samples_30(), .mcd_samples_180(), .mcd_mean_30(), .mcd_mean_180(),
         .stock0_ready(), .stock0_current_close(), .stock0_current_volume(), .stock0_current_date(),
         .stock0_samples_30(), .stock0_samples_180(), .stock0_mean_30(), .stock0_mean_180(),
@@ -85,6 +89,13 @@ module tb_yian_market;
         check(amd_date == LAST_DATE, "starting date is 2025-12-19 (the last seed row)");
         check(stock2_date == LAST_DATE && stock3_date == LAST_DATE,
               "all four stock channels share the same starting trading date");
+        check(amd_samples_7[111:96] == amd_close
+            && mcd_samples_7[111:96] == mcd_close,
+              "A_top exposes the newest close at the end of the 7-day timeframe");
+        check(amd_samples_7[15:0] != 16'd0
+            && mcd_samples_7[15:0] != 16'd0
+            && amd_mean_7 != 16'd0 && mcd_mean_7 != 16'd0,
+              "A_top exposes valid seven-day history samples and means");
         $display("     day 0: %0d  AMD %0d c  MCD %0d c  NVDA %0d c  GME %0d c",
             amd_date, amd_close, mcd_close, stock2_close, stock3_close);
 

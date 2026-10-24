@@ -42,10 +42,14 @@ module A_top #(
     output wire [15:0] mcd_current_close,
     output wire [31:0] mcd_current_volume,
     output wire [31:0] mcd_current_date,
+    output wire [(7*16)-1:0] amd_samples_7,
+    output wire [15:0] amd_mean_7,
     output wire [(30*16)-1:0] amd_samples_30,
     output wire [(30*16)-1:0] amd_samples_180,
     output wire [15:0] amd_mean_30,
     output wire [15:0] amd_mean_180,
+    output wire [(7*16)-1:0] mcd_samples_7,
+    output wire [15:0] mcd_mean_7,
     output wire [(30*16)-1:0] mcd_samples_30,
     output wire [(30*16)-1:0] mcd_samples_180,
     output wire [15:0] mcd_mean_30,
@@ -56,6 +60,8 @@ module A_top #(
     output wire [15:0] stock0_current_close,
     output wire [31:0] stock0_current_volume,
     output wire [31:0] stock0_current_date,
+    output wire [(7*16)-1:0] stock0_samples_7,
+    output wire [15:0] stock0_mean_7,
     output wire [(30*16)-1:0] stock0_samples_30,
     output wire [(30*16)-1:0] stock0_samples_180,
     output wire [15:0] stock0_mean_30,
@@ -64,6 +70,8 @@ module A_top #(
     output wire [15:0] stock1_current_close,
     output wire [31:0] stock1_current_volume,
     output wire [31:0] stock1_current_date,
+    output wire [(7*16)-1:0] stock1_samples_7,
+    output wire [15:0] stock1_mean_7,
     output wire [(30*16)-1:0] stock1_samples_30,
     output wire [(30*16)-1:0] stock1_samples_180,
     output wire [15:0] stock1_mean_30,
@@ -72,6 +80,8 @@ module A_top #(
     output wire [15:0] stock2_current_close,
     output wire [31:0] stock2_current_volume,
     output wire [31:0] stock2_current_date,
+    output wire [(7*16)-1:0] stock2_samples_7,
+    output wire [15:0] stock2_mean_7,
     output wire [(30*16)-1:0] stock2_samples_30,
     output wire [(30*16)-1:0] stock2_samples_180,
     output wire [15:0] stock2_mean_30,
@@ -80,6 +90,8 @@ module A_top #(
     output wire [15:0] stock3_current_close,
     output wire [31:0] stock3_current_volume,
     output wire [31:0] stock3_current_date,
+    output wire [(7*16)-1:0] stock3_samples_7,
+    output wire [15:0] stock3_mean_7,
     output wire [(30*16)-1:0] stock3_samples_30,
     output wire [(30*16)-1:0] stock3_samples_180,
     output wire [15:0] stock3_mean_30,
@@ -355,7 +367,24 @@ module A_top #(
     assign mcd_current_volume = stock1_current_volume;
     assign mcd_current_date = stock1_current_date;
 
-    // Each window is represented by 30 chronological subsection means.
+    wire [(7*16)-1:0] stock0_samples_7_int;
+    wire [(7*16)-1:0] stock1_samples_7_int;
+    wire [(7*16)-1:0] stock2_samples_7_int;
+    wire [(7*16)-1:0] stock3_samples_7_int;
+
+    // The seven-day timeframe keeps each trading day as an exact sample.
+    // The 30-day and 180-day timeframes remain 30 chronological bucket
+    // means, which keeps the display buses compact and fixed width.
+    get_30_values #(
+        .WINDOW(7),
+        .TOTAL_DEPTH(BUFFER_DEPTH),
+        .SAMPLE_COUNT(7)
+        ) stock0_get_7_values_inst (
+        .history_in(amd_close_history),
+        .samples_out(stock0_samples_7_int),
+        .mean_out(stock0_mean_7)
+    );
+
     get_30_values #(
         .WINDOW(30),
         .TOTAL_DEPTH(BUFFER_DEPTH)
@@ -372,6 +401,16 @@ module A_top #(
         .history_in(amd_close_history),
         .samples_out(stock0_samples_180),
         .mean_out(stock0_mean_180)
+    );
+
+    get_30_values #(
+        .WINDOW(7),
+        .TOTAL_DEPTH(BUFFER_DEPTH),
+        .SAMPLE_COUNT(7)
+        ) stock1_get_7_values_inst (
+        .history_in(mcd_close_history),
+        .samples_out(stock1_samples_7_int),
+        .mean_out(stock1_mean_7)
     );
 
     get_30_values #(
@@ -393,6 +432,16 @@ module A_top #(
     );
 
     get_30_values #(
+        .WINDOW(7),
+        .TOTAL_DEPTH(BUFFER_DEPTH),
+        .SAMPLE_COUNT(7)
+        ) stock2_get_7_values_inst (
+        .history_in(stock2_close_history),
+        .samples_out(stock2_samples_7_int),
+        .mean_out(stock2_mean_7)
+    );
+
+    get_30_values #(
         .WINDOW(30),
         .TOTAL_DEPTH(BUFFER_DEPTH)
         ) stock2_get_30_values_inst (
@@ -408,6 +457,16 @@ module A_top #(
         .history_in(stock2_close_history),
         .samples_out(stock2_samples_180),
         .mean_out(stock2_mean_180)
+    );
+
+    get_30_values #(
+        .WINDOW(7),
+        .TOTAL_DEPTH(BUFFER_DEPTH),
+        .SAMPLE_COUNT(7)
+        ) stock3_get_7_values_inst (
+        .history_in(stock3_close_history),
+        .samples_out(stock3_samples_7_int),
+        .mean_out(stock3_mean_7)
     );
 
     get_30_values #(
@@ -429,6 +488,14 @@ module A_top #(
     );
 
     // Legacy sample/mean names remain aliases for stock0/stock1.
+    assign stock0_samples_7 = stock0_samples_7_int;
+    assign stock1_samples_7 = stock1_samples_7_int;
+    assign stock2_samples_7 = stock2_samples_7_int;
+    assign stock3_samples_7 = stock3_samples_7_int;
+    assign amd_samples_7 = stock0_samples_7;
+    assign amd_mean_7 = stock0_mean_7;
+    assign mcd_samples_7 = stock1_samples_7;
+    assign mcd_mean_7 = stock1_mean_7;
     assign amd_samples_30 = stock0_samples_30;
     assign amd_samples_180 = stock0_samples_180;
     assign amd_mean_30 = stock0_mean_30;

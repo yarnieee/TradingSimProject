@@ -33,6 +33,7 @@ module A_top #(
     input wire clk,
     input wire rst,
     output wire [1:0] market_state,
+    output wire [2:0] market_event,
     output wire amd_ready,
     output wire mcd_ready,
     output wire [15:0] amd_current_close,
@@ -104,7 +105,7 @@ module A_top #(
         .tick(day_tick)
     );
 
-    // Distinct derivations keep the eight random streams independent while
+    // Distinct derivations keep the seven random streams independent while
     // avoiding a user-configurable seed input.
     wire [31:0] amd_lfsr_seed;
     wire [31:0] mcd_lfsr_seed;
@@ -112,6 +113,7 @@ module A_top #(
     wire [31:0] stock3_lfsr_seed;
     wire [31:0] market_lfsr_seed;
     wire [31:0] interval_lfsr_seed;
+    wire [31:0] event_lfsr_seed;
 
     assign amd_lfsr_seed = startup_random_seed ^ 32'h13579BDF;
     assign mcd_lfsr_seed = startup_random_seed ^ 32'h2468ACE1;
@@ -119,6 +121,7 @@ module A_top #(
     assign stock3_lfsr_seed = startup_random_seed ^ 32'hA5A55A5A;
     assign market_lfsr_seed = startup_random_seed ^ 32'h89ABCDEF;
     assign interval_lfsr_seed = startup_random_seed ^ 32'h0F1E2D3C;
+    assign event_lfsr_seed = startup_random_seed ^ 32'hC3D2E1F0;
 
     wire [31:0] amd_lfsr_value;
     wire [31:0] mcd_lfsr_value;
@@ -126,6 +129,7 @@ module A_top #(
     wire [31:0] stock3_lfsr_value;
     wire [31:0] market_lfsr_value;
     wire [31:0] interval_lfsr_value;
+    wire [31:0] event_lfsr_value;
     wire [7:0] amd_random_value;
     wire [7:0] mcd_random_value;
     wire [7:0] stock2_random_value;
@@ -189,6 +193,21 @@ module A_top #(
         .q(interval_lfsr_value)
     );
 
+    lfsr event_lfsr_inst (
+        .clk(clk),
+        .rst(rst),
+        .en(day_tick && all_stocks_ready),
+        .load(startup_seed_valid),
+        .seed(event_lfsr_seed),
+        .q(event_lfsr_value)
+    );
+
+    wire [2:0] market_event_request;
+    market_events market_events_inst (
+        .random_value(event_lfsr_value[7:0]),
+        .event_request(market_event_request)
+    );
+
     normalise_lfsr amd_normalise_lfsr_inst (
         .lfsr_value(amd_lfsr_value),
         .normalized(amd_random_value)
@@ -216,7 +235,9 @@ module A_top #(
         .day_tick(day_tick && all_stocks_ready),
         .random_state(market_lfsr_value[1:0]),
         .random_interval(interval_lfsr_value[2:0]),
-        .state(market_state)
+        .event_request(market_event_request),
+        .state(market_state),
+        .active_event(market_event)
     );
 
     wire [(BUFFER_DEPTH*16)-1:0] amd_close_history;

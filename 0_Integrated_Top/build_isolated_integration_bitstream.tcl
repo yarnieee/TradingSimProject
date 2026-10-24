@@ -22,6 +22,7 @@ set source_files [list \
     "$repo/2_YiAn_Market_Engine/submodules/get_30_values.v" \
     "$repo/2_YiAn_Market_Engine/submodules/get_latest_values.v" \
     "$repo/2_YiAn_Market_Engine/submodules/lfsr.v" \
+    "$repo/2_YiAn_Market_Engine/submodules/market_events.v" \
     "$repo/2_YiAn_Market_Engine/submodules/market_state.v" \
     "$repo/2_YiAn_Market_Engine/submodules/normalise_lfsr.v" \
     "$repo/2_YiAn_Market_Engine/submodules/startup_seed.v" \

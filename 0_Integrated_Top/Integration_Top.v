@@ -49,6 +49,7 @@ module Integration_Top #(
     // The market and ledger values are routed through this top level to the
     // display as well as to the order engine.
     wire [1:0]   market_state;
+    wire [2:0]   market_event;
     wire         amd_ready, mcd_ready;
     wire [15:0]  amd_close, mcd_close;
     wire [31:0]  amd_date;
@@ -96,6 +97,7 @@ module Integration_Top #(
     A_top #(.DAY_MAX_COUNT(DAY_MAX_COUNT)) yian_market (
         .clk(clk), .rst(sys_reset),
         .market_state(market_state),
+        .market_event(market_event),
         .amd_ready(amd_ready), .mcd_ready(mcd_ready),
         .amd_current_close(amd_close), .amd_current_volume(), .amd_current_date(amd_date),
         .mcd_current_close(mcd_close), .mcd_current_volume(), .mcd_current_date(),

@@ -8,9 +8,9 @@
 //     $655.35, never below $1.00, and no single day moves more than 25%
 // A trading day is shortened to 2000 clocks; nothing else is changed.
 //
-// EXPECTED TO FAIL until stock.v's calculate_next_close is fixed (unsigned
-// arithmetic pins prices at 65535; a 10% daily downward drift). It passes
-// once those are fixed.
+// The price-model checks below must pass after stock.v's signed arithmetic
+// fix: prices move in both directions, remain bounded, and do not drift only
+// downward.
 module tb_yian_market;
     reg clk = 0;
     always #5 clk = ~clk;
@@ -71,8 +71,12 @@ module tb_yian_market;
             if (amd_date <= d_prev || mcd_date != amd_date) bad_date = bad_date + 1;
             if (amd_close < 100 || mcd_close < 100 || amd_close == 16'hFFFF || mcd_close == 16'hFFFF)
                 bad_range = bad_range + 1;
-            a_move = amd_close - a_prev; if (a_move < 0) a_move = -a_move;
-            m_move = mcd_close - m_prev; if (m_move < 0) m_move = -m_move;
+            // Widen before subtracting so a downward move is not interpreted
+            // as a wrapped 16-bit unsigned value.
+            a_move = $signed({1'b0, amd_close}) - $signed({1'b0, a_prev});
+            if (a_move < 0) a_move = -a_move;
+            m_move = $signed({1'b0, mcd_close}) - $signed({1'b0, m_prev});
+            if (m_move < 0) m_move = -m_move;
             if (a_move * 4 > a_prev || m_move * 4 > m_prev) bad_jump = bad_jump + 1;
             if (day % 10 == 0)
                 $display("     day %0d: %0d  AMD %0d c  MCD %0d c", day, amd_date, amd_close, mcd_close);

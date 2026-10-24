@@ -10,6 +10,7 @@
 // The market state is used as a small directional bias on the random value:
 // bear shifts the random value upward, bull shifts it downward, and crash
 // applies a larger bearish shift.  Normal leaves the random value unchanged.
+// VOLATILITY is the approximate maximum percentage change per trading day.
 module stock #(
     parameter integer BUFFER_DEPTH = 180,
     parameter integer VOLATILITY = 10,
@@ -51,14 +52,18 @@ module stock #(
     function [7:0] adjust_random_for_market;
         input [7:0] random_value;
         input [1:0] state_value;
+        integer random_integer;
         integer adjusted_value;
         begin
-            adjusted_value = random_value;
+            // Convert the unsigned input before subtracting the bull bias.
+            // This prevents an 8-bit underflow when random_value is below 10.
+            random_integer = {1'b0, random_value};
+            adjusted_value = random_integer;
             case (state_value)
-                2'b00: adjusted_value = random_value + 10; // bear
-                2'b10: adjusted_value = random_value - 10; // bull
-                2'b11: adjusted_value = random_value + 30; // crash
-                default: adjusted_value = random_value;     // normal
+                2'b00: adjusted_value = random_integer + 10; // bear
+                2'b10: adjusted_value = random_integer - 10; // bull
+                2'b11: adjusted_value = random_integer + 30; // crash
+                default: adjusted_value = random_integer;     // normal
             endcase
 
             if (adjusted_value < 0) begin
@@ -77,24 +82,40 @@ module stock #(
         input [1:0] state_value;
         integer adjusted_random;
         integer random_offset;
-        integer stable_term;
-        integer random_term;
+        integer bounded_volatility;
+        integer daily_delta_percent;
+        integer price_multiplier;
         integer result;
+        reg signed [31:0] signed_previous_close;
+        reg signed [63:0] scaled_price;
         begin
             adjusted_random = adjust_random_for_market(random_value, state_value);
             random_offset = 50 - adjusted_random;
 
-            // The random term is divided by 100 a second time so that the
-            // normalized value produces a percentage-scale perturbation.
-            stable_term = previous_close * (100 - VOLATILITY) / 100;
-            random_term = (previous_close * VOLATILITY / 100)
-                * random_offset / 100;
-            result = stable_term + random_term;
+            // Keep the parameter in a safe range even if a future instance
+            // supplies an invalid value.  The old expression always applied
+            // a negative stable term, which caused a one-sided price drift.
+            bounded_volatility = VOLATILITY;
+            if (bounded_volatility < 0)
+                bounded_volatility = 0;
+            else if (bounded_volatility > 100)
+                bounded_volatility = 100;
+
+            // random_offset is -50..+50.  Scale it to approximately
+            // -VOLATILITY..+VOLATILITY percent around the previous close.
+            // All operands are explicitly signed before the multiplication.
+            daily_delta_percent = (random_offset * bounded_volatility) / 50;
+            price_multiplier = 100 + daily_delta_percent;
+            signed_previous_close = {16'd0, previous_close};
+            scaled_price = signed_previous_close * price_multiplier;
+            result = scaled_price / 100;
 
             if (result < 1) begin
                 result = 1;
-            end else if (result > 65535) begin
-                result = 65535;
+            end else if (result > 65534) begin
+                // 16'hFFFF is reserved as an invalid/saturated value by the
+                // market and order-engine testbenches.
+                result = 65534;
             end
 
             calculate_next_close = result;

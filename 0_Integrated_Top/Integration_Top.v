@@ -77,6 +77,8 @@ module Integration_Top #(
     wire [13:0] quantity;
     wire [1:0]  sel_stock, game_state;
     wire        ord_req, ord_side;
+    wire        fill, reject;
+    wire [2:0]  reject_code;
     wire [15:0] ticket_pixel;
     wire [6:0]  xL;
     wire [5:0]  yL;
@@ -87,6 +89,7 @@ module Integration_Top #(
         .clk(clk), .rst(sys_reset),
         .btnU(btnU), .btnD(btnD), .btnL(btnL), .btnR(btnR), .btnC(btnC),
         .final_day_reached(final_day_reached),
+        .order_fill(fill), .order_reject(reject), .order_reject_code(reject_code),
         .left_pixel(ticket_pixel), .left_x(xL), .left_y(yL),
         .screen_state(screen_state), .quantity(quantity), .sel_stock(sel_stock),
         .price0(price0), .price1(price1), .price2(price2), .price3(price3),
@@ -187,7 +190,7 @@ module Integration_Top #(
     wire [31:0] cb0, cb1, cb2, cb3;
     wire signed [31:0] realised;
     wire        ledger_busy, ledger_err;
-    wire        fill, fill_side, reject;
+    wire        fill_side;
     wire [1:0]  fill_stock;
     wire [7:0]  fill_qty;
     wire [15:0] fill_price, fill_fee;
@@ -211,7 +214,6 @@ module Integration_Top #(
     );
 
     // ================================================================ DOUGLAS: orders, ticket page
-    wire [2:0]  reject_code;
     wire [3:0]  pending_count;
     // The left OLED (JA) sits upside down on the board: draw the ticket rotated 180 degrees.
     B_order_top #(.TICKET_FLIP_180(1)) douglas_orders (

@@ -233,7 +233,9 @@ module menu_buttons (
     localparam SPECIFIC  = 4'd3;
     localparam BUY_STOCK = 4'd4;
     localparam SELL_STOCK= 4'd5;
-    localparam CONFIRM   = 4'd7;
+    localparam ORDER_REVIEW = 4'd7;
+    localparam ORDER_RESULT = 4'd8;
+    localparam TRADE_RESULT = 4'd9;
 
     localparam NAV_PORTFOLIO = 4'd0;
     localparam NAV_STOCKS    = 4'd1;
@@ -283,8 +285,9 @@ module menu_buttons (
             end
         end
 
-        // Title and confirmation screens: the OK button is always selected.
-        if ((screen_state == TITLE) || (screen_state == CONFIRM)) begin
+        // Title, order-review, and trade-result screens have an OK action.
+        if ((screen_state == TITLE) || (screen_state == ORDER_REVIEW) ||
+            (screen_state == TRADE_RESULT)) begin
             if ((pixel_x >= 7'd38) && (pixel_x <= 7'd57) &&
                 (pixel_y >= 6'd44) && (pixel_y <= 6'd56)) begin
                 button_kind = TITLE_OK;
@@ -588,7 +591,9 @@ module menu_button_text (
     localparam ACTION_CANCEL = 4'd10;
     localparam ACTION_QTY    = 4'd11;
     localparam ACTION_CONFIRM= 4'd12;
-    localparam CONFIRM       = 4'd7;
+    localparam ORDER_REVIEW  = 4'd7;
+    localparam ORDER_RESULT  = 4'd8;
+    localparam TRADE_RESULT  = 4'd9;
     localparam NO_LABEL      = 4'hF;
 
     wire [6:0] pixel_x = pixel_index % 96;
@@ -778,7 +783,8 @@ module menu_button_text (
             end
         end
 
-        if ((screen_state == TITLE) || (screen_state == CONFIRM)) begin
+        if ((screen_state == TITLE) || (screen_state == ORDER_REVIEW) ||
+            (screen_state == TRADE_RESULT)) begin
             if ((pixel_x >= 7'd43) && (pixel_x < 7'd55) &&
                 (pixel_y >= 6'd47) && (pixel_y < 6'd54)) begin
                 label_kind = TITLE_OK;

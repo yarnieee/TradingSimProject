@@ -9,17 +9,22 @@ module tb_matthew_game_fsm;
     reg rst = 1;
     reg U = 0, D = 0, L = 0, R = 0, C = 0;
     reg final_day_reached = 0;
+    reg order_fill = 0, order_reject = 0;
+    reg [2:0] order_reject_code = 0;
     wire [3:0]  screen_state;
     wire [13:0] quantity;
     wire [2:0]  selected_stock;
 
     game_fsm dut (.clk(clk), .rst(rst), .btnU(U), .btnD(D), .btnL(L), .btnR(R), .btnC(C),
                   .final_day_reached(final_day_reached),
+                  .order_fill(order_fill), .order_reject(order_reject),
+                  .order_reject_code(order_reject_code),
                   .screen_state(screen_state), .quantity(quantity),
                   .selected_stock(selected_stock));
 
     localparam TITLE = 0, PORTFOLIO = 1, STOCKS = 2, SPECIFIC = 3, BUY = 4, SELL = 5,
-               QUANTITY = 6, CONFIRM = 7, GAME_END = 8;
+               QUANTITY = 6, ORDER_REVIEW = 7, ORDER_RESULT = 8,
+               TRADE_RESULT = 9, GAME_END = 10;
     localparam BU = 0, BD = 1, BL = 2, BR = 3, BC = 4;
 
     integer n_pass = 0, n_fail = 0;
@@ -103,9 +108,16 @@ module tb_matthew_game_fsm;
         press(BC);
         check(screen_state == BUY && quantity == 9122, "quantity --C--> back to buy, quantity kept");
         press(BR); press(BR); press(BC);
-        check(screen_state == CONFIRM, "buy --R, R, C--> confirm");
+        check(screen_state == ORDER_REVIEW, "buy --R, R, C--> order review");
         press(BC);
-        check(screen_state == PORTFOLIO && quantity == 0, "confirm --C--> portfolio and reset quantity");
+        check(screen_state == ORDER_RESULT, "order review --C--> order result");
+        order_fill = 1;
+        @(negedge clk);
+        order_fill = 0;
+        @(negedge clk);
+        check(screen_state == TRADE_RESULT, "order fill --> trade result");
+        press(BC);
+        check(screen_state == PORTFOLIO && quantity == 0, "trade result --C--> portfolio and reset quantity");
 
         // sell path
         press(BR); press(BC); press(BD); press(BC);    // stocks, stock 0

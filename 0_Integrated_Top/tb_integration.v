@@ -25,7 +25,8 @@ module tb_integration;
 
     // game_fsm screens
     localparam S_TITLE = 0, S_PORTFOLIO = 1, S_STOCKS = 2, S_SPECIFIC = 3, S_BUY = 4,
-               S_SELL = 5, S_QUANTITY = 6, S_CONFIRM = 7;
+               S_SELL = 5, S_QUANTITY = 6, S_ORDER_REVIEW = 7,
+               S_ORDER_RESULT = 8, S_TRADE_RESULT = 9;
 
     integer n_pass = 0, n_fail = 0;
     task check;
@@ -74,7 +75,8 @@ module tb_integration;
             press(R); press(C);                         // "quantity" -> quantity screen (qty 0)
             for (k = 0; k < qty; k = k + 1) press(U);   // ones digit
             press(C);                                   // back to buy / sell screen (cursor 0)
-            press(R); press(R); press(C);               // "confirmation" -> CONFIRM: order goes to B
+            press(R); press(R); press(C);               // -> ORDER_REVIEW
+            press(C);                                   // review -> ORDER_RESULT: submit to B
             repeat (300) @(posedge clk);                // Douglas -> Tricia: fill and ledger update
         end
     endtask
@@ -118,8 +120,8 @@ module tb_integration;
         check(dut.cash == cash0 - 3 * last_px - 100, "Tricia: cash down by 3 x ask + fee");
         check(last_px == dut.douglas_orders.u_exec.u_spread.ask || last_px == ((p0 > 16'd65530) ? 16'hFFFF : p0 + 16'd5),
               "Douglas: filled at the ask (price + 5 c, saturating)");
-        check(dut.screen_state == S_CONFIRM, "Matthew: on the confirm screen");
-        press(C);                                       // confirm -> portfolio
+        check(dut.screen_state == S_TRADE_RESULT, "Matthew: on the trade-result screen");
+        press(C);                                       // trade result -> portfolio
 
         // ---------------- sell 2 MCD with none held: rejected by B, never reaches C
         f0 = n_fill; r0 = n_rej;

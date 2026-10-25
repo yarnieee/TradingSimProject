@@ -17,8 +17,10 @@ module text_layer (
     localparam BUY_STOCK   = 4'd4;
     localparam SELL_STOCK  = 4'd5;
     localparam QUANTITY    = 4'd6;
-    localparam CONFIRM     = 4'd7;
-    localparam GAME_END    = 4'd8;
+    localparam ORDER_REVIEW = 4'd7;
+    localparam ORDER_RESULT = 4'd8;
+    localparam TRADE_RESULT = 4'd9;
+    localparam GAME_END     = 4'd10;
 
     wire [6:0] pixel_x = pixel_index % 96;
     wire [5:0] pixel_y = pixel_index / 96;
@@ -153,11 +155,19 @@ module text_layer (
                     else
                         text_length = 8; // quantity
                 end
-                CONFIRM: begin
+                ORDER_REVIEW: begin
                     if (line == 0)
                         text_length = 9 + stock_name_length(stock);
                     else
-                        text_length = 12; // confirmation
+                        text_length = 12; // order review
+                end
+                ORDER_RESULT: begin
+                    if (line == 0) text_length = 12; // order result
+                    else          text_length = 10; // processing
+                end
+                TRADE_RESULT: begin
+                    if (line == 0) text_length = 12; // trade result
+                    else          text_length = 7; // success
                 end
                 GAME_END: begin
                     if (line == 0) text_length = 8;
@@ -326,7 +336,7 @@ module text_layer (
                         endcase
                     end
                 end
-                CONFIRM: begin
+                ORDER_REVIEW: begin
                     if (line == 0) begin
                         if (position < stock_name_length(stock))
                             text_char = stock_name_char(stock, position);
@@ -353,6 +363,49 @@ module text_layer (
                             6: text_char = 8'h6D; 7: text_char = 8'h61;
                             8: text_char = 8'h74; 9: text_char = 8'h69;
                             10: text_char = 8'h6F; 11: text_char = 8'h6E;
+                            default: text_char = 8'h20;
+                        endcase
+                    end
+                end
+                ORDER_RESULT: begin
+                    if (line == 0) begin
+                        case (position)
+                            0: text_char = 8'h6F; 1: text_char = 8'h72;
+                            2: text_char = 8'h64; 3: text_char = 8'h65;
+                            4: text_char = 8'h72; 5: text_char = 8'h20;
+                            6: text_char = 8'h72; 7: text_char = 8'h65;
+                            8: text_char = 8'h73; 9: text_char = 8'h75;
+                            10: text_char = 8'h6C; 11: text_char = 8'h74;
+                            default: text_char = 8'h20;
+                        endcase
+                    end else begin
+                        case (position)
+                            0: text_char = 8'h70; 1: text_char = 8'h72;
+                            2: text_char = 8'h6F; 3: text_char = 8'h63;
+                            4: text_char = 8'h65; 5: text_char = 8'h73;
+                            6: text_char = 8'h73; 7: text_char = 8'h69;
+                            8: text_char = 8'h6E; 9: text_char = 8'h67;
+                            default: text_char = 8'h20;
+                        endcase
+                    end
+                end
+                TRADE_RESULT: begin
+                    if (line == 0) begin
+                        case (position)
+                            0: text_char = 8'h74; 1: text_char = 8'h72;
+                            2: text_char = 8'h61; 3: text_char = 8'h64;
+                            4: text_char = 8'h65; 5: text_char = 8'h20;
+                            6: text_char = 8'h72; 7: text_char = 8'h65;
+                            8: text_char = 8'h73; 9: text_char = 8'h75;
+                            10: text_char = 8'h6C; 11: text_char = 8'h74;
+                            default: text_char = 8'h20;
+                        endcase
+                    end else begin
+                        case (position)
+                            0: text_char = 8'h73; 1: text_char = 8'h75;
+                            2: text_char = 8'h63; 3: text_char = 8'h63;
+                            4: text_char = 8'h65; 5: text_char = 8'h73;
+                            6: text_char = 8'h73;
                             default: text_char = 8'h20;
                         endcase
                     end

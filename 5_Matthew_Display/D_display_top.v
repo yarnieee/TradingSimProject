@@ -23,6 +23,9 @@ module D_display_top #(
     input  wire        btnR,
     input  wire        btnC,
     input  wire        final_day_reached,
+    input  wire        order_fill,
+    input  wire        order_reject,
+    input  wire [2:0]  order_reject_code,
     // External page for JA when SHOW_GAME_ON_JA == 0.
     input  wire [15:0] left_pixel,
     output wire [6:0]  left_x,
@@ -46,6 +49,8 @@ module D_display_top #(
     input  wire [959:0] portfolio_samples_30,
     output wire        ord_req,
     output wire        ord_side,
+    output wire [2:0]  trade_result_code,
+    output wire        trade_result_success,
     output wire [1:0]  game_state,
     // Board outputs.
     output wire [7:0]  JA,
@@ -90,6 +95,7 @@ module D_display_top #(
     wire [2:0] selected_stock;
     wire [1:0] quantity_cursor;
     wire [3:0] menu_selection;
+    wire       trade_side;
 
     game_fsm game_fsm_inst (
         .clk(clk),
@@ -100,11 +106,17 @@ module D_display_top #(
         .btnR(btnR_p),
         .btnC(btnC_p),
         .final_day_reached(final_day_reached),
+        .order_fill(order_fill),
+        .order_reject(order_reject),
+        .order_reject_code(order_reject_code),
         .screen_state(screen_state),
         .quantity(quantity),
         .selected_stock(selected_stock),
         .quantity_cursor(quantity_cursor),
-        .menu_selection(menu_selection)
+        .menu_selection(menu_selection),
+        .trade_result_code(trade_result_code),
+        .trade_result_success(trade_result_success),
+        .trade_side(trade_side)
     );
 
     assign sel_stock = selected_stock[1:0];
@@ -136,8 +148,10 @@ module D_display_top #(
     localparam [3:0] S_TITLE    = 4'd0;
     localparam [3:0] S_BUY      = 4'd4;
     localparam [3:0] S_SELL     = 4'd5;
-    localparam [3:0] S_CONFIRM  = 4'd7;
-    localparam [3:0] S_GAME_END = 4'd8;
+    localparam [3:0] S_ORDER_REVIEW = 4'd7;
+    localparam [3:0] S_ORDER_RESULT = 4'd8;
+    localparam [3:0] S_TRADE_RESULT = 4'd9;
+    localparam [3:0] S_GAME_END     = 4'd10;
 
     reg [3:0] state_d;
     always @(posedge clk) begin
@@ -147,10 +161,10 @@ module D_display_top #(
             state_d <= screen_state;
     end
 
-    // Generate a one-clock order request when BUY/SELL confirmation is entered.
-    assign ord_req  = (screen_state == S_CONFIRM) &&
-                      ((state_d == S_BUY) || (state_d == S_SELL));
-    assign ord_side = (state_d == S_SELL);
+    // Generate a one-clock order request when the review screen is submitted.
+    assign ord_req  = (screen_state == S_ORDER_RESULT) &&
+                      (state_d == S_ORDER_REVIEW);
+    assign ord_side = trade_side;
 
     assign game_state = ((screen_state == S_TITLE) ||
                          (screen_state == S_GAME_END)) ?

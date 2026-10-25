@@ -11,11 +11,17 @@ module game_fsm (
     input        btnR,
     input        btnC,
     input        final_day_reached,
+    input        order_fill,
+    input        order_reject,
+    input  [2:0] order_reject_code,
     output reg [3:0]  screen_state,
     output reg [13:0] quantity,
     output reg [2:0]  selected_stock,
     output reg [1:0]  quantity_cursor,
-    output     [3:0]  menu_selection
+    output     [3:0]  menu_selection,
+    output reg [2:0]  trade_result_code,
+    output reg        trade_result_success,
+    output reg        trade_side
 );
 
     localparam TITLE       = 4'd0;
@@ -25,8 +31,10 @@ module game_fsm (
     localparam BUY_STOCK   = 4'd4;
     localparam SELL_STOCK  = 4'd5;
     localparam QUANTITY    = 4'd6;
-    localparam CONFIRM     = 4'd7;
-    localparam GAME_END    = 4'd8;
+    localparam ORDER_REVIEW = 4'd7;
+    localparam ORDER_RESULT = 4'd8;
+    localparam TRADE_RESULT = 4'd9;
+    localparam GAME_END     = 4'd10;
 
     localparam RETURN_BUY  = 1'b0;
     localparam RETURN_SELL = 1'b1;
@@ -50,6 +58,8 @@ module game_fsm (
     reg [1:0] next_sell_cursor;
 
     reg [2:0] next_selected_stock;
+    reg [2:0] next_trade_result_code;
+    reg       next_trade_result_success;
 
     // Selection exposed to the display layer. The encoding depends on the
     // current screen and is documented by each screen's transition logic.
@@ -69,6 +79,8 @@ module game_fsm (
         next_quantity = quantity;
         next_quantity_return_state = quantity_return_state;
         next_selected_stock = selected_stock;
+        next_trade_result_code = trade_result_code;
+        next_trade_result_success = trade_result_success;
         next_quantity_cursor = quantity_cursor;
         next_portfolio_cursor = portfolio_cursor;
         next_stocks_cursor = stocks_cursor;
@@ -212,7 +224,7 @@ module game_fsm (
                             next_quantity_cursor = 0;
                         end
                         2: begin
-                            next_state = CONFIRM;
+                            next_state = ORDER_REVIEW;
                         end
                         default: next_state = BUY_STOCK;
                     endcase
@@ -237,7 +249,7 @@ module game_fsm (
                             next_quantity_cursor = 0;
                         end
                         2: begin
-                            next_state = CONFIRM;
+                            next_state = ORDER_REVIEW;
                         end
                         default: next_state = SELL_STOCK;
                     endcase
@@ -286,7 +298,27 @@ module game_fsm (
                 end
             end
 
-            CONFIRM: begin
+            ORDER_REVIEW: begin
+                if (btnC) begin
+                    next_state = ORDER_RESULT;
+                end
+            end
+
+            ORDER_RESULT: begin
+                // B_order_top reports exactly one fill or reject pulse for
+                // the submitted order.  Wait here until that result arrives.
+                if (order_fill) begin
+                    next_trade_result_code = 3'd0;
+                    next_trade_result_success = 1'b1;
+                    next_state = TRADE_RESULT;
+                end else if (order_reject) begin
+                    next_trade_result_code = order_reject_code;
+                    next_trade_result_success = 1'b0;
+                    next_state = TRADE_RESULT;
+                end
+            end
+
+            TRADE_RESULT: begin
                 if (btnC) begin
                     next_state = PORTFOLIO;
                     next_portfolio_cursor = 0;
@@ -309,6 +341,9 @@ module game_fsm (
             quantity <= 0;
             selected_stock <= 0;
             quantity_return_state <= RETURN_BUY;
+            trade_result_code <= 3'd0;
+            trade_result_success <= 1'b0;
+            trade_side <= RETURN_BUY;
             quantity_cursor <= 0;
             portfolio_cursor <= 0;
             stocks_cursor <= 0;
@@ -319,6 +354,9 @@ module game_fsm (
             screen_state <= next_state;
             quantity <= next_quantity;
             selected_stock <= next_selected_stock;
+            trade_result_code <= next_trade_result_code;
+            trade_result_success <= next_trade_result_success;
+            trade_side <= quantity_return_state;
             quantity_return_state <= next_quantity_return_state;
             quantity_cursor <= next_quantity_cursor;
             portfolio_cursor <= next_portfolio_cursor;

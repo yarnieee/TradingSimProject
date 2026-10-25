@@ -45,6 +45,12 @@ module D_display_top #(
     input  wire [31:0] portfolio_cash,
     input  wire [9:0]  portfolio_pos0,
     input  wire [9:0]  portfolio_pos1,
+    input  wire [9:0]  portfolio_pos2,
+    input  wire [9:0]  portfolio_pos3,
+    input  wire        stock_ready0,
+    input  wire        stock_ready1,
+    input  wire        stock_ready2,
+    input  wire        stock_ready3,
     input  wire [31:0] portfolio_value,
     input  wire [959:0] portfolio_samples_30,
     output wire        ord_req,
@@ -96,6 +102,8 @@ module D_display_top #(
     wire [1:0] quantity_cursor;
     wire [3:0] menu_selection;
     wire       trade_side;
+    reg        order_valid;
+    reg  [2:0] validation_code;
 
     game_fsm game_fsm_inst (
         .clk(clk),
@@ -109,6 +117,8 @@ module D_display_top #(
         .order_fill(order_fill),
         .order_reject(order_reject),
         .order_reject_code(order_reject_code),
+        .order_valid(order_valid),
+        .validation_code(validation_code),
         .screen_state(screen_state),
         .quantity(quantity),
         .selected_stock(selected_stock),
@@ -133,6 +143,37 @@ module D_display_top #(
                                        stock1_samples_30 :
                                        (selected_stock == 3'd2) ?
                                        stock2_samples_30 : stock3_samples_30;
+
+    wire selected_ready = (selected_stock == 3'd0) ? stock_ready0 :
+                          (selected_stock == 3'd1) ? stock_ready1 :
+                          (selected_stock == 3'd2) ? stock_ready2 : stock_ready3;
+    wire [9:0] selected_position = (selected_stock == 3'd0) ? portfolio_pos0 :
+                                   (selected_stock == 3'd1) ? portfolio_pos1 :
+                                   (selected_stock == 3'd2) ? portfolio_pos2 : portfolio_pos3;
+    wire [16:0] selected_ask_full = {1'b0, selected_price} + 17'd5;
+    wire [15:0] selected_ask = selected_ask_full[16] ? 16'hFFFF : selected_ask_full[15:0];
+    wire [31:0] buy_notional = {16'd0, selected_ask} * {18'd0, quantity};
+    wire [32:0] buy_total = {1'b0, buy_notional} + 33'd100;
+
+    // Validate before the order-review screen can submit to B_order_top.
+    // The ask and fee match B_order_top's market-order parameters.
+    always @(*) begin
+        order_valid = 1'b1;
+        validation_code = `RJ_NONE;
+        if (!selected_ready) begin
+            order_valid = 1'b0;
+            validation_code = `RJ_NOT_LIVE;
+        end else if ((quantity == 14'd0) || (quantity > 14'd255)) begin
+            order_valid = 1'b0;
+            validation_code = `RJ_BAD_QTY;
+        end else if (!trade_side && (buy_total > {1'b0, portfolio_cash})) begin
+            order_valid = 1'b0;
+            validation_code = `RJ_NO_CASH;
+        end else if (trade_side && (quantity > selected_position)) begin
+            order_valid = 1'b0;
+            validation_code = `RJ_NO_POS;
+        end
+    end
 
     quantity_7seg quantity_7seg_inst (
         .clk(clk),

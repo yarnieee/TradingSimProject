@@ -15,6 +15,8 @@ module game_fsm (
     input        order_fill,
     input        order_reject,
     input  [2:0] order_reject_code,
+    input        order_valid,
+    input  [2:0] validation_code,
     output reg [3:0]  screen_state,
     output reg [13:0] quantity,
     output reg [2:0]  selected_stock,
@@ -289,7 +291,13 @@ module game_fsm (
 
             `UI_ORDER_REVIEW: begin
                 if (btnC) begin
-                    next_state = `UI_ORDER_RESULT;
+                    if (order_valid) begin
+                        next_state = `UI_ORDER_RESULT;
+                    end else begin
+                        next_trade_result_code = validation_code;
+                        next_trade_result_success = 1'b0;
+                        next_state = `UI_TRADE_RESULT;
+                    end
                 end
             end
 

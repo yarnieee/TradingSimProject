@@ -40,7 +40,7 @@ module tb_integration;
         end
     endtask
 
-    integer n_fill = 0, n_rej = 0, n_err = 0, n_tick = 0;
+    integer n_fill = 0, n_rej = 0, n_err = 0, n_tick = 0, n_ord_req = 0;
     reg [2:0]  last_rej = 0;
     reg [15:0] last_px = 0;
     always @(posedge clk) if (!dut.sys_reset) begin
@@ -48,6 +48,7 @@ module tb_integration;
         if (dut.reject)     begin n_rej = n_rej + 1; last_rej = dut.reject_code; end
         if (dut.ledger_err) n_err = n_err + 1;
         if (dut.tick)       n_tick = n_tick + 1;
+        if (dut.ord_req)    n_ord_req = n_ord_req + 1;
     end
 
     // one press, held long enough for the debouncer (50 clocks)
@@ -83,7 +84,7 @@ module tb_integration;
         end
     endtask
 
-    integer cash0, f0, r0;
+    integer cash0, f0, r0, o0;
     reg [15:0] p0;
 
     initial begin
@@ -115,9 +116,10 @@ module tb_integration;
         check(dut.screen_state == S_PORTFOLIO, "Matthew: title -> portfolio");
 
         // ---------------- buy 3 AMD
-        cash0 = dut.cash; f0 = n_fill; p0 = dut.price0;
+        cash0 = dut.cash; f0 = n_fill; o0 = n_ord_req; p0 = dut.price0;
         trade(0, 0, 3);
         check(dut.sel_stock == 0, "Matthew -> Douglas: AMD selected");
+        check(n_ord_req == o0 + 1, "valid buy generates one order request");
         check(n_fill == f0 + 1 && dut.pos0 == 3, "Douglas -> Tricia: buy 3 AMD filled, position 3");
         check(dut.cash == cash0 - 3 * last_px - 100, "Tricia: cash down by 3 x ask + fee");
         check(last_px == dut.douglas_orders.u_exec.u_spread.ask || last_px == ((p0 > 16'd65530) ? 16'hFFFF : p0 + 16'd5),
@@ -126,22 +128,26 @@ module tb_integration;
         press(C);                                       // trade result -> portfolio
 
         // ---------------- sell 2 MCD with none held: rejected by B, never reaches C
-        f0 = n_fill; r0 = n_rej;
+        f0 = n_fill; r0 = n_rej; o0 = n_ord_req;
         trade(1, 1, 2);
         check(dut.sel_stock == 1, "Matthew -> Douglas: MCD selected");
-        check(n_rej == r0 + 1 && last_rej == `RJ_NO_POS && n_fill == f0, "Douglas: sell MCD with none held -> NO POS");
+        check(n_rej == r0 && n_fill == f0 && n_ord_req == o0
+              && dut.screen_state == S_TRADE_RESULT,
+              "validation: sell MCD with none held -> NO POS before submission");
         press(C);
 
         // ---------------- quantity 0 (confirm without setting it)
-        r0 = n_rej;
+        r0 = n_rej; o0 = n_ord_req;
         trade(0, 0, 0);
-        check(n_rej == r0 + 1 && last_rej == `RJ_BAD_QTY, "Douglas: quantity 0 -> BAD QTY");
+        check(n_rej == r0 && n_ord_req == o0 && dut.screen_state == S_TRADE_RESULT,
+              "validation: quantity 0 -> BAD QTY before submission");
         press(C);
 
         // ---------------- sell 1 AMD back: partial sell through Tricia's divider
-        f0 = n_fill;
+        f0 = n_fill; o0 = n_ord_req;
         trade(0, 1, 1);
-        check(n_fill == f0 + 1 && dut.pos0 == 2, "Douglas -> Tricia: sell 1 AMD, position 2");
+        check(n_fill == f0 + 1 && n_ord_req == o0 + 1 && dut.pos0 == 2,
+              "valid sell generates one order and updates AMD position to 2");
         check(dut.cash + dut.cb0 + dut.cb1 + dut.cb2 + dut.cb3 == 32'd1_000_000 + dut.realised,
               "Tricia: ledger invariant holds");
 

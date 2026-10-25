@@ -12,6 +12,8 @@ module tb_matthew_game_fsm;
     reg final_day_reached = 0;
     reg order_fill = 0, order_reject = 0;
     reg [2:0] order_reject_code = 0;
+    reg order_valid = 1;
+    reg [2:0] validation_code = `RJ_NONE;
     wire [3:0]  screen_state;
     wire [13:0] quantity;
     wire [2:0]  selected_stock;
@@ -20,6 +22,7 @@ module tb_matthew_game_fsm;
                   .final_day_reached(final_day_reached),
                   .order_fill(order_fill), .order_reject(order_reject),
                   .order_reject_code(order_reject_code),
+                  .order_valid(order_valid), .validation_code(validation_code),
                   .screen_state(screen_state), .quantity(quantity),
                   .selected_stock(selected_stock));
 

@@ -182,7 +182,7 @@ module game_fsm (
                         end
                         2: begin
                             next_state = `UI_STOCKS;
-                            next_stocks_cursor = 1;
+                            next_stocks_cursor = selected_stock + 3'd2;
                         end
                         3: begin
                             next_state = `UI_PORTFOLIO;
@@ -190,7 +190,7 @@ module game_fsm (
                         end
                         4: begin
                             next_state = `UI_STOCKS;
-                            next_stocks_cursor = 1;
+                            next_stocks_cursor = selected_stock + 3'd2;
                         end
                         default: next_state = `UI_SPECIFIC;
                     endcase

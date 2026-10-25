@@ -17,6 +17,7 @@ module tb_matthew_game_fsm;
     wire [3:0]  screen_state;
     wire [13:0] quantity;
     wire [2:0]  selected_stock;
+    wire [3:0]  menu_selection;
 
     game_fsm dut (.clk(clk), .rst(rst), .btnU(U), .btnD(D), .btnL(L), .btnR(R), .btnC(C),
                   .final_day_reached(final_day_reached),
@@ -24,7 +25,7 @@ module tb_matthew_game_fsm;
                   .order_reject_code(order_reject_code),
                   .order_valid(order_valid), .validation_code(validation_code),
                   .screen_state(screen_state), .quantity(quantity),
-                  .selected_stock(selected_stock));
+                  .selected_stock(selected_stock), .menu_selection(menu_selection));
 
     localparam TITLE = `UI_TITLE, PORTFOLIO = `UI_PORTFOLIO,
                STOCKS = `UI_STOCKS, SPECIFIC = `UI_SPECIFIC,
@@ -85,10 +86,11 @@ module tb_matthew_game_fsm;
               "stocks --D, C--> AMD screen with stock code 0");
 
         press(BU); press(BR); press(BC);
-        check(screen_state == STOCKS, "specific: U, R selects back-to-stocks");
-        press(BD); press(BD); press(BC);
+        check(screen_state == STOCKS && menu_selection == 4'd2,
+              "specific: returning to stocks preserves the AMD cursor");
+        press(BD); press(BC);
         check(screen_state == SPECIFIC && selected_stock == 1,
-              "stocks --D, D, C--> MCD screen with stock code 1");
+              "stocks --D, C--> AVGO screen with stock code 1");
         press(BU); press(BC);
         check(screen_state == PORTFOLIO, "specific: U selects back-to-portfolio");
 

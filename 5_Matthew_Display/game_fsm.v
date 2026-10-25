@@ -99,7 +99,7 @@ module game_fsm (
             end
 
             STOCKS: begin
-                // 0=Portfolio, 1=Stocks, 2=AMD, 3=MCD.
+                // 0=Portfolio, 1=Stocks, 2=AMD, 3=AVGO, 4=NVDA, 5=GME.
                 if (btnL && (stocks_cursor == 1))
                     next_stocks_cursor = 0;
                 if (btnR && (stocks_cursor == 0))
@@ -109,6 +109,8 @@ module game_fsm (
                     case (stocks_cursor)
                         1: next_stocks_cursor = 2;
                         2: next_stocks_cursor = 3;
+                        3: next_stocks_cursor = 4;
+                        4: next_stocks_cursor = 5;
                         default: next_stocks_cursor = stocks_cursor;
                     endcase
                 end
@@ -117,6 +119,8 @@ module game_fsm (
                     case (stocks_cursor)
                         2: next_stocks_cursor = 1;
                         3: next_stocks_cursor = 2;
+                        4: next_stocks_cursor = 3;
+                        5: next_stocks_cursor = 4;
                         default: next_stocks_cursor = stocks_cursor;
                     endcase
                 end
@@ -125,8 +129,8 @@ module game_fsm (
                     if (stocks_cursor == 0) begin
                         next_state = PORTFOLIO;
                         next_portfolio_cursor = 0;
-                    end else if ((stocks_cursor == 2) ||
-                                 (stocks_cursor == 3)) begin
+                    end else if ((stocks_cursor >= 2) &&
+                                 (stocks_cursor <= 5)) begin
                         next_state = SPECIFIC;
                         next_specific_cursor = 0;
                         next_selected_stock = stocks_cursor - 2;

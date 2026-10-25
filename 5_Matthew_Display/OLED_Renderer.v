@@ -238,7 +238,9 @@ module menu_buttons (
     localparam NAV_PORTFOLIO = 4'd0;
     localparam NAV_STOCKS    = 4'd1;
     localparam STOCK_AMD     = 4'd2;
-    localparam STOCK_MCD     = 4'd3;
+    localparam STOCK_AVGO    = 4'd3;
+    localparam STOCK_NVDA    = 4'd4;
+    localparam STOCK_GME     = 4'd5;
     localparam ACTION_BUY    = 4'd6;
     localparam ACTION_SELL   = 4'd7;
     localparam ACTION_BACK   = 4'd8;
@@ -297,8 +299,16 @@ module menu_buttons (
                 button_selected = (menu_selection == STOCK_AMD);
             end else if ((pixel_x >= 7'd30) && (pixel_x <= 7'd65) &&
                          (pixel_y >= 6'd33) && (pixel_y <= 6'd40)) begin
-                button_kind = STOCK_MCD;
-                button_selected = (menu_selection == STOCK_MCD);
+                button_kind = STOCK_AVGO;
+                button_selected = (menu_selection == STOCK_AVGO);
+            end else if ((pixel_x >= 7'd30) && (pixel_x <= 7'd65) &&
+                         (pixel_y >= 6'd42) && (pixel_y <= 6'd49)) begin
+                button_kind = STOCK_NVDA;
+                button_selected = (menu_selection == STOCK_NVDA);
+            end else if ((pixel_x >= 7'd30) && (pixel_x <= 7'd65) &&
+                         (pixel_y >= 6'd51) && (pixel_y <= 6'd58)) begin
+                button_kind = STOCK_GME;
+                button_selected = (menu_selection == STOCK_GME);
             end
         end
 
@@ -351,9 +361,17 @@ module menu_buttons (
                     button_border = (pixel_x == 7'd30) || (pixel_x == 7'd65) ||
                                     (pixel_y == 6'd24) || (pixel_y == 6'd31);
                 end
-                STOCK_MCD: begin
+                STOCK_AVGO: begin
                     button_border = (pixel_x == 7'd30) || (pixel_x == 7'd65) ||
                                     (pixel_y == 6'd33) || (pixel_y == 6'd40);
+                end
+                STOCK_NVDA: begin
+                    button_border = (pixel_x == 7'd30) || (pixel_x == 7'd65) ||
+                                    (pixel_y == 6'd42) || (pixel_y == 6'd49);
+                end
+                STOCK_GME: begin
+                    button_border = (pixel_x == 7'd30) || (pixel_x == 7'd65) ||
+                                    (pixel_y == 6'd51) || (pixel_y == 6'd58);
                 end
                 ACTION_BUY: begin
                     button_border = (pixel_x == 7'd4) || (pixel_x == 7'd31) ||
@@ -560,7 +578,9 @@ module menu_button_text (
     localparam NAV_PORTFOLIO = 4'd0;
     localparam NAV_STOCKS    = 4'd1;
     localparam STOCK_AMD     = 4'd2;
-    localparam STOCK_MCD     = 4'd3;
+    localparam STOCK_AVGO    = 4'd3;
+    localparam STOCK_NVDA    = 4'd4;
+    localparam STOCK_GME     = 4'd5;
     localparam ACTION_BUY    = 4'd6;
     localparam ACTION_SELL   = 4'd7;
     localparam ACTION_BACK   = 4'd8;
@@ -632,11 +652,29 @@ module menu_button_text (
                         default: label_char = 8'h20;
                     endcase
                 end
-                STOCK_MCD: begin
+                STOCK_AVGO: begin
                     case (position)
-                        0: label_char = 8'h4D; // M
-                        1: label_char = 8'h43; // C
+                        0: label_char = 8'h41; // A
+                        1: label_char = 8'h56; // V
+                        2: label_char = 8'h47; // G
+                        3: label_char = 8'h4F; // O
+                        default: label_char = 8'h20;
+                    endcase
+                end
+                STOCK_NVDA: begin
+                    case (position)
+                        0: label_char = 8'h4E; // N
+                        1: label_char = 8'h56; // V
                         2: label_char = 8'h44; // D
+                        3: label_char = 8'h41; // A
+                        default: label_char = 8'h20;
+                    endcase
+                end
+                STOCK_GME: begin
+                    case (position)
+                        0: label_char = 8'h47; // G
+                        1: label_char = 8'h4D; // M
+                        2: label_char = 8'h45; // E
                         default: label_char = 8'h20;
                     endcase
                 end
@@ -759,9 +797,23 @@ module menu_button_text (
                 label_active = 1'b1;
             end else if ((pixel_x >= 7'd39) && (pixel_x < 7'd57) &&
                          (pixel_y >= 6'd34) && (pixel_y < 6'd41)) begin
-                label_kind = STOCK_MCD;
-                text_start_x = 7'd39;
+                label_kind = STOCK_AVGO;
+                text_start_x = 7'd36;
                 text_start_y = 6'd34;
+                text_length = 4;
+                label_active = 1'b1;
+            end else if ((pixel_x >= 7'd36) && (pixel_x < 7'd60) &&
+                         (pixel_y >= 6'd43) && (pixel_y < 6'd50)) begin
+                label_kind = STOCK_NVDA;
+                text_start_x = 7'd36;
+                text_start_y = 6'd43;
+                text_length = 4;
+                label_active = 1'b1;
+            end else if ((pixel_x >= 7'd39) && (pixel_x < 7'd57) &&
+                         (pixel_y >= 6'd52) && (pixel_y < 6'd59)) begin
+                label_kind = STOCK_GME;
+                text_start_x = 7'd39;
+                text_start_y = 6'd52;
                 text_length = 3;
                 label_active = 1'b1;
             end

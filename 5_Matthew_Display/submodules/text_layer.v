@@ -45,7 +45,9 @@ module text_layer (
         begin
             case (stock)
                 3'd0: stock_name_length = 3;
-                3'd1: stock_name_length = 3;
+                3'd1: stock_name_length = 4;
+                3'd2: stock_name_length = 4;
+                3'd3: stock_name_length = 3;
                 default: stock_name_length = 3;
             endcase
         end
@@ -67,9 +69,27 @@ module text_layer (
                 end
                 3'd1: begin
                     case (position)
-                        0: stock_name_char = 8'h4D; // M
-                        1: stock_name_char = 8'h43; // C
+                        0: stock_name_char = 8'h41; // A
+                        1: stock_name_char = 8'h56; // V
+                        2: stock_name_char = 8'h47; // G
+                        3: stock_name_char = 8'h4F; // O
+                        default: stock_name_char = 8'h20;
+                    endcase
+                end
+                3'd2: begin
+                    case (position)
+                        0: stock_name_char = 8'h4E; // N
+                        1: stock_name_char = 8'h56; // V
                         2: stock_name_char = 8'h44; // D
+                        3: stock_name_char = 8'h41; // A
+                        default: stock_name_char = 8'h20;
+                    endcase
+                end
+                3'd3: begin
+                    case (position)
+                        0: stock_name_char = 8'h47; // G
+                        1: stock_name_char = 8'h4D; // M
+                        2: stock_name_char = 8'h45; // E
                         default: stock_name_char = 8'h20;
                     endcase
                 end
@@ -110,11 +130,7 @@ module text_layer (
                 end
                 SPECIFIC: begin
                     if (line == 0) begin
-                        case (stock)
-                            3'd0: text_length = 9;  // AMD stock
-                            3'd1: text_length = 9;  // MCD stock
-                            default: text_length = 9;
-                        endcase
+                        text_length = stock_name_length(stock) + 6;
                     end else begin
                         text_length = 0;
                     end
@@ -198,33 +214,20 @@ module text_layer (
                     endcase
                 end
                 SPECIFIC: begin
-                    case (stock)
-                        3'd0: begin
-                            case (position)
-                                0: text_char = 8'h41; // A
-                                1: text_char = 8'h4D; // M
-                                2: text_char = 8'h44; // D
-                                3: text_char = 8'h20;
-                                4: text_char = 8'h73; 5: text_char = 8'h74;
-                                6: text_char = 8'h6F; 7: text_char = 8'h63;
-                                8: text_char = 8'h6B;
-                                default: text_char = 8'h20;
-                            endcase
-                        end
-                        3'd1: begin
-                            case (position)
-                                0: text_char = 8'h4D; // M
-                                1: text_char = 8'h43; // C
-                                2: text_char = 8'h44; // D
-                                3: text_char = 8'h20;
-                                4: text_char = 8'h73; 5: text_char = 8'h74;
-                                6: text_char = 8'h6F; 7: text_char = 8'h63;
-                                8: text_char = 8'h6B;
-                                default: text_char = 8'h20;
-                            endcase
-                        end
-                        default: text_char = 8'h20;
-                    endcase
+                    if (position < stock_name_length(stock))
+                        text_char = stock_name_char(stock, position);
+                    else if (position == stock_name_length(stock))
+                        text_char = 8'h20;
+                    else begin
+                        case (position - stock_name_length(stock) - 1)
+                            0: text_char = 8'h73; // s
+                            1: text_char = 8'h74; // t
+                            2: text_char = 8'h6F; // o
+                            3: text_char = 8'h63; // c
+                            4: text_char = 8'h6B; // k
+                            default: text_char = 8'h20;
+                        endcase
+                    end
                 end
                 BUY_STOCK: begin
                     if (line == 0) begin

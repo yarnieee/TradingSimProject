@@ -85,17 +85,25 @@ module tb_integration;
     initial begin
         repeat (10) @(posedge clk);
         rst = 0;
-        wait (dut.amd_ready && dut.mcd_ready);
+        wait (dut.amd_ready && dut.mcd_ready && dut.stock2_ready && dut.stock3_ready);
         repeat (DAY + 100) @(posedge clk);              // one day ticks over
-        check(dut.price0 != 0 && dut.price1 != 0, "Yi An: AMD and MCD have prices (if not: AMD_seed.mem / MCD_seed.mem not found)");
+        check(dut.price0 != 0 && dut.price1 != 0 && dut.price2 != 0 && dut.price3 != 0,
+              "Yi An: all four stocks have prices (if not: a seed file was not found)");
+        check(dut.price0 == dut.amd_close && dut.price1 == dut.mcd_close
+              && dut.price2 == dut.stock2_close && dut.price3 == dut.stock3_close,
+              "Integration: all four prices are routed into the shared order bus");
         check(n_tick >= 1, "Yi An -> Douglas: a tick reached the order engine after a trading day");
         check(dut.portfolio_value == 32'd1_000_000,
               "Display data path: portfolio starts at the ledger's cash value");
         check(dut.portfolio_samples_30[31:0] == dut.portfolio_value,
               "Display data path: portfolio history is initialized");
-        $display("     AMD %0d c, MCD %0d c", dut.price0, dut.price1);
+        $display("     AMD %0d c, MCD %0d c, NVDA %0d c, GME %0d c",
+                 dut.price0, dut.price1, dut.price2, dut.price3);
         // Yi An's own price maths (stock.v, calculate_next_close), reported but not counted
-        if (dut.price0 == 16'hFFFF || dut.price1 == 16'hFFFF || dut.price0 < 100 || dut.price1 < 100)
+        if (dut.price0 == 16'hFFFF || dut.price1 == 16'hFFFF
+            || dut.price2 == 16'hFFFF || dut.price3 == 16'hFFFF
+            || dut.price0 < 100 || dut.price1 < 100
+            || dut.price2 < 100 || dut.price3 < 100)
             $display("WARN: Yi An's prices look wrong (pinned at $655.35 or near 0): see stock.v, calculate_next_close");
 
         // ---------------- title -> portfolio

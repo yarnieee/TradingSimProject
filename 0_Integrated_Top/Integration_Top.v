@@ -50,10 +50,18 @@ module Integration_Top #(
     // display as well as to the order engine.
     wire [1:0]   market_state;
     wire [2:0]   market_event;
-    wire         amd_ready, mcd_ready;
-    wire [15:0]  amd_close, mcd_close;
-    wire [31:0]  amd_date;
+    wire         amd_ready, mcd_ready, stock2_ready, stock3_ready;
+    wire [15:0]  amd_close, mcd_close, stock2_close, stock3_close;
+    wire [31:0]  amd_date, mcd_date, stock2_date, stock3_date;
+    wire [31:0]  stock2_volume, stock3_volume;
+    wire [111:0] stock2_samples_7, stock3_samples_7;
+    wire [15:0]  stock2_mean_7, stock3_mean_7;
     wire [479:0] amd_samples_30, mcd_samples_30;
+    wire [479:0] stock2_samples_30, stock3_samples_30;
+    wire [479:0] stock2_samples_180, stock3_samples_180;
+    wire [15:0]  stock2_mean_30, stock3_mean_30;
+    wire [15:0]  stock2_mean_180, stock3_mean_180;
+    wire         all_stocks_ready;
     wire [31:0]  cash;
     wire [9:0]   pos0, pos1, pos2, pos3;
     wire [15:0]  price0, price1, price2, price3;
@@ -92,17 +100,38 @@ module Integration_Top #(
     // in 2_YiAn_Market_Engine/data/ and are added to the Vivado project, so point
     // both stocks at the plain file names. [ASSUMPTION: Vivado finds .mem files
     // added to the project by name, in synthesis and simulation. Not tested here.]
-    // Current prices and 30-point histories are both kept for the display and
-    // the order engine.
+    // Current prices and history buses for all four stocks are routed through
+    // this integration level. The display currently consumes the first two
+    // history buses; the remaining buses are ready for the chart expansion.
     A_top #(.DAY_MAX_COUNT(DAY_MAX_COUNT)) yian_market (
         .clk(clk), .rst(sys_reset),
         .market_state(market_state),
         .market_event(market_event),
         .amd_ready(amd_ready), .mcd_ready(mcd_ready),
         .amd_current_close(amd_close), .amd_current_volume(), .amd_current_date(amd_date),
-        .mcd_current_close(mcd_close), .mcd_current_volume(), .mcd_current_date(),
+        .mcd_current_close(mcd_close), .mcd_current_volume(), .mcd_current_date(mcd_date),
         .amd_samples_30(amd_samples_30), .amd_samples_180(), .amd_mean_30(), .amd_mean_180(),
-        .mcd_samples_30(mcd_samples_30), .mcd_samples_180(), .mcd_mean_30(), .mcd_mean_180()
+        .mcd_samples_30(mcd_samples_30), .mcd_samples_180(), .mcd_mean_30(), .mcd_mean_180(),
+        .stock2_ready(stock2_ready),
+        .stock2_current_close(stock2_close),
+        .stock2_current_volume(stock2_volume),
+        .stock2_current_date(stock2_date),
+        .stock2_samples_7(stock2_samples_7),
+        .stock2_mean_7(stock2_mean_7),
+        .stock2_samples_30(stock2_samples_30),
+        .stock2_samples_180(stock2_samples_180),
+        .stock2_mean_30(stock2_mean_30),
+        .stock2_mean_180(stock2_mean_180),
+        .stock3_ready(stock3_ready),
+        .stock3_current_close(stock3_close),
+        .stock3_current_volume(stock3_volume),
+        .stock3_current_date(stock3_date),
+        .stock3_samples_7(stock3_samples_7),
+        .stock3_mean_7(stock3_mean_7),
+        .stock3_samples_30(stock3_samples_30),
+        .stock3_samples_180(stock3_samples_180),
+        .stock3_mean_30(stock3_mean_30),
+        .stock3_mean_180(stock3_mean_180)
     );
 
     // Vivado resolves hierarchical defparams after the referenced instance
@@ -114,23 +143,27 @@ module Integration_Top #(
     defparam yian_market.stock2_inst.SEED_FILE = "NVDA_seed.mem";
     defparam yian_market.stock3_inst.SEED_FILE = "GME_seed.mem";
 
-    // Price bus for Douglas. Replace when A_top outputs price0..3 and tick.
-    // A_top updates all four stocks on the same internal day tick, and the date
-    // always moves on a trading day, so a date change marks the tick.
-    // Stocks 2 and 3 are intentionally connected in a later integration step;
-    // their market data is already loaded and simulated inside A_top.
+    // A_top updates all four stocks on the same internal day tick. A date
+    // change marks the tick only after every stock is ready and all four dates
+    // agree, so the order engine and portfolio history see a complete market
+    // update.
     assign price0 = amd_ready ? amd_close : 16'd0;
     assign price1 = mcd_ready ? mcd_close : 16'd0;
-    assign price2 = 16'd0;
-    assign price3 = 16'd0;
-    reg  [31:0] amd_date_d;
+    assign price2 = stock2_ready ? stock2_close : 16'd0;
+    assign price3 = stock3_ready ? stock3_close : 16'd0;
+    assign all_stocks_ready = amd_ready && mcd_ready && stock2_ready && stock3_ready;
+    reg  [31:0] market_date_d;
     always @(posedge clk) begin
         if (sys_reset) begin
-            amd_date_d <= 32'd0;
-            tick       <= 1'b0;
+            market_date_d <= 32'd0;
+            tick          <= 1'b0;
         end else begin
-            amd_date_d <= amd_date;
-            tick       <= amd_ready && (amd_date != amd_date_d);
+            market_date_d <= amd_date;
+            tick          <= all_stocks_ready
+                          && (amd_date == mcd_date)
+                          && (amd_date == stock2_date)
+                          && (amd_date == stock3_date)
+                          && (amd_date != market_date_d);
         end
     end
 

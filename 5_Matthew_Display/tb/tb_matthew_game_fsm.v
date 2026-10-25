@@ -91,6 +91,21 @@ module tb_matthew_game_fsm;
         press(BD); press(BC);
         check(screen_state == SPECIFIC && selected_stock == 1,
               "stocks --D, C--> AVGO screen with stock code 1");
+
+        press(BU); press(BR); press(BC);
+        check(screen_state == STOCKS && menu_selection == 4'd3,
+              "AVGO returns to the stock list with its cursor preserved");
+        press(BD); press(BC);
+        check(screen_state == SPECIFIC && selected_stock == 2,
+              "stocks --D, C--> NVDA screen with stock code 2");
+
+        press(BU); press(BR); press(BC);
+        check(screen_state == STOCKS && menu_selection == 4'd4,
+              "NVDA returns to the stock list with its cursor preserved");
+        press(BD); press(BC);
+        check(screen_state == SPECIFIC && selected_stock == 3,
+              "stocks --D, C--> GME screen with stock code 3");
+
         press(BU); press(BC);
         check(screen_state == PORTFOLIO, "specific: U selects back-to-portfolio");
 

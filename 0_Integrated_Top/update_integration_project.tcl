@@ -44,6 +44,16 @@ foreach source_file $display_sources {
     }
 }
 
+set title_art_sources [glob -nocomplain -types f "$repo/5_Matthew_Display/title_art_*.mem"]
+
+foreach source_file $title_art_sources {
+    set source_file [file normalize $source_file]
+    if {[llength [get_files -quiet $source_file]] == 0} {
+        add_files -fileset $source_set -norecurse $source_file
+        puts "Added title artwork: $source_file"
+    }
+}
+
 set_property top Integration_Top $source_set
 update_compile_order -fileset $source_set
 puts "Updated '$project_name': top=Integration_Top; display submodules are in sources_1."

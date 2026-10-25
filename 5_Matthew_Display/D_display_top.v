@@ -209,6 +209,8 @@ module D_display_top #(
 
     // ================================================================ right OLED (JB)
     wire [12:0] pixel_index_R;
+    wire [15:0] pixel_data_game_R;
+    wire [15:0] title_pixel_R;
     wire [15:0] pixel_data_R;
     wire        frame_begin_R;
     wire        sending_pixels_R;
@@ -227,7 +229,7 @@ module D_display_top #(
         .portfolio_pos1(portfolio_pos1),
         .portfolio_value(portfolio_value),
         .selected_price(selected_price),
-        .pixel_data(pixel_data_R)
+        .pixel_data(pixel_data_game_R)
     );
 
     oled_display oled_R (
@@ -252,13 +254,30 @@ module D_display_top #(
     // ================================================================ left OLED (JA)
     wire [12:0] pixel_index_L;
     wire [15:0] pixel_data_game_L;
+    wire [15:0] title_pixel_L;
     wire [15:0] pixel_data_L;
+    wire [6:0] title_display_x_L;
+    wire [5:0] title_display_y_L;
+    wire [12:0] title_pixel_index_L;
     wire        frame_begin_L;
     wire        sending_pixels_L;
     wire        sample_pixel_L;
 
     assign left_x = pixel_index_L % 96;
     assign left_y = pixel_index_L / 96;
+    assign title_display_x_L = 7'd95 - (pixel_index_L % 96);
+    assign title_display_y_L = 6'd63 - (pixel_index_L / 96);
+    assign title_pixel_index_L = (title_display_y_L * 13'd96) + title_display_x_L;
+
+    title_art_renderer title_art_renderer_inst (
+        .pixel_index_R(pixel_index_R),
+        .pixel_index_L(title_pixel_index_L),
+        .pixel_data_R(title_pixel_R),
+        .pixel_data_L(title_pixel_L)
+    );
+
+    assign pixel_data_R = (screen_state == `UI_TITLE) ?
+                          title_pixel_R : pixel_data_game_R;
 
     OLED_Button_Renderer oled_renderer_L (
         .pixel_index(pixel_index_L),
@@ -281,7 +300,9 @@ module D_display_top #(
         .pixel_data(pixel_data_game_L)
     );
 
-    assign pixel_data_L = SHOW_GAME_ON_JA ? pixel_data_game_L : left_pixel;
+    assign pixel_data_L = SHOW_GAME_ON_JA ?
+                          ((screen_state == `UI_TITLE) ? title_pixel_L :
+                           pixel_data_game_L) : left_pixel;
 
     oled_display oled_L (
         .clk(clk_6_25MHz),

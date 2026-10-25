@@ -47,6 +47,7 @@ set source_files [list \
     "$repo/5_Matthew_Display/game_fsm.v" \
     "$repo/5_Matthew_Display/submodules/binary_to_bcd_14bit.v" \
     "$repo/5_Matthew_Display/submodules/chart_renderer.v" \
+    "$repo/5_Matthew_Display/submodules/countdown_layer.v" \
     "$repo/5_Matthew_Display/submodules/font_renderer.v" \
     "$repo/5_Matthew_Display/submodules/portfolio_history.v" \
     "$repo/5_Matthew_Display/submodules/portfolio_info_layer.v" \

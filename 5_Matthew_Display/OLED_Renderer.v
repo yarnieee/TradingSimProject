@@ -23,6 +23,7 @@ module OLED_Renderer (
     input  [31:0] portfolio_cb1,
     input  [31:0] portfolio_cb2,
     input  [31:0] portfolio_cb3,
+    input  [31:0] time_remaining,
     input  [31:0] portfolio_value,
     input  [15:0] selected_price,
     output reg [15:0] pixel_data
@@ -37,6 +38,8 @@ module OLED_Renderer (
     wire [15:0] menu_pixel_color;
     wire chart_pixel_active;
     wire [15:0] chart_pixel_color;
+    wire        countdown_pixel_active;
+    wire [15:0] countdown_pixel_color;
     wire [1:0] chart_mode = (screen_state == `UI_SPECIFIC) ? 2'b01 :
                              (screen_state == `UI_PORTFOLIO) ? 2'b10 : 2'b00;
 
@@ -67,6 +70,7 @@ module OLED_Renderer (
         .price0(price0), .price1(price1), .price2(price2), .price3(price3),
         .cb0(portfolio_cb0), .cb1(portfolio_cb1),
         .cb2(portfolio_cb2), .cb3(portfolio_cb3),
+        .cash(portfolio_cash),
         .pixel_active(table_pixel_active),
         .pixel_color(table_pixel_color)
     );
@@ -77,8 +81,17 @@ module OLED_Renderer (
         .chart_mode(chart_mode),
         .stock_samples(stock_samples),
         .portfolio_samples(portfolio_samples),
+        .live_value(portfolio_value),
         .pixel_active(chart_pixel_active),
         .pixel_color(chart_pixel_color)
+    );
+
+    countdown_layer countdown_layer_inst (
+        .pixel_index(pixel_index),
+        .screen_state(screen_state),
+        .time_remaining(time_remaining),
+        .pixel_active(countdown_pixel_active),
+        .pixel_color(countdown_pixel_color)
     );
 
     menu_button_text menu_button_text_inst (
@@ -99,6 +112,8 @@ module OLED_Renderer (
     always @(*) begin
         if (menu_text_pixel)
             pixel_data = 16'hFFFF;
+        else if (countdown_pixel_active)
+            pixel_data = countdown_pixel_color;
         else if (table_pixel_active)
             pixel_data = table_pixel_color;
         else if (info_pixel)
@@ -147,6 +162,7 @@ module OLED_Button_Renderer (
     input  [31:0] portfolio_cb1,
     input  [31:0] portfolio_cb2,
     input  [31:0] portfolio_cb3,
+    input  [31:0] time_remaining,
     input  [31:0] portfolio_value,
     input  [15:0] selected_price,
     input         btnU,
@@ -208,6 +224,7 @@ module OLED_Button_Renderer (
         .chart_mode(chart_mode),
         .stock_samples(stock_samples),
         .portfolio_samples(portfolio_samples),
+        .live_value(portfolio_value),
         .pixel_active(chart_pixel_active),
         .pixel_color(chart_pixel_color)
     );

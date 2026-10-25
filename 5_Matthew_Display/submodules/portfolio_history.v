@@ -35,6 +35,7 @@ module portfolio_history #(
     assign portfolio_value = total_value[31:0];
 
     reg initialized;
+    wire [31:0] newest_sample = portfolio_samples[(SAMPLE_COUNT*32)-1:((SAMPLE_COUNT-1)*32)];
     integer i;
 
     always @(posedge clk) begin
@@ -47,11 +48,14 @@ module portfolio_history #(
                 portfolio_samples[i*32 +: 32] <= portfolio_value;
             end
             initialized <= 1'b1;
-        end else if (tick) begin
+        end else if (tick || (portfolio_value != newest_sample)) begin
             // Keep the history in one fixed-width shift.  Using a variable
             // part-select inside a procedural loop makes Vivado infer a
             // large run-time mux for every stored bit; explicit slices keep
-            // the same oldest-to-newest ordering with simple wiring.
+            // the same oldest-to-newest ordering with simple wiring.  The
+            // value-change condition also captures fills immediately, so the
+            // portfolio graph reflects the current valuation instead of only
+            // changing at the next simulated trading day.
             portfolio_samples <= {portfolio_value,
                                   portfolio_samples[(SAMPLE_COUNT*32)-1:32]};
         end

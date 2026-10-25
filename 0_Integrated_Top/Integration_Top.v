@@ -72,6 +72,13 @@ module Integration_Top #(
     wire [31:0]  portfolio_value;
     wire [959:0] portfolio_samples_30;
     wire [31:0]  cb0, cb1, cb2, cb3;
+    wire [31:0]  time_remaining;
+
+    // The game timer is expressed in remaining simulated trading days.  The
+    // ledger starts with 1,000,000 cents ($10,000), and the same cash bus is
+    // used by every screen so purchases and sales remain consistent.
+    assign time_remaining = (trading_day_count < FINAL_TRADING_DAY) ?
+                            (FINAL_TRADING_DAY - trading_day_count) : 32'd0;
 
     // ================================================================ MATTHEW: buttons, screens, 7-seg, both OLEDs
     wire [3:0]  screen_state;
@@ -90,6 +97,7 @@ module Integration_Top #(
         .clk(clk), .rst(sys_reset),
         .btnU(btnU), .btnD(btnD), .btnL(btnL), .btnR(btnR), .btnC(btnC),
         .final_day_reached(final_day_reached),
+        .time_remaining(time_remaining),
         .order_fill(fill), .order_reject(reject), .order_reject_code(reject_code),
         .left_pixel(ticket_pixel), .left_x(xL), .left_y(yL),
         .screen_state(screen_state), .quantity(quantity), .sel_stock(sel_stock),

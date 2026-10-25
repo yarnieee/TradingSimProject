@@ -10,6 +10,7 @@ module tb_chart_renderer;
     reg  [1:0]   chart_mode;
     reg  [479:0] stock_samples;
     reg  [959:0] portfolio_samples;
+    reg  [31:0]  live_value;
     wire         pixel_active;
     wire [15:0]  pixel_color;
 
@@ -23,6 +24,7 @@ module tb_chart_renderer;
         .chart_mode(chart_mode),
         .stock_samples(stock_samples),
         .portfolio_samples(portfolio_samples),
+        .live_value(live_value),
         .pixel_active(pixel_active),
         .pixel_color(pixel_color)
     );
@@ -57,6 +59,7 @@ module tb_chart_renderer;
         chart_mode = 2'b00;
         stock_samples = 480'd0;
         portfolio_samples = 960'd0;
+        live_value = 32'd0;
         #1;
         check(!pixel_active, "disabled chart produces no pixels");
 
@@ -65,6 +68,7 @@ module tb_chart_renderer;
         chart_mode = 2'b10;
         for (i = 0; i < 30; i = i + 1)
             set_portfolio_sample(i, 32'd1000000);
+        live_value = 32'd1000000;
         pixel_x = 7'd8;
         pixel_y = 6'd32;
         #1;
@@ -78,6 +82,7 @@ module tb_chart_renderer;
         for (i = 0; i < 30; i = i + 1)
             set_portfolio_sample(i, 32'd1000000);
         set_portfolio_sample(4, 32'd1004608);
+        live_value = 32'd1000000;
 
         pixel_x = 7'd8;
         pixel_y = 6'd41;

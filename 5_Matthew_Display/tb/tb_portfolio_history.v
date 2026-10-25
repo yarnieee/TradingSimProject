@@ -66,6 +66,15 @@ module tb_portfolio_history;
         check(portfolio_samples[31:0] == 32'd1000,
               "oldest history value remains after one tick");
 
+        // A fill can change cash/positions between market-day ticks.  The
+        // newest history point must follow that live valuation immediately.
+        cash = 32'd900;
+        #1;
+        @(posedge clk);
+        #1;
+        check(portfolio_samples[959:928] == 32'd1300,
+              "history captures a live valuation change without a market tick");
+
         if (n_fail == 0)
             $display("PASS: tb_portfolio_history (%0d checks)", n_pass);
         else

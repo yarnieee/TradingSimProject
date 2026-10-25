@@ -21,6 +21,7 @@ module portfolio_table_layer (
     input  wire [31:0] cb1,
     input  wire [31:0] cb2,
     input  wire [31:0] cb3,
+    input  wire [31:0] cash,
     output reg         pixel_active,
     output reg  [15:0] pixel_color
 );
@@ -48,6 +49,7 @@ module portfolio_table_layer (
     reg [32:0] row_pnl_signed;
     reg [15:0] row_pnl_abs;
     reg        row_pnl_negative;
+    reg        capital_row;
     reg [2:0] glyph_x;
     reg [2:0] glyph_y;
     wire glyph_pixel;
@@ -139,6 +141,7 @@ module portfolio_table_layer (
         row_pnl_signed = 33'd0;
         row_pnl_abs = 16'd0;
         row_pnl_negative = 1'b0;
+        capital_row = 1'b0;
         glyph_x = 3'd0;
         glyph_y = 3'd0;
         pixel_active = 1'b0;
@@ -149,15 +152,16 @@ module portfolio_table_layer (
             if ((pixel_x == 7'd0) || (pixel_x == 7'd95) ||
                 (pixel_x == 7'd24) || (pixel_x == 7'd42) ||
                 (pixel_x == 7'd68) ||
-                (pixel_y == 6'd12) || (pixel_y == 6'd20) ||
-                (pixel_y == 6'd29) || (pixel_y == 6'd38) ||
-                (pixel_y == 6'd47) || (pixel_y == 6'd56)) begin
+                 (pixel_y == 6'd11) || (pixel_y == 6'd18) ||
+                 (pixel_y == 6'd26) || (pixel_y == 6'd34) ||
+                 (pixel_y == 6'd42) || (pixel_y == 6'd50) ||
+                 (pixel_y == 6'd57)) begin
                 pixel_active = 1'b1;
                 pixel_color = 16'h4208;
             end
 
-            if ((pixel_y >= 6'd13) && (pixel_y < 6'd20)) begin
-                line_y = 6'd13;
+            if ((pixel_y >= 6'd12) && (pixel_y < 6'd18)) begin
+                line_y = 6'd12;
                 text_active = 1'b1;
                 if (pixel_x < 7'd24) begin
                     field_kind = FIELD_NAME; field_start_x = 7'd2; line_length = 4'd4;
@@ -168,14 +172,16 @@ module portfolio_table_layer (
                 end else begin
                     field_kind = FIELD_PNL; field_start_x = 7'd70; line_length = 4'd3;
                 end
-            end else if ((pixel_y >= 6'd21) && (pixel_y < 6'd28)) begin
-                row_index = 2'd0; line_y = 6'd21; text_active = 1'b1;
-            end else if ((pixel_y >= 6'd30) && (pixel_y < 6'd37)) begin
-                row_index = 2'd1; line_y = 6'd30; text_active = 1'b1;
-            end else if ((pixel_y >= 6'd39) && (pixel_y < 6'd46)) begin
-                row_index = 2'd2; line_y = 6'd39; text_active = 1'b1;
-            end else if ((pixel_y >= 6'd48) && (pixel_y < 6'd55)) begin
-                row_index = 2'd3; line_y = 6'd48; text_active = 1'b1;
+            end else if ((pixel_y >= 6'd19) && (pixel_y < 6'd26)) begin
+                row_index = 2'd0; line_y = 6'd19; text_active = 1'b1;
+            end else if ((pixel_y >= 6'd27) && (pixel_y < 6'd34)) begin
+                row_index = 2'd1; line_y = 6'd27; text_active = 1'b1;
+            end else if ((pixel_y >= 6'd35) && (pixel_y < 6'd42)) begin
+                row_index = 2'd2; line_y = 6'd35; text_active = 1'b1;
+            end else if ((pixel_y >= 6'd43) && (pixel_y < 6'd50)) begin
+                row_index = 2'd3; line_y = 6'd43; text_active = 1'b1;
+            end else if ((pixel_y >= 6'd51) && (pixel_y < 6'd58)) begin
+                capital_row = 1'b1; line_y = 6'd51; text_active = 1'b1;
             end
 
             // The same columns are used by the heading and all four rows.
@@ -189,11 +195,23 @@ module portfolio_table_layer (
                 end else begin
                     field_kind = FIELD_PNL; field_start_x = 7'd70; line_length = 4'd5;
                 end
-                if ((pixel_y < 6'd20) && (field_kind == FIELD_PNL))
+                if ((pixel_y < 6'd18) && (field_kind == FIELD_PNL))
                     line_length = 4'd3;
+                if (capital_row) begin
+                    if (pixel_x < 7'd24) begin
+                        field_kind = FIELD_NAME; field_start_x = 7'd2; line_length = 4'd4;
+                    end else if (pixel_x < 7'd42) begin
+                        field_kind = FIELD_POS; field_start_x = 7'd27; line_length = 4'd0;
+                    end else if (capital_row ? (pixel_x < 7'd69) :
+                                               (pixel_x < 7'd68)) begin
+                        field_kind = FIELD_VAL; field_start_x = 7'd44; line_length = 4'd5;
+                    end else begin
+                        field_kind = FIELD_PNL; field_start_x = 7'd70; line_length = 4'd0;
+                    end
+                end
             end
 
-            if ((pixel_y >= 6'd21) && (pixel_y < 6'd55)) begin
+            if ((pixel_y >= 6'd19) && (pixel_y < 6'd50)) begin
                 case (row_index)
                     2'd0: begin row_position = pos0; row_price = price0; row_cost_basis = cb0; end
                     2'd1: begin row_position = pos1; row_price = price1; row_cost_basis = cb1; end
@@ -209,6 +227,9 @@ module portfolio_table_layer (
                 row_pnl_abs = row_pnl_signed[32] ?
                               -row_pnl_signed[15:0] : row_pnl_signed[15:0];
             end
+
+            if (capital_row)
+                row_value = cash;
 
             if (text_active && (pixel_y >= line_y) &&
                 (pixel_y < line_y + 6'd7)) begin
@@ -227,16 +248,26 @@ module portfolio_table_layer (
                                                 ((char_position == 0) ? 8'h4e :
                                                  (char_position == 1) ? 8'h41 :
                                                  (char_position == 2) ? 8'h4d : 8'h45) :
-                                                stock_char(row_index, char_position);
+                                                (capital_row ?
+                                                 ((char_position == 0) ? 8'h43 :
+                                                  (char_position == 1) ? 8'h41 :
+                                                  (char_position == 2) ? 8'h50 : 8'h20) :
+                                                 stock_char(row_index, char_position));
                         FIELD_POS: char_code = (pixel_y < 6'd20) ?
                                                ((char_position == 0) ? 8'h50 :
                                                 (char_position == 1) ? 8'h4f : 8'h53) :
                                                position_char(row_position, char_position);
-                        FIELD_VAL: char_code = (pixel_y < 6'd20) ?
+                        FIELD_VAL: char_code = (pixel_y < 6'd18) ?
                                                ((char_position == 0) ? 8'h56 :
                                                 (char_position == 1) ? 8'h41 :
                                                 (char_position == 2) ? 8'h4c : 8'h20) :
-                                               hex_char(value_nibble(row_value[15:0], char_position));
+                                              (capital_row ?
+                                               ((char_position == 0) ? hex_char(cash[19:16]) :
+                                                (char_position == 1) ? hex_char(cash[15:12]) :
+                                                (char_position == 2) ? hex_char(cash[11:8]) :
+                                                (char_position == 3) ? hex_char(cash[7:4]) :
+                                                hex_char(cash[3:0])) :
+                                               hex_char(value_nibble(row_value[15:0], char_position)));
                         default: char_code = (pixel_y < 6'd20) ?
                                              ((char_position == 0) ? 8'h50 :
                                               (char_position == 1) ? 8'h4e : 8'h4c) :

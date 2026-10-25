@@ -19,6 +19,7 @@ module chart_renderer (
     input  wire [1:0]  chart_mode,
     input  wire [479:0] stock_samples,
     input  wire [959:0] portfolio_samples,
+    input  wire [31:0]  live_value,
     output reg          pixel_active,
     output reg  [15:0]  pixel_color
 );
@@ -67,7 +68,10 @@ module chart_renderer (
             sample_value[4] = portfolio_samples[543:512];
             sample_value[5] = portfolio_samples[671:640];
             sample_value[6] = portfolio_samples[799:768];
-            sample_value[7] = portfolio_samples[927:896];
+            // Always include the live valuation as the newest point.  This
+            // keeps the graph responsive immediately after a fill, without
+            // waiting for another market-day sample to be shifted in.
+            sample_value[7] = live_value;
         end
 
         min_value = sample_value[0];

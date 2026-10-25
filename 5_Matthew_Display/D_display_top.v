@@ -23,6 +23,7 @@ module D_display_top #(
     input  wire        btnR,
     input  wire        btnC,
     input  wire        final_day_reached,
+    input  wire [31:0] time_remaining,
     input  wire        order_fill,
     input  wire        order_reject,
     input  wire [2:0]  order_reject_code,
@@ -238,6 +239,7 @@ module D_display_top #(
         .portfolio_cb1(portfolio_cb1),
         .portfolio_cb2(portfolio_cb2),
         .portfolio_cb3(portfolio_cb3),
+         .time_remaining(time_remaining),
         .portfolio_value(portfolio_value),
         .selected_price(selected_price),
         .pixel_data(pixel_data_game_R)
@@ -308,6 +310,7 @@ module D_display_top #(
         .portfolio_cb1(portfolio_cb1),
         .portfolio_cb2(portfolio_cb2),
         .portfolio_cb3(portfolio_cb3),
+         .time_remaining(time_remaining),
         .portfolio_value(portfolio_value),
         .selected_price(selected_price),
         .btnU(btnU_db),

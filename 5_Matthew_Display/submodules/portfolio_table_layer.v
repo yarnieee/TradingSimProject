@@ -9,6 +9,7 @@
 module portfolio_table_layer (
     input  wire [12:0] pixel_index,
     input  wire [3:0]  screen_state,
+    input  wire [3:0]  menu_selection,
     input  wire [9:0]  pos0,
     input  wire [9:0]  pos1,
     input  wire [9:0]  pos2,
@@ -26,6 +27,7 @@ module portfolio_table_layer (
     output reg  [15:0] pixel_color
 );
     localparam [3:0] PORTFOLIO = 4'd1;
+    localparam [3:0] STOCKS    = 4'd2;
 
     localparam [1:0] FIELD_NAME = 2'd0;
     localparam [1:0] FIELD_POS  = 2'd1;
@@ -50,6 +52,7 @@ module portfolio_table_layer (
     reg [15:0] row_pnl_abs;
     reg        row_pnl_negative;
     reg        capital_row;
+    reg        row_selected;
     reg [2:0] glyph_x;
     reg [2:0] glyph_y;
     wire glyph_pixel;
@@ -142,12 +145,13 @@ module portfolio_table_layer (
         row_pnl_abs = 16'd0;
         row_pnl_negative = 1'b0;
         capital_row = 1'b0;
+        row_selected = 1'b0;
         glyph_x = 3'd0;
         glyph_y = 3'd0;
         pixel_active = 1'b0;
         pixel_color = 16'h0000;
 
-        if (screen_state == PORTFOLIO) begin
+        if ((screen_state == PORTFOLIO) || (screen_state == STOCKS)) begin
             // Thin table grid; text below has priority over these lines.
             if ((pixel_x == 7'd0) || (pixel_x == 7'd95) ||
                 (pixel_x == 7'd24) || (pixel_x == 7'd42) ||
@@ -226,10 +230,24 @@ module portfolio_table_layer (
                                  $signed({1'b0, row_cost_basis});
                 row_pnl_abs = row_pnl_signed[32] ?
                               -row_pnl_signed[15:0] : row_pnl_signed[15:0];
+                // For stock rows 0..3, menu selections 2..5 encode
+                // row = menu_selection - 2. Express this as bit relations
+                // instead of a per-pixel four-bit adder/comparator.
+                if ((screen_state == STOCKS) && !menu_selection[3] &&
+                    (menu_selection[1] == ~menu_selection[2]) &&
+                    (row_index[1] == menu_selection[2]) &&
+                    (row_index[0] == menu_selection[0]))
+                    row_selected = 1'b1;
             end
 
             if (capital_row)
                 row_value = cash;
+
+            if (row_selected && (pixel_y >= line_y) &&
+                (pixel_y < line_y + 6'd7)) begin
+                pixel_active = 1'b1;
+                pixel_color = 16'h001F;
+            end
 
             if (text_active && (pixel_y >= line_y) &&
                 (pixel_y < line_y + 6'd7)) begin

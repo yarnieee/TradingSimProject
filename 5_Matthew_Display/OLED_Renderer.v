@@ -9,6 +9,10 @@ module OLED_Renderer (
     input  [13:0] quantity,
     input  [3:0]  menu_selection,
     input  [479:0] stock_samples,
+    input  [479:0] stock0_samples,
+    input  [479:0] stock1_samples,
+    input  [479:0] stock2_samples,
+    input  [479:0] stock3_samples,
     input  [959:0] portfolio_samples,
     input  [31:0] portfolio_cash,
     input  [9:0]  portfolio_pos0,
@@ -65,6 +69,7 @@ module OLED_Renderer (
     portfolio_table_layer portfolio_table_layer_inst (
         .pixel_index(pixel_index),
         .screen_state(screen_state),
+        .menu_selection(menu_selection),
         .pos0(portfolio_pos0), .pos1(portfolio_pos1),
         .pos2(portfolio_pos2), .pos3(portfolio_pos3),
         .price0(price0), .price1(price1), .price2(price2), .price3(price3),
@@ -148,6 +153,10 @@ module OLED_Button_Renderer (
     input  [13:0] quantity,
     input  [3:0]  menu_selection,
     input  [479:0] stock_samples,
+    input  [479:0] stock0_samples,
+    input  [479:0] stock1_samples,
+    input  [479:0] stock2_samples,
+    input  [479:0] stock3_samples,
     input  [959:0] portfolio_samples,
     input  [31:0] portfolio_cash,
     input  [9:0]  portfolio_pos0,
@@ -187,6 +196,8 @@ module OLED_Button_Renderer (
     wire [15:0] menu_pixel_color;
     wire chart_pixel_active;
     wire [15:0] chart_pixel_color;
+    wire        stocks_overview_active;
+    wire [15:0] stocks_overview_color;
     wire [1:0] chart_mode = (screen_state == `UI_SPECIFIC) ? 2'b01 :
                              (screen_state == `UI_PORTFOLIO) ? 2'b10 : 2'b00;
 
@@ -229,6 +240,18 @@ module OLED_Button_Renderer (
         .pixel_color(chart_pixel_color)
     );
 
+    stocks_overview_layer stocks_overview_layer_inst (
+        .pixel_index(flipped_pixel_index),
+        .screen_state(screen_state),
+        .stock0_samples(stock0_samples),
+        .stock1_samples(stock1_samples),
+        .stock2_samples(stock2_samples),
+        .stock3_samples(stock3_samples),
+        .price0(price0), .price1(price1), .price2(price2), .price3(price3),
+        .pixel_active(stocks_overview_active),
+        .pixel_color(stocks_overview_color)
+    );
+
     menu_button_text menu_button_text_inst (
         .pixel_index(flipped_pixel_index),
         .screen_state(screen_state),
@@ -247,7 +270,9 @@ module OLED_Button_Renderer (
     always @(*) begin
         // Menu buttons and their labels are drawn before the live button
         // indicators so the indicators remain visible while pressed.
-        if (menu_text_pixel)
+        if (stocks_overview_active)
+            pixel_data = stocks_overview_color;
+        else if (menu_text_pixel)
             pixel_data = 16'hFFFF;
         else if (status_pixel_active)
             pixel_data = status_pixel_color;

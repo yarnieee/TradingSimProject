@@ -23,7 +23,8 @@
 module Integration_Top #(
     parameter DAY_MAX_COUNT = 199_999_999,      // Yi An: 2 s per trading day
     parameter DEBOUNCE_CTR  = 32'd1_999_999,    // Matthew: 20 ms
-    parameter SHOW_GAME_ON_JA = 1'b1
+    parameter SHOW_GAME_ON_JA = 1'b1,
+    parameter FINAL_TRADING_DAY = 32'd30       // Game ends after this many days
 ) (
     input  wire        clk,
     input  wire        rst,
@@ -66,6 +67,8 @@ module Integration_Top #(
     wire [9:0]   pos0, pos1, pos2, pos3;
     wire [15:0]  price0, price1, price2, price3;
     reg          tick;
+    reg  [31:0]  trading_day_count;
+    wire         final_day_reached;
     wire [31:0]  portfolio_value;
     wire [959:0] portfolio_samples_30;
 
@@ -83,6 +86,7 @@ module Integration_Top #(
     ) matthew_display (
         .clk(clk), .rst(sys_reset),
         .btnU(btnU), .btnD(btnD), .btnL(btnL), .btnR(btnR), .btnC(btnC),
+        .final_day_reached(final_day_reached),
         .left_pixel(ticket_pixel), .left_x(xL), .left_y(yL),
         .screen_state(screen_state), .quantity(quantity), .sel_stock(sel_stock),
         .price0(price0), .price1(price1), .price2(price2), .price3(price3),
@@ -159,6 +163,7 @@ module Integration_Top #(
         if (sys_reset) begin
             market_date_d <= 32'd0;
             tick          <= 1'b0;
+            trading_day_count <= 32'd0;
         end else begin
             market_date_d <= amd_date;
             tick          <= all_stocks_ready
@@ -166,8 +171,17 @@ module Integration_Top #(
                           && (amd_date == stock2_date)
                           && (amd_date == stock3_date)
                           && (amd_date != market_date_d);
+            if (tick && (trading_day_count < FINAL_TRADING_DAY))
+                trading_day_count <= trading_day_count + 1'b1;
         end
     end
+
+    // tick is a one-clock pulse for a completed market-day update.  The
+    // counter is compared to the preceding day so the last update itself is
+    // included before the display enters GAME_END.
+    assign final_day_reached = (FINAL_TRADING_DAY != 0)
+                             && tick
+                             && (trading_day_count == (FINAL_TRADING_DAY - 1'b1));
 
     // ================================================================ TRICIA: ledger
     wire [31:0] cb0, cb1, cb2, cb3;

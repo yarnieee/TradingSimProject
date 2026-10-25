@@ -22,6 +22,7 @@ module D_display_top #(
     input  wire        btnL,
     input  wire        btnR,
     input  wire        btnC,
+    input  wire        final_day_reached,
     // External page for JA when SHOW_GAME_ON_JA == 0.
     input  wire [15:0] left_pixel,
     output wire [6:0]  left_x,
@@ -98,6 +99,7 @@ module D_display_top #(
         .btnL(btnL_p),
         .btnR(btnR_p),
         .btnC(btnC_p),
+        .final_day_reached(final_day_reached),
         .screen_state(screen_state),
         .quantity(quantity),
         .selected_stock(selected_stock),

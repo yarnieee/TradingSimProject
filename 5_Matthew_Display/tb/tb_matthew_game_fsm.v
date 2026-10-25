@@ -8,16 +8,18 @@ module tb_matthew_game_fsm;
     always #5 clk = ~clk;
     reg rst = 1;
     reg U = 0, D = 0, L = 0, R = 0, C = 0;
+    reg final_day_reached = 0;
     wire [3:0]  screen_state;
     wire [13:0] quantity;
     wire [2:0]  selected_stock;
 
     game_fsm dut (.clk(clk), .rst(rst), .btnU(U), .btnD(D), .btnL(L), .btnR(R), .btnC(C),
+                  .final_day_reached(final_day_reached),
                   .screen_state(screen_state), .quantity(quantity),
                   .selected_stock(selected_stock));
 
     localparam TITLE = 0, PORTFOLIO = 1, STOCKS = 2, SPECIFIC = 3, BUY = 4, SELL = 5,
-               QUANTITY = 6, CONFIRM = 7;
+               QUANTITY = 6, CONFIRM = 7, GAME_END = 8;
     localparam BU = 0, BD = 1, BL = 2, BR = 3, BC = 4;
 
     integer n_pass = 0, n_fail = 0;
@@ -118,6 +120,18 @@ module tb_matthew_game_fsm;
 
         rst = 1; @(negedge clk); rst = 0; @(negedge clk);
         check(screen_state == TITLE && quantity == 0, "reset returns to title, quantity 0");
+
+        // The final-day pulse is accepted from an active screen and the
+        // game-end screen remains terminal even if a button is pressed.
+        press(BC);
+        check(screen_state == PORTFOLIO, "restart reaches portfolio before final-day test");
+        final_day_reached = 1;
+        @(negedge clk);
+        final_day_reached = 0;
+        @(negedge clk);
+        check(screen_state == GAME_END, "final trading day enters game-end screen");
+        press(BC);
+        check(screen_state == GAME_END, "game-end screen is terminal");
 
         if (n_fail == 0) $display("PASS: tb_matthew_game_fsm (%0d checks)", n_pass);
         else             $display("FAIL: tb_matthew_game_fsm (%0d failed, %0d passed)", n_fail, n_pass);

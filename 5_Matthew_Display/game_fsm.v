@@ -10,6 +10,7 @@ module game_fsm (
     input        btnL,
     input        btnR,
     input        btnC,
+    input        final_day_reached,
     output reg [3:0]  screen_state,
     output reg [13:0] quantity,
     output reg [2:0]  selected_stock,
@@ -75,7 +76,13 @@ module game_fsm (
         next_buy_cursor = buy_cursor;
         next_sell_cursor = sell_cursor;
 
-        case (screen_state)
+        // Once the market reaches its configured final trading day, leave
+        // every active game screen for the terminal game-end screen.  The
+        // title screen remains startable if the board is powered on after
+        // the market has already completed its run.
+        if (final_day_reached && (screen_state != TITLE)) begin
+            next_state = GAME_END;
+        end else case (screen_state)
             TITLE: begin
                 if (btnC) begin
                     next_state = PORTFOLIO;

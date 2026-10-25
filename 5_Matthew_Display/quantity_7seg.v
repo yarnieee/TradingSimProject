@@ -1,4 +1,5 @@
 `timescale 1ns / 1ps
+`include "trading_defs.vh"
 
 // Displays the binary quantity as four multiplexed decimal digits.
 module quantity_7seg (
@@ -76,7 +77,7 @@ module quantity_7seg (
         // Basys3 seven-segment display is active-low. While editing a
         // quantity, the currently selected digit is blanked during the
         // blink phase so it visibly blinks.
-        if ((screen_state == 4'd6) && blink_phase &&
+        if ((screen_state == `UI_QUANTITY) && blink_phase &&
             (digit_select == quantity_cursor)) begin
             seg = 8'b11111111;
         end else begin

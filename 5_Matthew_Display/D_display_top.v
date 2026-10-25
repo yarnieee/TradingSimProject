@@ -145,29 +145,21 @@ module D_display_top #(
     );
 
     // ================================================================ order outputs
-    localparam [3:0] S_TITLE    = 4'd0;
-    localparam [3:0] S_BUY      = 4'd4;
-    localparam [3:0] S_SELL     = 4'd5;
-    localparam [3:0] S_ORDER_REVIEW = 4'd7;
-    localparam [3:0] S_ORDER_RESULT = 4'd8;
-    localparam [3:0] S_TRADE_RESULT = 4'd9;
-    localparam [3:0] S_GAME_END     = 4'd10;
-
     reg [3:0] state_d;
     always @(posedge clk) begin
         if (rst)
-            state_d <= S_TITLE;
+            state_d <= `UI_TITLE;
         else
             state_d <= screen_state;
     end
 
     // Generate a one-clock order request when the review screen is submitted.
-    assign ord_req  = (screen_state == S_ORDER_RESULT) &&
-                      (state_d == S_ORDER_REVIEW);
+    assign ord_req  = (screen_state == `UI_ORDER_RESULT) &&
+                      (state_d == `UI_ORDER_REVIEW);
     assign ord_side = trade_side;
 
-    assign game_state = ((screen_state == S_TITLE) ||
-                         (screen_state == S_GAME_END)) ?
+    assign game_state = ((screen_state == `UI_TITLE) ||
+                         (screen_state == `UI_GAME_END)) ?
                         2'd0 : 2'd1;
 
     // ================================================================ OLED clocks

@@ -1,4 +1,5 @@
 `timescale 1ns / 1ps
+`include "trading_defs.vh"
 
 // Shared text layer. Characters use a five-pixel glyph and one-pixel gap.
 // Long screen names are split across two lines so they fit on the 96x64 OLED.
@@ -10,17 +11,17 @@ module text_layer (
     output reg    text_pixel
 );
 
-    localparam TITLE       = 4'd0;
-    localparam PORTFOLIO   = 4'd1;
-    localparam STOCKS      = 4'd2;
-    localparam SPECIFIC    = 4'd3;
-    localparam BUY_STOCK   = 4'd4;
-    localparam SELL_STOCK  = 4'd5;
-    localparam QUANTITY    = 4'd6;
-    localparam ORDER_REVIEW = 4'd7;
-    localparam ORDER_RESULT = 4'd8;
-    localparam TRADE_RESULT = 4'd9;
-    localparam GAME_END     = 4'd10;
+    localparam TITLE        = `UI_TITLE;
+    localparam PORTFOLIO    = `UI_PORTFOLIO;
+    localparam STOCKS       = `UI_STOCKS;
+    localparam SPECIFIC     = `UI_SPECIFIC;
+    localparam BUY_STOCK    = `UI_BUY_STOCK;
+    localparam SELL_STOCK   = `UI_SELL_STOCK;
+    localparam QUANTITY     = `UI_QUANTITY;
+    localparam ORDER_REVIEW = `UI_ORDER_REVIEW;
+    localparam ORDER_RESULT = `UI_ORDER_RESULT;
+    localparam TRADE_RESULT = `UI_TRADE_RESULT;
+    localparam GAME_END     = `UI_GAME_END;
 
     wire [6:0] pixel_x = pixel_index % 96;
     wire [5:0] pixel_y = pixel_index / 96;

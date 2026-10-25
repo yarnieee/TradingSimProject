@@ -1,4 +1,5 @@
 `timescale 1ns / 1ps
+`include "trading_defs.vh"
 
 // Shared OLED renderer for all game states.
 module OLED_Renderer (
@@ -24,8 +25,8 @@ module OLED_Renderer (
     wire [15:0] menu_pixel_color;
     wire chart_pixel_active;
     wire [15:0] chart_pixel_color;
-    wire [1:0] chart_mode = (screen_state == 4'd3) ? 2'b01 :
-                             (screen_state == 4'd1) ? 2'b10 : 2'b00;
+    wire [1:0] chart_mode = (screen_state == `UI_SPECIFIC) ? 2'b01 :
+                             (screen_state == `UI_PORTFOLIO) ? 2'b10 : 2'b00;
 
     text_layer text_layer_inst (
         .pixel_index(pixel_index),
@@ -132,8 +133,8 @@ module OLED_Button_Renderer (
     wire [15:0] menu_pixel_color;
     wire chart_pixel_active;
     wire [15:0] chart_pixel_color;
-    wire [1:0] chart_mode = (screen_state == 4'd3) ? 2'b01 :
-                             (screen_state == 4'd1) ? 2'b10 : 2'b00;
+    wire [1:0] chart_mode = (screen_state == `UI_SPECIFIC) ? 2'b01 :
+                             (screen_state == `UI_PORTFOLIO) ? 2'b10 : 2'b00;
 
     text_layer text_layer_inst (
         .pixel_index(flipped_pixel_index),
@@ -227,15 +228,15 @@ module menu_buttons (
     output reg [15:0] pixel_color
 );
 
-    localparam TITLE     = 4'd0;
-    localparam PORTFOLIO = 4'd1;
-    localparam STOCKS    = 4'd2;
-    localparam SPECIFIC  = 4'd3;
-    localparam BUY_STOCK = 4'd4;
-    localparam SELL_STOCK= 4'd5;
-    localparam ORDER_REVIEW = 4'd7;
-    localparam ORDER_RESULT = 4'd8;
-    localparam TRADE_RESULT = 4'd9;
+    localparam TITLE     = `UI_TITLE;
+    localparam PORTFOLIO = `UI_PORTFOLIO;
+    localparam STOCKS    = `UI_STOCKS;
+    localparam SPECIFIC  = `UI_SPECIFIC;
+    localparam BUY_STOCK = `UI_BUY_STOCK;
+    localparam SELL_STOCK= `UI_SELL_STOCK;
+    localparam ORDER_REVIEW = `UI_ORDER_REVIEW;
+    localparam ORDER_RESULT = `UI_ORDER_RESULT;
+    localparam TRADE_RESULT = `UI_TRADE_RESULT;
 
     localparam NAV_PORTFOLIO = 4'd0;
     localparam NAV_STOCKS    = 4'd1;
@@ -435,8 +436,8 @@ module menu_button_text_legacy (
     output reg    text_pixel
 );
 
-    localparam TITLE     = 4'd0;
-    localparam PORTFOLIO = 4'd1;
+    localparam TITLE     = `UI_TITLE;
+    localparam PORTFOLIO = `UI_PORTFOLIO;
 
     wire [6:0] pixel_x = pixel_index % 96;
     wire [5:0] pixel_y = pixel_index / 96;
@@ -571,12 +572,12 @@ module menu_button_text (
     output reg    text_pixel
 );
 
-    localparam TITLE     = 4'd0;
-    localparam PORTFOLIO = 4'd1;
-    localparam STOCKS    = 4'd2;
-    localparam SPECIFIC  = 4'd3;
-    localparam BUY_STOCK = 4'd4;
-    localparam SELL_STOCK= 4'd5;
+    localparam TITLE     = `UI_TITLE;
+    localparam PORTFOLIO = `UI_PORTFOLIO;
+    localparam STOCKS    = `UI_STOCKS;
+    localparam SPECIFIC  = `UI_SPECIFIC;
+    localparam BUY_STOCK = `UI_BUY_STOCK;
+    localparam SELL_STOCK= `UI_SELL_STOCK;
 
     localparam NAV_PORTFOLIO = 4'd0;
     localparam NAV_STOCKS    = 4'd1;
@@ -591,9 +592,9 @@ module menu_button_text (
     localparam ACTION_CANCEL = 4'd10;
     localparam ACTION_QTY    = 4'd11;
     localparam ACTION_CONFIRM= 4'd12;
-    localparam ORDER_REVIEW  = 4'd7;
-    localparam ORDER_RESULT  = 4'd8;
-    localparam TRADE_RESULT  = 4'd9;
+    localparam ORDER_REVIEW  = `UI_ORDER_REVIEW;
+    localparam ORDER_RESULT  = `UI_ORDER_RESULT;
+    localparam TRADE_RESULT  = `UI_TRADE_RESULT;
     localparam NO_LABEL      = 4'hF;
 
     wire [6:0] pixel_x = pixel_index % 96;

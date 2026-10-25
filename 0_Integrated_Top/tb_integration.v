@@ -24,9 +24,11 @@ module tb_integration;
     );
 
     // game_fsm screens
-    localparam S_TITLE = 0, S_PORTFOLIO = 1, S_STOCKS = 2, S_SPECIFIC = 3, S_BUY = 4,
-               S_SELL = 5, S_QUANTITY = 6, S_ORDER_REVIEW = 7,
-               S_ORDER_RESULT = 8, S_TRADE_RESULT = 9;
+    localparam S_TITLE = `UI_TITLE, S_PORTFOLIO = `UI_PORTFOLIO,
+               S_STOCKS = `UI_STOCKS, S_SPECIFIC = `UI_SPECIFIC,
+               S_BUY = `UI_BUY_STOCK, S_SELL = `UI_SELL_STOCK,
+               S_QUANTITY = `UI_QUANTITY, S_ORDER_REVIEW = `UI_ORDER_REVIEW,
+               S_ORDER_RESULT = `UI_ORDER_RESULT, S_TRADE_RESULT = `UI_TRADE_RESULT;
 
     integer n_pass = 0, n_fail = 0;
     task check;

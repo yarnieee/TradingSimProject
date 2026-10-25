@@ -1,4 +1,5 @@
 `timescale 1ns / 1ps
+`include "trading_defs.vh"
 
 // tb_matthew_game_fsm: checks Matthew's game_fsm on its own (button pulses in,
 // screen_state and quantity out). Covers every screen transition in the
@@ -22,9 +23,12 @@ module tb_matthew_game_fsm;
                   .screen_state(screen_state), .quantity(quantity),
                   .selected_stock(selected_stock));
 
-    localparam TITLE = 0, PORTFOLIO = 1, STOCKS = 2, SPECIFIC = 3, BUY = 4, SELL = 5,
-               QUANTITY = 6, ORDER_REVIEW = 7, ORDER_RESULT = 8,
-               TRADE_RESULT = 9, GAME_END = 10;
+    localparam TITLE = `UI_TITLE, PORTFOLIO = `UI_PORTFOLIO,
+               STOCKS = `UI_STOCKS, SPECIFIC = `UI_SPECIFIC,
+               BUY = `UI_BUY_STOCK, SELL = `UI_SELL_STOCK,
+               QUANTITY = `UI_QUANTITY, ORDER_REVIEW = `UI_ORDER_REVIEW,
+               ORDER_RESULT = `UI_ORDER_RESULT, TRADE_RESULT = `UI_TRADE_RESULT,
+               GAME_END = `UI_GAME_END;
     localparam BU = 0, BD = 1, BL = 2, BR = 3, BC = 4;
 
     integer n_pass = 0, n_fail = 0;

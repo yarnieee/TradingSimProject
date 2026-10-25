@@ -32,8 +32,12 @@ module D_display_top #(
     output wire [1:0]  sel_stock,
     input  wire [15:0] price0,
     input  wire [15:0] price1,
+    input  wire [15:0] price2,
+    input  wire [15:0] price3,
     input  wire [479:0] stock0_samples_30,
     input  wire [479:0] stock1_samples_30,
+    input  wire [479:0] stock2_samples_30,
+    input  wire [479:0] stock3_samples_30,
     input  wire [31:0] portfolio_cash,
     input  wire [9:0]  portfolio_pos0,
     input  wire [9:0]  portfolio_pos1,
@@ -103,9 +107,18 @@ module D_display_top #(
 
     assign sel_stock = selected_stock[1:0];
 
-    wire [15:0] selected_price = (selected_stock == 3'd0) ? price0 : price1;
+    // The chart and selected-stock price follow the same four-stock index
+    // that is sent to the order engine. This keeps the specific-stock screen
+    // and its live graph on the same stock after the model expansion.
+    wire [15:0] selected_price = (selected_stock == 3'd0) ? price0 :
+                                 (selected_stock == 3'd1) ? price1 :
+                                 (selected_stock == 3'd2) ? price2 : price3;
     wire [479:0] selected_samples_30 = (selected_stock == 3'd0) ?
-                                       stock0_samples_30 : stock1_samples_30;
+                                       stock0_samples_30 :
+                                       (selected_stock == 3'd1) ?
+                                       stock1_samples_30 :
+                                       (selected_stock == 3'd2) ?
+                                       stock2_samples_30 : stock3_samples_30;
 
     quantity_7seg quantity_7seg_inst (
         .clk(clk),

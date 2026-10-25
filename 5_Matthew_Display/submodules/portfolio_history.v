@@ -12,17 +12,25 @@ module portfolio_history #(
     input  wire [31:0]                  cash,
     input  wire [9:0]                   pos0,
     input  wire [9:0]                   pos1,
+    input  wire [9:0]                   pos2,
+    input  wire [9:0]                   pos3,
     input  wire [15:0]                  price0,
     input  wire [15:0]                  price1,
+    input  wire [15:0]                  price2,
+    input  wire [15:0]                  price3,
     output wire [31:0]                  portfolio_value,
     output reg  [(SAMPLE_COUNT*32)-1:0] portfolio_samples
 );
 
     wire [31:0] position_value0 = pos0 * price0;
     wire [31:0] position_value1 = pos1 * price1;
+    wire [31:0] position_value2 = pos2 * price2;
+    wire [31:0] position_value3 = pos3 * price3;
     wire [32:0] total_value = {1'b0, cash}
                             + {1'b0, position_value0}
-                            + {1'b0, position_value1};
+                            + {1'b0, position_value1}
+                            + {1'b0, position_value2}
+                            + {1'b0, position_value3};
 
     assign portfolio_value = total_value[31:0];
 

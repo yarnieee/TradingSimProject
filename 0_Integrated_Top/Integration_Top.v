@@ -85,9 +85,11 @@ module Integration_Top #(
         .btnU(btnU), .btnD(btnD), .btnL(btnL), .btnR(btnR), .btnC(btnC),
         .left_pixel(ticket_pixel), .left_x(xL), .left_y(yL),
         .screen_state(screen_state), .quantity(quantity), .sel_stock(sel_stock),
-        .price0(price0), .price1(price1),
+        .price0(price0), .price1(price1), .price2(price2), .price3(price3),
         .stock0_samples_30(amd_samples_30),
         .stock1_samples_30(mcd_samples_30),
+        .stock2_samples_30(stock2_samples_30),
+        .stock3_samples_30(stock3_samples_30),
         .portfolio_cash(cash), .portfolio_pos0(pos0), .portfolio_pos1(pos1),
         .portfolio_value(portfolio_value),
         .portfolio_samples_30(portfolio_samples_30),
@@ -101,8 +103,8 @@ module Integration_Top #(
     // both stocks at the plain file names. [ASSUMPTION: Vivado finds .mem files
     // added to the project by name, in synthesis and simulation. Not tested here.]
     // Current prices and history buses for all four stocks are routed through
-    // this integration level. The display currently consumes the first two
-    // history buses; the remaining buses are ready for the chart expansion.
+    // this integration level. The selected-stock chart consumes the matching
+    // history bus for any of the four stock selections.
     A_top #(.DAY_MAX_COUNT(DAY_MAX_COUNT)) yian_market (
         .clk(clk), .rst(sys_reset),
         .market_state(market_state),
@@ -188,8 +190,8 @@ module Integration_Top #(
     // that drives the order book. It uses live cash, positions, and prices.
     portfolio_history portfolio_history_inst (
         .clk(clk), .rst(sys_reset), .tick(tick),
-        .cash(cash), .pos0(pos0), .pos1(pos1),
-        .price0(price0), .price1(price1),
+        .cash(cash), .pos0(pos0), .pos1(pos1), .pos2(pos2), .pos3(pos3),
+        .price0(price0), .price1(price1), .price2(price2), .price3(price3),
         .portfolio_value(portfolio_value),
         .portfolio_samples(portfolio_samples_30)
     );

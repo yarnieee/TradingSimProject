@@ -126,7 +126,8 @@ module text_layer (
                     if (line == 0) text_length = 12;
                 end
                 PORTFOLIO: begin
-                    if (line == 0) text_length = 16;
+                    // The portfolio view has dedicated visual status layers.
+                    text_length = 0;
                 end
                 STOCKS: begin
                     if (line == 0) text_length = 13;

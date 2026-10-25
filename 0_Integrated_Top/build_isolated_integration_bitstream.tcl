@@ -50,6 +50,8 @@ set source_files [list \
     "$repo/5_Matthew_Display/submodules/font_renderer.v" \
     "$repo/5_Matthew_Display/submodules/portfolio_history.v" \
     "$repo/5_Matthew_Display/submodules/portfolio_info_layer.v" \
+    "$repo/5_Matthew_Display/submodules/portfolio_status_layer.v" \
+    "$repo/5_Matthew_Display/submodules/portfolio_table_layer.v" \
     "$repo/5_Matthew_Display/submodules/text_layer.v" \
     "$repo/5_Matthew_Display/submodules/title_art_renderer.v" \
     "$repo/5_Matthew_Display/title_art_left.mem" \

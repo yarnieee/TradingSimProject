@@ -60,19 +60,7 @@ module portfolio_info_layer (
         glyph_y     = 3'd0;
         line_start_x = 7'd2;
 
-        if (screen_state == PORTFOLIO) begin
-            if ((pixel_y >= 6'd44) && (pixel_y < 6'd51)) begin
-                line_select = 2'd0;
-                line_y = 6'd44;
-                line_length = 5'd13; // C + 5 hex digits + V + 5 hex digits
-                line_active = 1'b1;
-            end else if ((pixel_y >= 6'd54) && (pixel_y < 6'd61)) begin
-                line_select = 2'd1;
-                line_y = 6'd54;
-                line_length = 5'd11; // A0000 M0000
-                line_active = 1'b1;
-            end
-        end else if ((screen_state == SPECIFIC) &&
+        if ((screen_state == SPECIFIC) &&
                      (pixel_y >= 6'd24) && (pixel_y < 6'd31)) begin
             line_select = 2'd0;
             line_y = 6'd24;
@@ -101,38 +89,7 @@ module portfolio_info_layer (
             glyph_x = pixel_x - line_start_x - (char_position * 3'd6);
             glyph_y = pixel_y - line_y;
 
-            if (screen_state == PORTFOLIO) begin
-                if (line_select == 2'd0) begin
-                    case (char_position)
-                        5'd0:  char_code = 8'h43; // C
-                        5'd1:  char_code = hex_char(cash[19:16]);
-                        5'd2:  char_code = hex_char(cash[15:12]);
-                        5'd3:  char_code = hex_char(cash[11:8]);
-                        5'd4:  char_code = hex_char(cash[7:4]);
-                        5'd5:  char_code = hex_char(cash[3:0]);
-                        5'd6:  char_code = 8'h20;
-                        5'd7:  char_code = 8'h56; // V
-                        5'd8:  char_code = hex_char(portfolio_value[19:16]);
-                        5'd9:  char_code = hex_char(portfolio_value[15:12]);
-                        5'd10: char_code = hex_char(portfolio_value[11:8]);
-                        5'd11: char_code = hex_char(portfolio_value[7:4]);
-                        default: char_code = hex_char(portfolio_value[3:0]);
-                    endcase
-                end else begin
-                    case (char_position)
-                        5'd0:  char_code = 8'h41; // A
-                        5'd1:  char_code = hex_char({2'b00, pos0[9:8]});
-                        5'd2:  char_code = hex_char(pos0[7:4]);
-                        5'd3:  char_code = hex_char(pos0[3:0]);
-                        5'd4:  char_code = 8'h20;
-                        5'd5:  char_code = 8'h4D; // M
-                        5'd6:  char_code = hex_char({2'b00, pos1[9:8]});
-                        5'd7:  char_code = hex_char(pos1[7:4]);
-                        5'd8:  char_code = hex_char(pos1[3:0]);
-                        default: char_code = 8'h20;
-                    endcase
-                end
-            end else if (screen_state == SPECIFIC) begin
+            if (screen_state == SPECIFIC) begin
                 case (char_position)
                     5'd0: char_code = 8'h50; // P
                     5'd1: char_code = hex_char(selected_price[15:12]);

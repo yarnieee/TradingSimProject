@@ -71,6 +71,7 @@ module Integration_Top #(
     wire         final_day_reached;
     wire [31:0]  portfolio_value;
     wire [959:0] portfolio_samples_30;
+    wire [31:0]  cb0, cb1, cb2, cb3;
 
     // ================================================================ MATTHEW: buttons, screens, 7-seg, both OLEDs
     wire [3:0]  screen_state;
@@ -102,6 +103,8 @@ module Integration_Top #(
         .stock_ready0(amd_ready), .stock_ready1(mcd_ready),
         .stock_ready2(stock2_ready), .stock_ready3(stock3_ready),
         .portfolio_value(portfolio_value),
+        .portfolio_cb0(cb0), .portfolio_cb1(cb1),
+        .portfolio_cb2(cb2), .portfolio_cb3(cb3),
         .portfolio_samples_30(portfolio_samples_30),
         .ord_req(ord_req), .ord_side(ord_side), .game_state(game_state),
         .JA(JA), .JB(JB), .an(an), .seg(seg)
@@ -190,7 +193,6 @@ module Integration_Top #(
                              && (trading_day_count == (FINAL_TRADING_DAY - 1'b1));
 
     // ================================================================ TRICIA: ledger
-    wire [31:0] cb0, cb1, cb2, cb3;
     wire signed [31:0] realised;
     wire        ledger_busy, ledger_err;
     wire        fill_side;

@@ -13,6 +13,16 @@ module OLED_Renderer (
     input  [31:0] portfolio_cash,
     input  [9:0]  portfolio_pos0,
     input  [9:0]  portfolio_pos1,
+    input  [9:0]  portfolio_pos2,
+    input  [9:0]  portfolio_pos3,
+    input  [15:0] price0,
+    input  [15:0] price1,
+    input  [15:0] price2,
+    input  [15:0] price3,
+    input  [31:0] portfolio_cb0,
+    input  [31:0] portfolio_cb1,
+    input  [31:0] portfolio_cb2,
+    input  [31:0] portfolio_cb3,
     input  [31:0] portfolio_value,
     input  [15:0] selected_price,
     output reg [15:0] pixel_data
@@ -20,6 +30,8 @@ module OLED_Renderer (
 
     wire text_pixel;
     wire info_pixel;
+    wire table_pixel_active;
+    wire [15:0] table_pixel_color;
     wire menu_text_pixel;
     wire menu_pixel_active;
     wire [15:0] menu_pixel_color;
@@ -45,6 +57,18 @@ module OLED_Renderer (
         .portfolio_value(portfolio_value),
         .selected_price(selected_price),
         .text_pixel(info_pixel)
+    );
+
+    portfolio_table_layer portfolio_table_layer_inst (
+        .pixel_index(pixel_index),
+        .screen_state(screen_state),
+        .pos0(portfolio_pos0), .pos1(portfolio_pos1),
+        .pos2(portfolio_pos2), .pos3(portfolio_pos3),
+        .price0(price0), .price1(price1), .price2(price2), .price3(price3),
+        .cb0(portfolio_cb0), .cb1(portfolio_cb1),
+        .cb2(portfolio_cb2), .cb3(portfolio_cb3),
+        .pixel_active(table_pixel_active),
+        .pixel_color(table_pixel_color)
     );
 
     chart_renderer chart_renderer_inst (
@@ -75,6 +99,8 @@ module OLED_Renderer (
     always @(*) begin
         if (menu_text_pixel)
             pixel_data = 16'hFFFF;
+        else if (table_pixel_active)
+            pixel_data = table_pixel_color;
         else if (info_pixel)
             pixel_data = 16'hFFE0;
         else if (menu_pixel_active)
@@ -111,6 +137,16 @@ module OLED_Button_Renderer (
     input  [31:0] portfolio_cash,
     input  [9:0]  portfolio_pos0,
     input  [9:0]  portfolio_pos1,
+    input  [9:0]  portfolio_pos2,
+    input  [9:0]  portfolio_pos3,
+    input  [15:0] price0,
+    input  [15:0] price1,
+    input  [15:0] price2,
+    input  [15:0] price3,
+    input  [31:0] portfolio_cb0,
+    input  [31:0] portfolio_cb1,
+    input  [31:0] portfolio_cb2,
+    input  [31:0] portfolio_cb3,
     input  [31:0] portfolio_value,
     input  [15:0] selected_price,
     input         btnU,
@@ -128,6 +164,8 @@ module OLED_Button_Renderer (
     wire [12:0] flipped_pixel_index = (display_y * 13'd96) + display_x;
     wire text_pixel;
     wire info_pixel;
+    wire status_pixel_active;
+    wire [15:0] status_pixel_color;
     wire menu_text_pixel;
     wire menu_pixel_active;
     wire [15:0] menu_pixel_color;
@@ -153,6 +191,15 @@ module OLED_Button_Renderer (
         .portfolio_value(portfolio_value),
         .selected_price(selected_price),
         .text_pixel(info_pixel)
+    );
+
+    portfolio_status_layer portfolio_status_layer_inst (
+        .pixel_index(flipped_pixel_index),
+        .screen_state(screen_state),
+        .cash(portfolio_cash),
+        .portfolio_value(portfolio_value),
+        .pixel_active(status_pixel_active),
+        .pixel_color(status_pixel_color)
     );
 
     chart_renderer chart_renderer_inst (
@@ -185,6 +232,8 @@ module OLED_Button_Renderer (
         // indicators so the indicators remain visible while pressed.
         if (menu_text_pixel)
             pixel_data = 16'hFFFF;
+        else if (status_pixel_active)
+            pixel_data = status_pixel_color;
         else if (info_pixel)
             pixel_data = 16'hFFE0;
         else if (menu_pixel_active)

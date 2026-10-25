@@ -34,6 +34,7 @@ module game_fsm (
     reg [13:0] next_quantity;
     reg        quantity_return_state;
     reg        next_quantity_return_state;
+    reg        next_trade_side;
     reg [1:0] next_quantity_cursor;
 
     // Menu cursors are intentionally kept separate for each screen.
@@ -69,6 +70,7 @@ module game_fsm (
         next_state = screen_state;
         next_quantity = quantity;
         next_quantity_return_state = quantity_return_state;
+        next_trade_side = trade_side;
         next_selected_stock = selected_stock;
         next_trade_result_code = trade_result_code;
         next_trade_result_success = trade_result_success;
@@ -175,10 +177,12 @@ module game_fsm (
                         0: begin
                             next_state = `UI_BUY_STOCK;
                             next_buy_cursor = 0;
+                            next_trade_side = RETURN_BUY;
                         end
                         1: begin
                             next_state = `UI_SELL_STOCK;
                             next_sell_cursor = 0;
+                            next_trade_side = RETURN_SELL;
                         end
                         2: begin
                             next_state = `UI_STOCKS;
@@ -198,6 +202,7 @@ module game_fsm (
             end
 
             `UI_BUY_STOCK: begin
+                next_trade_side = RETURN_BUY;
                 if (btnR && (buy_cursor < 2))
                     next_buy_cursor = buy_cursor + 1'b1;
                 if (btnL && (buy_cursor > 0))
@@ -223,6 +228,7 @@ module game_fsm (
             end
 
             `UI_SELL_STOCK: begin
+                next_trade_side = RETURN_SELL;
                 if (btnR && (sell_cursor < 2))
                     next_sell_cursor = sell_cursor + 1'b1;
                 if (btnL && (sell_cursor > 0))
@@ -353,7 +359,7 @@ module game_fsm (
             selected_stock <= next_selected_stock;
             trade_result_code <= next_trade_result_code;
             trade_result_success <= next_trade_result_success;
-            trade_side <= quantity_return_state;
+            trade_side <= next_trade_side;
             quantity_return_state <= next_quantity_return_state;
             quantity_cursor <= next_quantity_cursor;
             portfolio_cursor <= next_portfolio_cursor;

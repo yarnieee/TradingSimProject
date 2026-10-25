@@ -18,6 +18,7 @@ module tb_matthew_game_fsm;
     wire [13:0] quantity;
     wire [2:0]  selected_stock;
     wire [3:0]  menu_selection;
+    wire        trade_side;
 
     game_fsm dut (.clk(clk), .rst(rst), .btnU(U), .btnD(D), .btnL(L), .btnR(R), .btnC(C),
                   .final_day_reached(final_day_reached),
@@ -25,7 +26,8 @@ module tb_matthew_game_fsm;
                   .order_reject_code(order_reject_code),
                   .order_valid(order_valid), .validation_code(validation_code),
                   .screen_state(screen_state), .quantity(quantity),
-                  .selected_stock(selected_stock), .menu_selection(menu_selection));
+                  .selected_stock(selected_stock), .menu_selection(menu_selection),
+                  .trade_side(trade_side));
 
     localparam TITLE = `UI_TITLE, PORTFOLIO = `UI_PORTFOLIO,
                STOCKS = `UI_STOCKS, SPECIFIC = `UI_SPECIFIC,
@@ -146,7 +148,8 @@ module tb_matthew_game_fsm;
         // sell path
         press(BR); press(BC); press(BD); press(BC);    // stocks, stock 0
         press(BR); press(BC);
-        check(screen_state == SELL, "specific --R, C--> sell screen");
+        check(screen_state == SELL && trade_side == 1'b1,
+              "specific --R, C--> sell screen with sell side latched");
         press(BR); press(BC);
         check(screen_state == QUANTITY && quantity == 0, "sell --R, C--> quantity, reset to 0");
         presses(BU, 5); press(BC);

@@ -155,6 +155,17 @@ module D_display_top #(
     wire [9:0] selected_position = (selected_stock == 3'd0) ? portfolio_pos0 :
                                    (selected_stock == 3'd1) ? portfolio_pos1 :
                                    (selected_stock == 3'd2) ? portfolio_pos2 : portfolio_pos3;
+    wire [31:0] selected_cost_basis = (selected_stock == 3'd0) ? portfolio_cb0 :
+                                      (selected_stock == 3'd1) ? portfolio_cb1 :
+                                      (selected_stock == 3'd2) ? portfolio_cb2 : portfolio_cb3;
+    wire [31:0] selected_value = selected_position * selected_price;
+    wire signed [32:0] selected_pnl = $signed({1'b0, selected_value}) -
+                                       $signed({1'b0, selected_cost_basis});
+    wire [15:0] selected_reference_price = selected_samples_30[15:0];
+    wire selected_change_negative = selected_price < selected_reference_price;
+    wire [15:0] selected_change = selected_change_negative ?
+                                  (selected_reference_price - selected_price) :
+                                  (selected_price - selected_reference_price);
     wire [16:0] selected_ask_full = {1'b0, selected_price} + 17'd5;
     wire [15:0] selected_ask = selected_ask_full[16] ? 16'hFFFF : selected_ask_full[15:0];
     wire [31:0] buy_notional = {16'd0, selected_ask} * {18'd0, quantity};
@@ -246,6 +257,11 @@ module D_display_top #(
          .time_remaining(time_remaining),
         .portfolio_value(portfolio_value),
         .selected_price(selected_price),
+        .selected_change(selected_change),
+        .selected_change_negative(selected_change_negative),
+        .selected_position(selected_position),
+        .selected_value(selected_value),
+        .selected_pnl(selected_pnl),
         .pixel_data(pixel_data_game_R)
     );
 
@@ -321,6 +337,11 @@ module D_display_top #(
          .time_remaining(time_remaining),
         .portfolio_value(portfolio_value),
         .selected_price(selected_price),
+        .selected_change(selected_change),
+        .selected_change_negative(selected_change_negative),
+        .selected_position(selected_position),
+        .selected_value(selected_value),
+        .selected_pnl(selected_pnl),
         .btnU(btnU_db),
         .btnD(btnD_db),
         .btnL(btnL_db),

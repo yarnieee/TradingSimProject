@@ -30,6 +30,11 @@ module OLED_Renderer (
     input  [31:0] time_remaining,
     input  [31:0] portfolio_value,
     input  [15:0] selected_price,
+    input  [15:0] selected_change,
+    input         selected_change_negative,
+    input  [9:0]  selected_position,
+    input  [31:0] selected_value,
+    input  signed [32:0] selected_pnl,
     output reg [15:0] pixel_data
 );
 
@@ -52,6 +57,10 @@ module OLED_Renderer (
         .screen_state(screen_state),
         .selected_stock(selected_stock),
         .quantity(quantity),
+        .selected_price(selected_price),
+        .selected_change(selected_change),
+        .selected_change_negative(selected_change_negative),
+        .specific_header(1'b0),
         .text_pixel(text_pixel)
     );
 
@@ -63,6 +72,10 @@ module OLED_Renderer (
         .pos1(portfolio_pos1),
         .portfolio_value(portfolio_value),
         .selected_price(selected_price),
+        .selected_position(selected_position),
+        .selected_value(selected_value),
+        .selected_pnl(selected_pnl),
+        .specific_metrics_enable(1'b1),
         .text_pixel(info_pixel)
     );
 
@@ -174,6 +187,11 @@ module OLED_Button_Renderer (
     input  [31:0] time_remaining,
     input  [31:0] portfolio_value,
     input  [15:0] selected_price,
+    input  [15:0] selected_change,
+    input         selected_change_negative,
+    input  [9:0]  selected_position,
+    input  [31:0] selected_value,
+    input  signed [32:0] selected_pnl,
     input         btnU,
     input         btnD,
     input         btnL,
@@ -206,6 +224,10 @@ module OLED_Button_Renderer (
         .screen_state(screen_state),
         .selected_stock(selected_stock),
         .quantity(quantity),
+        .selected_price(selected_price),
+        .selected_change(selected_change),
+        .selected_change_negative(selected_change_negative),
+        .specific_header(1'b1),
         .text_pixel(text_pixel)
     );
 
@@ -217,6 +239,10 @@ module OLED_Button_Renderer (
         .pos1(portfolio_pos1),
         .portfolio_value(portfolio_value),
         .selected_price(selected_price),
+        .selected_position(selected_position),
+        .selected_value(selected_value),
+        .selected_pnl(selected_pnl),
+        .specific_metrics_enable(1'b0),
         .text_pixel(info_pixel)
     );
 

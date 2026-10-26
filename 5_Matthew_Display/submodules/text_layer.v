@@ -8,6 +8,10 @@ module text_layer (
     input  [3:0]  screen_state,
     input  [2:0]  selected_stock,
     input  [13:0] quantity,
+    input  [15:0] selected_price,
+    input  [15:0] selected_change,
+    input         selected_change_negative,
+    input         specific_header,
     output reg    text_pixel
 );
 
@@ -114,6 +118,16 @@ module text_layer (
         end
     endfunction
 
+    function [7:0] hex_char;
+        input [3:0] nibble;
+        begin
+            if (nibble < 4'd10)
+                hex_char = 8'h30 + nibble;
+            else
+                hex_char = 8'h41 + (nibble - 4'd10);
+        end
+    endfunction
+
     function [4:0] text_length;
         input [3:0] state;
         input [2:0] stock;
@@ -134,7 +148,10 @@ module text_layer (
                 end
                 SPECIFIC: begin
                     if (line == 0) begin
-                        text_length = stock_name_length(stock) + 6;
+                        if (specific_header)
+                            text_length = 15;
+                        else
+                            text_length = stock_name_length(stock) + 6;
                     end else begin
                         text_length = 0;
                     end
@@ -186,6 +203,9 @@ module text_layer (
         input [13:0] value;
         input       line;
         input [4:0] position;
+        input [15:0] price;
+        input [15:0] change;
+        input        change_negative;
         begin
             text_char = 8'h20;
             case (state)
@@ -226,7 +246,35 @@ module text_layer (
                     endcase
                 end
                 SPECIFIC: begin
-                    if (position < stock_name_length(stock))
+                    if (specific_header) begin
+                        // Fixed columns keep the stock name at the left,
+                        // the live price in the middle, and the signed
+                        // change at the right of the header.
+                        if (position < stock_name_length(stock))
+                            text_char = stock_name_char(stock, position);
+                        else if (position < 6)
+                            text_char = 8'h20;
+                        else if (position == 6)
+                            text_char = 8'h50; // P
+                        else if (position == 7)
+                            text_char = hex_char(selected_price[15:12]);
+                        else if (position == 8)
+                            text_char = hex_char(selected_price[11:8]);
+                        else if (position == 9)
+                            text_char = hex_char(selected_price[7:4]);
+                        else if (position == 10)
+                            text_char = hex_char(selected_price[3:0]);
+                        else if (position == 11)
+                            text_char = 8'h43; // C
+                        else if (position == 12)
+                            text_char = selected_change_negative ? 8'h2D : 8'h2B;
+                        else if (position == 13)
+                            text_char = hex_char(selected_change[7:4]);
+                        else if (position == 14)
+                            text_char = hex_char(selected_change[3:0]);
+                        else
+                            text_char = 8'h20;
+                    end else if (position < stock_name_length(stock))
                         text_char = stock_name_char(stock, position);
                     else if (position == stock_name_length(stock))
                         text_char = 8'h20;
@@ -447,7 +495,13 @@ module text_layer (
 
         // Two-line screens use rows 14..20 and 24..30. Single-line screens
         // use rows 14..20 so the screen description stays at the top.
-        if (text_length(screen_state, selected_stock, quantity, 1) != 0) begin
+        if ((screen_state == SPECIFIC) && specific_header) begin
+            if ((pixel_y >= 2) && (pixel_y < 9)) begin
+                line_select = 0;
+                line_y = 2;
+                line_active = 1;
+            end
+        end else if (text_length(screen_state, selected_stock, quantity, 1) != 0) begin
             if ((pixel_y >= 14) && (pixel_y < 21)) begin
                 line_select = 0;
                 line_y = 14;
@@ -470,7 +524,9 @@ module text_layer (
             line_length = text_length(screen_state, selected_stock,
                                       quantity, line_select);
             char_code = text_char(screen_state, selected_stock, quantity,
-                                  line_select, char_position);
+                                  line_select, char_position,
+                                  selected_price, selected_change,
+                                  selected_change_negative);
         end
 
         text_pixel = glyph_pixel &&

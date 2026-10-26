@@ -13,6 +13,10 @@ module portfolio_info_layer (
     input  wire [9:0]  pos1,
     input  wire [31:0] portfolio_value,
     input  wire [15:0] selected_price,
+    input  wire [9:0]  selected_position,
+    input  wire [31:0] selected_value,
+    input  wire signed [32:0] selected_pnl,
+    input  wire        specific_metrics_enable,
     output reg         text_pixel
 );
 
@@ -31,6 +35,8 @@ module portfolio_info_layer (
     reg [2:0] glyph_y;
     reg [6:0] line_start_x;
     wire      glyph_pixel;
+    wire [32:0] pnl_magnitude = selected_pnl[32] ?
+                                 (~selected_pnl + 33'd1) : selected_pnl;
 
     font_renderer font_renderer_inst (
         .char_code(char_code),
@@ -60,13 +66,23 @@ module portfolio_info_layer (
         glyph_y     = 3'd0;
         line_start_x = 7'd2;
 
-        if ((screen_state == SPECIFIC) &&
-                     (pixel_y >= 6'd24) && (pixel_y < 6'd31)) begin
-            line_select = 2'd0;
-            line_y = 6'd24;
-            line_start_x = 7'd68;
-            line_length = 5'd5; // P plus four price nibbles
-            line_active = 1'b1;
+        if ((screen_state == SPECIFIC) && specific_metrics_enable) begin
+            if ((pixel_y >= 6'd14) && (pixel_y < 6'd21)) begin
+                line_select = 2'd0;
+                line_y = 6'd14;
+                line_length = 5'd7; // POS plus three position nibbles
+                line_active = 1'b1;
+            end else if ((pixel_y >= 6'd22) && (pixel_y < 6'd29)) begin
+                line_select = 2'd1;
+                line_y = 6'd22;
+                line_length = 5'd8; // VAL plus four value nibbles
+                line_active = 1'b1;
+            end else if ((pixel_y >= 6'd30) && (pixel_y < 6'd37)) begin
+                line_select = 2'd2;
+                line_y = 6'd30;
+                line_length = 5'd8; // PNL plus sign and four nibbles
+                line_active = 1'b1;
+            end
         end
 
         if (line_active && (pixel_x >= line_start_x)) begin
@@ -89,13 +105,43 @@ module portfolio_info_layer (
             glyph_x = pixel_x - line_start_x - (char_position * 3'd6);
             glyph_y = pixel_y - line_y;
 
-            if (screen_state == SPECIFIC) begin
-                case (char_position)
-                    5'd0: char_code = 8'h50; // P
-                    5'd1: char_code = hex_char(selected_price[15:12]);
-                    5'd2: char_code = hex_char(selected_price[11:8]);
-                    5'd3: char_code = hex_char(selected_price[7:4]);
-                    default: char_code = hex_char(selected_price[3:0]);
+            if ((screen_state == SPECIFIC) && specific_metrics_enable) begin
+                case (line_select)
+                    2'd0: begin
+                        case (char_position)
+                            5'd0: char_code = 8'h50; // P
+                            5'd1: char_code = 8'h4F; // O
+                            5'd2: char_code = 8'h53; // S
+                            5'd3: char_code = 8'h20;
+                            5'd4: char_code = hex_char({2'b00, selected_position[9:8]});
+                            5'd5: char_code = hex_char(selected_position[7:4]);
+                            default: char_code = hex_char(selected_position[3:0]);
+                        endcase
+                    end
+                    2'd1: begin
+                        case (char_position)
+                            5'd0: char_code = 8'h56; // V
+                            5'd1: char_code = 8'h41; // A
+                            5'd2: char_code = 8'h4C; // L
+                            5'd3: char_code = 8'h20;
+                            5'd4: char_code = hex_char(selected_value[15:12]);
+                            5'd5: char_code = hex_char(selected_value[11:8]);
+                            5'd6: char_code = hex_char(selected_value[7:4]);
+                            default: char_code = hex_char(selected_value[3:0]);
+                        endcase
+                    end
+                    default: begin
+                        case (char_position)
+                            5'd0: char_code = 8'h50; // P
+                            5'd1: char_code = 8'h4E; // N
+                            5'd2: char_code = 8'h4C; // L
+                            5'd3: char_code = selected_pnl[32] ? 8'h2D : 8'h2B;
+                            5'd4: char_code = hex_char(pnl_magnitude[15:12]);
+                            5'd5: char_code = hex_char(pnl_magnitude[11:8]);
+                            5'd6: char_code = hex_char(pnl_magnitude[7:4]);
+                            default: char_code = hex_char(pnl_magnitude[3:0]);
+                        endcase
+                    end
                 endcase
             end
         end

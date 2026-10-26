@@ -32,6 +32,7 @@ module D_display_top #(
     input  wire [63:0] tp_price,
     // bot (sw1 shows it)
     input  wire        bot_view,
+    input  wire        bot_active,        // 0 until the bot's strategy exists: "NO BOT YET"
     input  wire [31:0] bot_cash,
     input  wire [31:0] bot_value,
     input  wire [9:0]  bot_pos0,
@@ -317,6 +318,7 @@ module D_display_top #(
         .order_type(ord_type),
         .order_brk(ord_brk),
         .bot_view(bot_view),
+        .bot_active(bot_active),
         .bot_signal(bot_signal),
         .sel_sl(sel_sl),
         .sel_tp(sel_tp),
@@ -375,6 +377,7 @@ module D_display_top #(
     bot_log_page #(.FLIP_180(1)) bot_log_page_inst (
         .pix_x(left_x), .pix_y(left_y),
         .bcd(numbers_bcd),
+        .active(bot_active),
         .log_valid(bot_log_valid), .log_side(bot_log_side), .log_stock(bot_log_stock),
         .pixel(bot_log_pixel)
     );

@@ -28,6 +28,7 @@ module OLED_Renderer (
     input  [1:0]  order_type,
     input  [1:0]  order_brk,
     input         bot_view,                // sw1: the bot's screen
+    input         bot_active,              // 0: no bot yet
     input  [7:0]  bot_signal,
     input  [15:0] sel_sl,                  // selected stock's SL / TP levels (0 = none)
     input  [15:0] sel_tp,
@@ -67,6 +68,7 @@ module OLED_Renderer (
         .order_type(order_type),
         .order_brk(order_brk),
         .bot_view(bot_view),
+        .bot_active(bot_active),
         .bot_signal(bot_signal),
         .big(big), .chart_on(chart_on),
         .ch(ch), .fg(fg), .bg(bg)

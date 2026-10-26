@@ -5,9 +5,10 @@
 // bot_log_page: the left OLED in the bot view (sw1 up), on the text_grid layout.
 //
 //   row 0     BOT TRADES          header (plum, as the bot view on the right OLED)
-//   rows 1-5  09 B AMD   213.50   the bot's last 5 trades, newest first:
+//   rows 1-5  09 B AMD   213.50   the bot's last 5 trades, newest first (NO BOT YET
+//                                 while bot_trader is still the stub):
 //                                 day, Buy / Sell (green / red), stock, price
-//   row 6     RULE: 8-DAY AVG
+//   row 6     SW1 DOWN: GAME      how to leave the bot view
 //
 // FLIP_180 = 1 turns the page for the upside-down left OLED, as the ticket does.
 module bot_log_page #(
@@ -16,6 +17,7 @@ module bot_log_page #(
     input  wire [6:0]  pix_x,
     input  wire [5:0]  pix_y,
     input  wire [`DN_N*32-1:0] bcd,       // display_numbers (log prices and days)
+    input  wire        active,            // 0: the bot is not written yet
     input  wire [4:0]  log_valid,
     input  wire [4:0]  log_side,
     input  wire [9:0]  log_stock,
@@ -99,7 +101,9 @@ module bot_log_page #(
             bg = BOTHDR;
             ch = str_ch("BOT TRADES      ", col);
         end else if (row <= 3'd5) begin
-            if (!e_v) begin
+            if (!active) begin
+                if (row == 3'd1) begin ch = str_ch("NO BOT YET      ", col); fg = GREY; end
+            end else if (!e_v) begin
                 if (row == 3'd1) begin ch = str_ch("NO TRADES YET   ", col); fg = GREY; end
             end else if (col <= 4'd1) begin                          // day
                 ch = "0" + e_day[4*(1 - col) +: 4];
@@ -114,7 +118,7 @@ module bot_log_page #(
                 ch = price_ch(e_px, col - 4'd10);
             end
         end else begin
-            ch = str_ch("RULE: 8-DAY AVG ", col);
+            ch = str_ch("SW1 DOWN: GAME  ", col);
             fg = GREY;
         end
     end

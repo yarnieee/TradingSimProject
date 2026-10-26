@@ -15,7 +15,6 @@ set all_tbs {
     tb_normalise_lfsr
     tb_matthew_game_fsm
     tb_ledger
-    tb_bot_trader
     tb_seq_divider
     tb_BC_ledger
     tb_order_validate

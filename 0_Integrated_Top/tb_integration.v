@@ -177,13 +177,10 @@ module tb_integration;
         check(dut.douglas_orders.u_book.s_brk[0] == `BRK_5 && dut.douglas_orders.u_book.s_trig[0] == dut.ord_trig,
               "Douglas: book keeps the trigger and the SL/TP setting");
 
-        // ---------------- the bot trades on its own; sw[1] shows it
+        // ---------------- the bot (Tricia's stub for now); sw[1] shows it
         repeat (6 * DAY) @(posedge clk);               // a few more trading days
-        check(dut.bot_value == dut.bot_cash + dut.bot_pos0 * dut.price0 + dut.bot_pos1 * dut.price1
-                               + dut.bot_pos2 * dut.price2 + dut.bot_pos3 * dut.price3
-              || dut.tick, "Bot: value = cash + shares x price");
-        check(dut.bot_cash <= 32'd1_000_000 || dut.bot_trades != 0, "Bot: cash only changes by trading");
-        $display("     bot: %0d trades, cash %0d c, value %0d c", dut.bot_trades, dut.bot_cash, dut.bot_value);
+        check(!dut.bot_active && dut.bot_trades == 0 && dut.bot_value == 32'd1_000_000,
+              "Bot stub: inactive, no trades, value stays at the starting cash");
         bot_sw = 1;
         repeat (5) @(posedge clk);
         check(dut.matthew_display.pixel_data_L == dut.matthew_display.bot_log_pixel,

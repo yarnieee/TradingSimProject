@@ -10,7 +10,7 @@
 //   yian_market      A_top           Yi An    4 stock channels, one trading day every 2 s
 //   douglas_orders   B_order_top     Douglas  validates and fills orders, order book, ticket page
 //   tricia_ledger    ledger          Tricia   cash, positions, cost basis, ledger_busy handshake
-//   tricia_bot       bot_trader      Tricia   the computer player (8-day average rule) [AI-written, to review]
+//   tricia_bot       bot_trader      Tricia   the computer player: STUB, Tricia writes the strategy
 //   matthew_display  D_display_top   Matthew  buttons, game screens, 7-seg, both OLEDs
 //
 // Board:
@@ -93,6 +93,7 @@ module Integration_Top #(
     wire [63:0] sl_price, tp_price;
     wire        fill, reject;
     // bot
+    wire        bot_active;
     wire [31:0] bot_cash, bot_value, bot_cb0, bot_cb1, bot_cb2, bot_cb3;
     wire [9:0]  bot_pos0, bot_pos1, bot_pos2, bot_pos3;
     wire [7:0]  bot_signal, bot_trades;
@@ -120,7 +121,7 @@ module Integration_Top #(
         .order_fill(fill), .order_reject(reject), .order_reject_code(reject_code),
         .order_placed(ord_placed), .order_from_submit(res_submit),
         .sl_price(sl_price), .tp_price(tp_price),
-        .bot_view(bot_view), .bot_cash(bot_cash), .bot_value(bot_value),
+        .bot_view(bot_view), .bot_active(bot_active), .bot_cash(bot_cash), .bot_value(bot_value),
         .bot_pos0(bot_pos0), .bot_pos1(bot_pos1), .bot_pos2(bot_pos2), .bot_pos3(bot_pos3),
         .bot_cb0(bot_cb0), .bot_cb1(bot_cb1), .bot_cb2(bot_cb2), .bot_cb3(bot_cb3),
         .bot_signal(bot_signal), .bot_log_valid(bot_log_valid), .bot_log_side(bot_log_side),
@@ -253,14 +254,14 @@ module Integration_Top #(
         .portfolio_samples(portfolio_samples_30)
     );
 
-    // The bot: its own cash and shares, trading on each market tick.
+    // The bot (Tricia): its own cash and shares. A stub for now: active = 0, no trades.
     bot_trader tricia_bot (
         .clk(clk), .rst(sys_reset), .tick(tick), .game_live(game_state == `GS_PLAYING),
         .day(trading_day_count[7:0] + 8'd1),
         .price0(price0), .price1(price1), .price2(price2), .price3(price3),
         .samples0(amd_samples_30), .samples1(mcd_samples_30),
         .samples2(stock2_samples_30), .samples3(stock3_samples_30),
-        .cash(bot_cash), .pos0(bot_pos0), .pos1(bot_pos1), .pos2(bot_pos2), .pos3(bot_pos3),
+        .active(bot_active), .cash(bot_cash), .pos0(bot_pos0), .pos1(bot_pos1), .pos2(bot_pos2), .pos3(bot_pos3),
         .cb0(bot_cb0), .cb1(bot_cb1), .cb2(bot_cb2), .cb3(bot_cb3), .value(bot_value),
         .signal(bot_signal), .trades(bot_trades),
         .log_valid(bot_log_valid), .log_side(bot_log_side), .log_stock(bot_log_stock),

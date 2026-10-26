@@ -44,6 +44,7 @@ module text_layer (
     input  [1:0]  order_type,          // the order's type, trigger and SL/TP (game_fsm)
     input  [1:0]  order_brk,
     input         bot_view,            // sw1: show the bot instead of the player
+    input         bot_active,          // 0: the bot is not written yet (NO BOT YET)
     input  [7:0]  bot_signal,          // per stock [2k+1:2k]: 1 above its 8-day average, 2 below
     output reg        big,             // this screen uses the big row
     output reg        chart_on,        // rows 3-5 are the chart (SPECIFIC)
@@ -276,7 +277,8 @@ module text_layer (
             chart_on = 1'b0;
             case (row)
                 3'd1: begin                                             // BOT  $10123.45
-                    if (col <= 4'd2) begin ch = str_ch("BOT             ", col); fg = CYAN; end
+                    if (!bot_active) begin ch = str_ch("NO BOT YET      ", col); fg = GREY; end
+                    else if (col <= 4'd2) begin ch = str_ch("BOT             ", col); fg = CYAN; end
                     else begin
                         ch = num_ch(n_bnet, 1'b0, 1'b0, 1'b1, "$", 4'd13, col - 4'd3);
                         fg = neg[`DN_BNETPNL] ? RED : GREEN;
@@ -290,7 +292,8 @@ module text_layer (
                     end
                 end
                 default: begin                                          // AMD ^  10   +123
-                    if (col <= 4'd3) begin ch = ticker_ch(bk, col); fg = CYAN; end
+                    if (!bot_active) ;
+                    else if (col <= 4'd3) begin ch = ticker_ch(bk, col); fg = CYAN; end
                     else if (col == 4'd5) begin
                         ch = (b_sig == 2'd1) ? 8'h80 : (b_sig == 2'd2) ? 8'h81 : "-";
                         fg = (b_sig == 2'd1) ? GREEN : (b_sig == 2'd2) ? RED : GREY;

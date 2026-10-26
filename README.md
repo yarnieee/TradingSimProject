@@ -55,5 +55,5 @@ Each test prints `PASS` or `FAIL`.
 To buy: pick a stock, choose BUY, set QTY, then OK and send. For a limit or stop order, or a
 stop-loss / take-profit, choose TYPE first (U/D picks a row, L/R changes it).
 
-The bot trades on its own from the start: it buys 10 shares of a stock when the price is above its
-8-day average and sells when it falls below.
+The bot view (sw[1]) shows "NO BOT YET" until Tricia's bot strategy is written
+(`4_Tricia_Ledger/submodules/bot_trader.v` is a stub with its ports defined).

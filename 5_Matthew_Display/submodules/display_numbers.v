@@ -1,0 +1,168 @@
+`timescale 1ns / 1ps
+`default_nettype none
+`include "trading_defs.vh"
+
+// display_numbers: every number the right OLED shows, as decimal digits.
+//
+// One field at a time (list in trading_defs.vh, DN_*): work out the value,
+// then convert it to 8 BCD digits with a shift-and-add-3 converter (32 clocks).
+// All 20 fields refresh about every 700 clocks (7 us), so the screens always
+// read finished digits from registers: no dividers in the pixel logic.
+// Values above 99,999,999 show as 99999999.
+//
+// bcd[32*f +: 32] is field f, digit 0 (ones) in bits [3:0].
+// neg[f] is 1 when field f is negative (P/L and price change only).
+module display_numbers #(
+    parameter [31:0] START_CASH = 32'd1_000_000,   // cents
+    parameter [15:0] SPREAD     = 16'd5,           // cents, as in B_order_top
+    parameter [15:0] FEE        = 16'd100          // cents, as in B_order_top
+) (
+    input  wire        clk,
+    input  wire        rst,
+    input  wire [31:0] cash,
+    input  wire [31:0] portfolio_value,
+    input  wire [15:0] price0,
+    input  wire [15:0] price1,
+    input  wire [15:0] price2,
+    input  wire [15:0] price3,
+    input  wire [9:0]  pos0,
+    input  wire [9:0]  pos1,
+    input  wire [9:0]  pos2,
+    input  wire [9:0]  pos3,
+    input  wire [31:0] cb0,
+    input  wire [31:0] cb1,
+    input  wire [31:0] cb2,
+    input  wire [31:0] cb3,
+    input  wire [1:0]  sel_stock,
+    input  wire [15:0] sel_ref_price,     // selected stock's price 30 days ago
+    input  wire [13:0] quantity,
+    input  wire [31:0] days_left,
+    input  wire        sell,              // 0 buy, 1 sell (order fields)
+    output reg  [`DN_N*32-1:0] bcd,
+    output reg  [`DN_N-1:0]    neg
+);
+    localparam [31:0] MAX_SHOWN = 32'd99_999_999;
+
+    // ------------------------------------------------------------ the field's value
+    reg  [4:0]  idx;
+    wire [1:0]  k = (idx >= `DN_PNL0) ? idx - `DN_PNL0 :
+                    (idx >= `DN_POS0) ? idx - `DN_POS0 : idx - `DN_PX0;
+
+    reg [15:0] px_k;
+    reg [9:0]  pos_k;
+    reg [31:0] cb_k;
+    always @* begin
+        case (k)
+            2'd0:    begin px_k = price0; pos_k = pos0; cb_k = cb0; end
+            2'd1:    begin px_k = price1; pos_k = pos1; cb_k = cb1; end
+            2'd2:    begin px_k = price2; pos_k = pos2; cb_k = cb2; end
+            default: begin px_k = price3; pos_k = pos3; cb_k = cb3; end
+        endcase
+    end
+
+    reg [15:0] sel_px;
+    always @* begin
+        case (sel_stock)
+            2'd0:    sel_px = price0;
+            2'd1:    sel_px = price1;
+            2'd2:    sel_px = price2;
+            default: sel_px = price3;
+        endcase
+    end
+
+    wire [16:0] ask_full = {1'b0, sel_px} + {1'b0, SPREAD};
+    wire [15:0] ask      = ask_full[16] ? 16'hFFFF : ask_full[15:0];
+    wire [15:0] bid      = (sel_px > SPREAD) ? sel_px - SPREAD : 16'd0;
+    wire [15:0] ord_px   = sell ? bid : ask;
+
+    // one shared multiplier: shares x price for P/L, quantity x price for the order total
+    wire        mul_ord = (idx == `DN_ORDTOT);
+    wire [15:0] mul_a   = mul_ord ? ord_px : px_k;
+    wire [13:0] mul_b   = mul_ord ? quantity : {4'd0, pos_k};
+    wire [29:0] prod    = mul_a * mul_b;
+
+    reg [31:0] val;
+    reg        val_neg;
+    always @* begin
+        val_neg = 1'b0;
+        case (idx)
+            `DN_CASH:   val = cash;
+            `DN_NET:    val = portfolio_value;
+            `DN_CHG: begin
+                val_neg = sel_px < sel_ref_price;
+                val     = val_neg ? sel_ref_price - sel_px : sel_px - sel_ref_price;
+            end
+            `DN_QTY:    val = {18'd0, quantity};
+            `DN_DAYS:   val = days_left;
+            `DN_ORDPX:  val = {16'd0, ord_px};
+            `DN_ORDTOT: begin
+                if (!sell)               val = {2'd0, prod} + FEE;
+                else if (prod >= FEE)    val = {2'd0, prod} - FEE;
+                else begin val_neg = 1'b1; val = FEE - prod; end
+            end
+            `DN_NETPNL: begin
+                val_neg = portfolio_value < START_CASH;
+                val     = val_neg ? START_CASH - portfolio_value : portfolio_value - START_CASH;
+            end
+            default: begin
+                if (idx >= `DN_PNL0) begin                 // P/L of stock k
+                    val_neg = {2'd0, prod} < cb_k;
+                    val     = val_neg ? cb_k - {2'd0, prod} : {2'd0, prod} - cb_k;
+                end else if (idx >= `DN_POS0) begin        // shares of stock k
+                    val = {22'd0, pos_k};
+                end else begin                             // price of stock k
+                    val = {16'd0, px_k};
+                end
+            end
+        endcase
+    end
+
+    // ------------------------------------------------------------ binary to BCD, one field at a time
+    reg [31:0] bin;
+    reg [31:0] acc;          // 8 BCD digits being built
+    reg [5:0]  step;         // 0..32
+    reg        cur_neg;
+    reg        busy;
+
+    // add 3 to every digit that is 5 or more (before each shift)
+    function [31:0] add3;
+        input [31:0] d;
+        integer i;
+        begin
+            add3 = d;
+            for (i = 0; i < 8; i = i + 1)
+                if (d[4*i +: 4] >= 4'd5) add3[4*i +: 4] = d[4*i +: 4] + 4'd3;
+        end
+    endfunction
+
+    wire [31:0] acc_adj = add3(acc);
+
+    always @(posedge clk) begin
+        if (rst) begin
+            idx     <= 5'd0;
+            bin     <= 32'd0;
+            acc     <= 32'd0;
+            step    <= 6'd0;
+            cur_neg <= 1'b0;
+            busy    <= 1'b0;
+            bcd     <= {(`DN_N*32){1'b0}};
+            neg     <= {`DN_N{1'b0}};
+        end else if (!busy) begin
+            bin     <= (val > MAX_SHOWN) ? MAX_SHOWN : val;
+            cur_neg <= val_neg;
+            acc     <= 32'd0;
+            step    <= 6'd0;
+            busy    <= 1'b1;
+        end else if (step != 6'd32) begin
+            {acc, bin} <= {acc_adj, bin} << 1;
+            step       <= step + 6'd1;
+        end else begin
+            bcd[32*idx +: 32] <= acc;
+            neg[idx]          <= cur_neg && (acc != 32'd0);
+            idx               <= (idx == `DN_N - 1) ? 5'd0 : idx + 5'd1;
+            busy              <= 1'b0;
+        end
+    end
+endmodule
+
+`default_nettype wire

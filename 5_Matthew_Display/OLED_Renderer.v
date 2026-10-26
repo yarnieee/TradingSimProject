@@ -1,116 +1,63 @@
 `timescale 1ns / 1ps
 `include "trading_defs.vh"
 
-// Shared OLED renderer for all game states.
+// Right OLED (JB): every game screen.
+//
+// Layers, front to back (each owns its own area, so nothing overlaps):
+//   menu_button_text  labels inside the tab bar, action buttons and OK box
+//   text_layer        all other text, on a 16-column grid (see text_layer.v)
+//   menu_buttons      tab bar, stock list, action buttons, OK box
+//   chart_renderer    30-day chart of the selected stock (specific-stock screen)
+// The title screen is drawn by title_art_renderer in D_display_top.
 module OLED_Renderer (
     input  [12:0] pixel_index,
     input  [3:0]  screen_state,
     input  [2:0]  selected_stock,
-    input  [13:0] quantity,
     input  [3:0]  menu_selection,
-    input  [479:0] stock_samples,
-    input  [479:0] stock0_samples,
-    input  [479:0] stock1_samples,
-    input  [479:0] stock2_samples,
-    input  [479:0] stock3_samples,
-    input  [959:0] portfolio_samples,
-    input  [31:0] portfolio_cash,
-    input  [9:0]  portfolio_pos0,
-    input  [9:0]  portfolio_pos1,
-    input  [9:0]  portfolio_pos2,
-    input  [9:0]  portfolio_pos3,
-    input  [15:0] price0,
-    input  [15:0] price1,
-    input  [15:0] price2,
-    input  [15:0] price3,
-    input  [31:0] portfolio_cb0,
-    input  [31:0] portfolio_cb1,
-    input  [31:0] portfolio_cb2,
-    input  [31:0] portfolio_cb3,
-    input  [31:0] time_remaining,
-    input  [31:0] portfolio_value,
-    input  [15:0] selected_price,
-    input  [15:0] selected_change,
-    input         selected_change_negative,
-    input  [9:0]  selected_position,
-    input  [31:0] selected_value,
-    input  signed [32:0] selected_pnl,
+    input  [1:0]  quantity_cursor,
+    input         trade_side,
+    input         trade_result_success,
+    input  [2:0]  trade_result_code,
+    input  [479:0] stock_samples,          // selected stock's 30-day history
+    input  [`DN_N*32-1:0] numbers_bcd,     // from display_numbers
+    input  [`DN_N-1:0]    numbers_neg,
+    input  [3:0]  stock_up,                // stock k above its price 30 days ago
     output reg [15:0] pixel_data
 );
-
-    wire text_pixel;
-    wire info_pixel;
-    wire table_pixel_active;
-    wire [15:0] table_pixel_color;
-    wire menu_text_pixel;
-    wire menu_pixel_active;
+    wire        text_active;
+    wire [15:0] text_color;
+    wire        menu_text_pixel;
+    wire        menu_pixel_active;
     wire [15:0] menu_pixel_color;
-    wire chart_pixel_active;
+    wire        chart_pixel_active;
     wire [15:0] chart_pixel_color;
-    wire        countdown_pixel_active;
-    wire [15:0] countdown_pixel_color;
-    wire [1:0] chart_mode = (screen_state == `UI_SPECIFIC) ? 2'b01 :
-                             (screen_state == `UI_PORTFOLIO) ? 2'b10 : 2'b00;
+    wire [6:0]  pixel_x = pixel_index % 96;
+    wire [5:0]  pixel_y = pixel_index / 96;
 
     text_layer text_layer_inst (
         .pixel_index(pixel_index),
         .screen_state(screen_state),
         .selected_stock(selected_stock),
-        .quantity(quantity),
-        .selected_price(selected_price),
-        .selected_change(selected_change),
-        .selected_change_negative(selected_change_negative),
-        .specific_header(1'b0),
-        .text_pixel(text_pixel)
-    );
-
-    portfolio_info_layer portfolio_info_layer_inst (
-        .pixel_index(pixel_index),
-        .screen_state(screen_state),
-        .cash(portfolio_cash),
-        .pos0(portfolio_pos0),
-        .pos1(portfolio_pos1),
-        .portfolio_value(portfolio_value),
-        .selected_price(selected_price),
-        .selected_position(selected_position),
-        .selected_value(selected_value),
-        .selected_pnl(selected_pnl),
-        .specific_metrics_enable(1'b1),
-        .capital_info_enable(1'b1),
-        .text_pixel(info_pixel)
-    );
-
-    portfolio_table_layer portfolio_table_layer_inst (
-        .pixel_index(pixel_index),
-        .screen_state(screen_state),
-        .menu_selection(menu_selection),
-        .pos0(portfolio_pos0), .pos1(portfolio_pos1),
-        .pos2(portfolio_pos2), .pos3(portfolio_pos3),
-        .price0(price0), .price1(price1), .price2(price2), .price3(price3),
-        .cb0(portfolio_cb0), .cb1(portfolio_cb1),
-        .cb2(portfolio_cb2), .cb3(portfolio_cb3),
-        .cash(portfolio_cash),
-        .pixel_active(table_pixel_active),
-        .pixel_color(table_pixel_color)
+        .quantity_cursor(quantity_cursor),
+        .trade_side(trade_side),
+        .trade_result_success(trade_result_success),
+        .trade_result_code(trade_result_code),
+        .bcd(numbers_bcd),
+        .neg(numbers_neg),
+        .up(stock_up),
+        .pixel_active(text_active),
+        .pixel_color(text_color)
     );
 
     chart_renderer chart_renderer_inst (
-        .pixel_x(pixel_index % 96),
-        .pixel_y(pixel_index / 96),
-        .chart_mode(chart_mode),
+        .pixel_x(pixel_x),
+        .pixel_y(pixel_y),
+        .chart_mode((screen_state == `UI_SPECIFIC) ? 2'b01 : 2'b00),
         .stock_samples(stock_samples),
-        .portfolio_samples(portfolio_samples),
-        .live_value(portfolio_value),
+        .portfolio_samples(960'd0),
+        .live_value(32'd0),
         .pixel_active(chart_pixel_active),
         .pixel_color(chart_pixel_color)
-    );
-
-    countdown_layer countdown_layer_inst (
-        .pixel_index(pixel_index),
-        .screen_state(screen_state),
-        .time_remaining(time_remaining),
-        .pixel_active(countdown_pixel_active),
-        .pixel_color(countdown_pixel_color)
     );
 
     menu_button_text menu_button_text_inst (
@@ -120,8 +67,8 @@ module OLED_Renderer (
     );
 
     menu_buttons menu_buttons_inst (
-        .pixel_x(pixel_index % 96),
-        .pixel_y(pixel_index / 96),
+        .pixel_x(pixel_x),
+        .pixel_y(pixel_y),
         .screen_state(screen_state),
         .menu_selection(menu_selection),
         .pixel_active(menu_pixel_active),
@@ -131,210 +78,15 @@ module OLED_Renderer (
     always @(*) begin
         if (menu_text_pixel)
             pixel_data = 16'hFFFF;
-        else if (countdown_pixel_active)
-            pixel_data = countdown_pixel_color;
-        else if (table_pixel_active)
-            pixel_data = table_pixel_color;
-        else if (info_pixel)
-            pixel_data = 16'hFFE0;
+        else if (text_active)
+            pixel_data = text_color;
         else if (menu_pixel_active)
             pixel_data = menu_pixel_color;
         else if (chart_pixel_active)
             pixel_data = chart_pixel_color;
-        else if (text_pixel)
-            pixel_data = 16'h07FF;
         else
             pixel_data = 16'h0000;
     end
-
-endmodule
-// Renderer for the second OLED connected to JA. The JA OLED is mounted
-// upside down, so its incoming pixel coordinates are rotated 180 degrees
-// before the shared text layer is evaluated.
-//
-// Directional button indicators are drawn only while the debounced button
-// is held:
-//   btnL = yellow left strip
-//   btnR = red right strip
-//   btnU = green top strip
-//   btnD = blue bottom strip
-//   btnC = white confirmation marker
-// btnC remains a confirmation input only; it does not change the FSM here.
-module OLED_Button_Renderer (
-    input  [12:0] pixel_index,
-    input  [3:0]  screen_state,
-    input  [2:0]  selected_stock,
-    input  [13:0] quantity,
-    input  [3:0]  menu_selection,
-    input  [479:0] stock_samples,
-    input  [479:0] stock0_samples,
-    input  [479:0] stock1_samples,
-    input  [479:0] stock2_samples,
-    input  [479:0] stock3_samples,
-    input  [959:0] portfolio_samples,
-    input  [31:0] portfolio_cash,
-    input  [9:0]  portfolio_pos0,
-    input  [9:0]  portfolio_pos1,
-    input  [9:0]  portfolio_pos2,
-    input  [9:0]  portfolio_pos3,
-    input  [15:0] price0,
-    input  [15:0] price1,
-    input  [15:0] price2,
-    input  [15:0] price3,
-    input  [31:0] portfolio_cb0,
-    input  [31:0] portfolio_cb1,
-    input  [31:0] portfolio_cb2,
-    input  [31:0] portfolio_cb3,
-    input  [31:0] time_remaining,
-    input  [31:0] portfolio_value,
-    input  [15:0] selected_price,
-    input  [15:0] selected_change,
-    input         selected_change_negative,
-    input  [9:0]  selected_position,
-    input  [31:0] selected_value,
-    input  signed [32:0] selected_pnl,
-    input         btnU,
-    input         btnD,
-    input         btnL,
-    input         btnR,
-    input         btnC,
-    output reg [15:0] pixel_data
-);
-
-    wire [6:0] memory_x = pixel_index % 96;
-    wire [5:0] memory_y = pixel_index / 96;
-    wire [6:0] display_x = 7'd95 - memory_x;
-    wire [5:0] display_y = 6'd63 - memory_y;
-    wire [12:0] flipped_pixel_index = (display_y * 13'd96) + display_x;
-    wire text_pixel;
-    wire info_pixel;
-    wire status_pixel_active;
-    wire [15:0] status_pixel_color;
-    wire menu_text_pixel;
-    wire menu_pixel_active;
-    wire [15:0] menu_pixel_color;
-    wire chart_pixel_active;
-    wire [15:0] chart_pixel_color;
-    wire        stocks_overview_active;
-    wire [15:0] stocks_overview_color;
-    wire [1:0] chart_mode = (screen_state == `UI_SPECIFIC) ? 2'b01 :
-                             (screen_state == `UI_PORTFOLIO) ? 2'b10 : 2'b00;
-
-    text_layer text_layer_inst (
-        .pixel_index(flipped_pixel_index),
-        .screen_state(screen_state),
-        .selected_stock(selected_stock),
-        .quantity(quantity),
-        .selected_price(selected_price),
-        .selected_change(selected_change),
-        .selected_change_negative(selected_change_negative),
-        .specific_header(1'b1),
-        .text_pixel(text_pixel)
-    );
-
-    portfolio_info_layer portfolio_info_layer_inst (
-        .pixel_index(flipped_pixel_index),
-        .screen_state(screen_state),
-        .cash(portfolio_cash),
-        .pos0(portfolio_pos0),
-        .pos1(portfolio_pos1),
-        .portfolio_value(portfolio_value),
-        .selected_price(selected_price),
-        .selected_position(selected_position),
-        .selected_value(selected_value),
-        .selected_pnl(selected_pnl),
-        .specific_metrics_enable(1'b0),
-        .capital_info_enable(1'b0),
-        .text_pixel(info_pixel)
-    );
-
-    portfolio_status_layer portfolio_status_layer_inst (
-        .pixel_index(flipped_pixel_index),
-        .screen_state(screen_state),
-        .cash(portfolio_cash),
-        .portfolio_value(portfolio_value),
-        .pixel_active(status_pixel_active),
-        .pixel_color(status_pixel_color)
-    );
-
-    chart_renderer chart_renderer_inst (
-        .pixel_x(display_x),
-        .pixel_y(display_y),
-        .chart_mode(chart_mode),
-        .stock_samples(stock_samples),
-        .portfolio_samples(portfolio_samples),
-        .live_value(portfolio_value),
-        .pixel_active(chart_pixel_active),
-        .pixel_color(chart_pixel_color)
-    );
-
-    stocks_overview_layer stocks_overview_layer_inst (
-        .pixel_index(flipped_pixel_index),
-        .screen_state(screen_state),
-        .stock0_samples(stock0_samples),
-        .stock1_samples(stock1_samples),
-        .stock2_samples(stock2_samples),
-        .stock3_samples(stock3_samples),
-        .price0(price0), .price1(price1), .price2(price2), .price3(price3),
-        .pixel_active(stocks_overview_active),
-        .pixel_color(stocks_overview_color)
-    );
-
-    menu_button_text menu_button_text_inst (
-        .pixel_index(flipped_pixel_index),
-        .screen_state(screen_state),
-        .text_pixel(menu_text_pixel)
-    );
-
-    menu_buttons menu_buttons_inst (
-        .pixel_x(display_x),
-        .pixel_y(display_y),
-        .screen_state(screen_state),
-        .menu_selection(menu_selection),
-        .pixel_active(menu_pixel_active),
-        .pixel_color(menu_pixel_color)
-    );
-
-    always @(*) begin
-        // Menu buttons and their labels are drawn before the live button
-        // indicators so the indicators remain visible while pressed.
-        if (stocks_overview_active)
-            pixel_data = stocks_overview_color;
-        else if (menu_text_pixel)
-            pixel_data = 16'hFFFF;
-        else if (status_pixel_active)
-            pixel_data = status_pixel_color;
-        else if (info_pixel)
-            pixel_data = 16'hFFE0;
-        else if (menu_pixel_active)
-            pixel_data = menu_pixel_color;
-        else if (chart_pixel_active)
-            pixel_data = chart_pixel_color;
-        else if (text_pixel)
-            pixel_data = 16'h07FF;
-        else
-            pixel_data = 16'h0000;
-
-        // The physical screen coordinates are used after the 180-degree
-        // transform, so the indicators stay on the expected sides.
-        if (btnL && (display_x < 8)) begin
-            pixel_data = 16'hFFE0; // yellow
-        end else if (btnR && (display_x >= 88)) begin
-            pixel_data = 16'hF800; // red
-        end else if (btnU && (display_y < 8) &&
-                     (display_x >= 8) && (display_x < 88)) begin
-            pixel_data = 16'h07E0; // green
-        end else if (btnD && (display_y >= 56) &&
-                     (display_x >= 8) && (display_x < 88)) begin
-            pixel_data = 16'h001F; // blue
-        end else if (btnC && (display_x >= 44) && (display_x < 52) &&
-                     (display_y >= 48) && (display_y < 56)) begin
-            pixel_data = 16'hFFFF; // confirmation marker
-        end else if (text_pixel) begin
-            pixel_data = 16'hFFFF;
-        end
-    end
-
 endmodule
 
 // Visual menu buttons shared by both OLEDs.
@@ -360,7 +112,7 @@ module menu_buttons (
     localparam NAV_PORTFOLIO = 4'd0;
     localparam NAV_STOCKS    = 4'd1;
     localparam STOCK_AMD     = 4'd2;
-    localparam STOCK_AVGO    = 4'd3;
+    localparam STOCK_MCD     = 4'd3;
     localparam STOCK_NVDA    = 4'd4;
     localparam STOCK_GME     = 4'd5;
     localparam ACTION_BUY    = 4'd6;
@@ -415,21 +167,23 @@ module menu_buttons (
             end
         end
 
+        // Stock list: one button per stock at x=2..33, y=12+9k..20+9k. The
+        // ticker inside and the live price beside it come from text_layer.
         if (screen_state == STOCKS) begin
-            if ((pixel_x >= 7'd30) && (pixel_x <= 7'd65) &&
-                (pixel_y >= 6'd24) && (pixel_y <= 6'd31)) begin
+            if ((pixel_x >= 7'd2) && (pixel_x <= 7'd33) &&
+                (pixel_y >= 6'd12) && (pixel_y <= 6'd20)) begin
                 button_kind = STOCK_AMD;
                 button_selected = (menu_selection == STOCK_AMD);
-            end else if ((pixel_x >= 7'd30) && (pixel_x <= 7'd65) &&
-                         (pixel_y >= 6'd33) && (pixel_y <= 6'd40)) begin
-                button_kind = STOCK_AVGO;
-                button_selected = (menu_selection == STOCK_AVGO);
-            end else if ((pixel_x >= 7'd30) && (pixel_x <= 7'd65) &&
-                         (pixel_y >= 6'd42) && (pixel_y <= 6'd49)) begin
+            end else if ((pixel_x >= 7'd2) && (pixel_x <= 7'd33) &&
+                         (pixel_y >= 6'd21) && (pixel_y <= 6'd29)) begin
+                button_kind = STOCK_MCD;
+                button_selected = (menu_selection == STOCK_MCD);
+            end else if ((pixel_x >= 7'd2) && (pixel_x <= 7'd33) &&
+                         (pixel_y >= 6'd30) && (pixel_y <= 6'd38)) begin
                 button_kind = STOCK_NVDA;
                 button_selected = (menu_selection == STOCK_NVDA);
-            end else if ((pixel_x >= 7'd30) && (pixel_x <= 7'd65) &&
-                         (pixel_y >= 6'd51) && (pixel_y <= 6'd58)) begin
+            end else if ((pixel_x >= 7'd2) && (pixel_x <= 7'd33) &&
+                         (pixel_y >= 6'd39) && (pixel_y <= 6'd47)) begin
                 button_kind = STOCK_GME;
                 button_selected = (menu_selection == STOCK_GME);
             end
@@ -481,20 +235,20 @@ module menu_buttons (
                                     (pixel_y == 6'd1) || (pixel_y == 6'd10);
                 end
                 STOCK_AMD: begin
-                    button_border = (pixel_x == 7'd30) || (pixel_x == 7'd65) ||
-                                    (pixel_y == 6'd24) || (pixel_y == 6'd31);
+                    button_border = (pixel_x == 7'd2) || (pixel_x == 7'd33) ||
+                                    (pixel_y == 6'd12) || (pixel_y == 6'd20);
                 end
-                STOCK_AVGO: begin
-                    button_border = (pixel_x == 7'd30) || (pixel_x == 7'd65) ||
-                                    (pixel_y == 6'd33) || (pixel_y == 6'd40);
+                STOCK_MCD: begin
+                    button_border = (pixel_x == 7'd2) || (pixel_x == 7'd33) ||
+                                    (pixel_y == 6'd21) || (pixel_y == 6'd29);
                 end
                 STOCK_NVDA: begin
-                    button_border = (pixel_x == 7'd30) || (pixel_x == 7'd65) ||
-                                    (pixel_y == 6'd42) || (pixel_y == 6'd49);
+                    button_border = (pixel_x == 7'd2) || (pixel_x == 7'd33) ||
+                                    (pixel_y == 6'd30) || (pixel_y == 6'd38);
                 end
                 STOCK_GME: begin
-                    button_border = (pixel_x == 7'd30) || (pixel_x == 7'd65) ||
-                                    (pixel_y == 6'd51) || (pixel_y == 6'd58);
+                    button_border = (pixel_x == 7'd2) || (pixel_x == 7'd33) ||
+                                    (pixel_y == 6'd39) || (pixel_y == 6'd47);
                 end
                 ACTION_BUY: begin
                     button_border = (pixel_x == 7'd4) || (pixel_x == 7'd31) ||
@@ -548,142 +302,6 @@ module menu_buttons (
 
 endmodule
 
-// Text labels for the visual menu buttons.
-module menu_button_text_legacy (
-    input  [12:0] pixel_index,
-    input  [3:0]  screen_state,
-    output reg    text_pixel
-);
-
-    localparam TITLE     = `UI_TITLE;
-    localparam PORTFOLIO = `UI_PORTFOLIO;
-
-    wire [6:0] pixel_x = pixel_index % 96;
-    wire [5:0] pixel_y = pixel_index / 96;
-
-    reg [7:0] char_code;
-    reg [3:0] char_position;
-    reg [6:0] text_start_x;
-    reg [5:0] text_start_y;
-    reg [3:0] text_length;
-    reg       text_active;
-    reg [2:0] glyph_x;
-    reg [2:0] glyph_y;
-    wire      glyph_pixel;
-
-    font_renderer font_renderer_inst (
-        .char_code(char_code),
-        .glyph_x(glyph_x),
-        .glyph_y(glyph_y),
-        .pixel_on(glyph_pixel)
-    );
-
-    function [7:0] button_char;
-        input [3:0] state;
-        input [1:0] button;
-        input [3:0] position;
-        begin
-            button_char = 8'h20;
-            case (state)
-                TITLE: begin
-                    if (button == 2'd0) begin
-                        case (position)
-                            0: button_char = 8'h4F; // O
-                            1: button_char = 8'h4B; // K
-                            default: button_char = 8'h20;
-                        endcase
-                    end
-                end
-                PORTFOLIO: begin
-                    case (button)
-                        2'd0: begin
-                            case (position)
-                                0: button_char = 8'h50; // P
-                                1: button_char = 8'h6F; // o
-                                2: button_char = 8'h72; // r
-                                3: button_char = 8'h74; // t
-                                4: button_char = 8'h66; // f
-                                5: button_char = 8'h6F; // o
-                                6: button_char = 8'h6C; // l
-                                7: button_char = 8'h69; // i
-                                8: button_char = 8'h6F; // o
-                                default: button_char = 8'h20;
-                            endcase
-                        end
-                        2'd1: begin
-                            case (position)
-                                0: button_char = 8'h53; // S
-                                1: button_char = 8'h74; // t
-                                2: button_char = 8'h6F; // o
-                                3: button_char = 8'h63; // c
-                                4: button_char = 8'h6B; // k
-                                5: button_char = 8'h73; // s
-                                default: button_char = 8'h20;
-                            endcase
-                        end
-                        default: button_char = 8'h20;
-                    endcase
-                end
-                default: button_char = 8'h20;
-            endcase
-        end
-    endfunction
-
-    always @(*) begin
-        char_code = 8'h20;
-        char_position = 0;
-        text_start_x = 0;
-        text_start_y = 0;
-        text_length = 0;
-        text_active = 1'b0;
-        glyph_x = 0;
-        glyph_y = 0;
-
-        if (screen_state == TITLE) begin
-            // OK label centered inside the title button.
-            text_start_x = 7'd43;
-            text_start_y = 6'd47;
-            text_length = 2;
-            if ((pixel_x >= text_start_x) &&
-                (pixel_x < text_start_x + 12) &&
-                (pixel_y >= text_start_y) &&
-                (pixel_y < text_start_y + 7)) begin
-                text_active = 1'b1;
-            end
-        end else if (screen_state == PORTFOLIO) begin
-            if ((pixel_x >= 7'd21) && (pixel_x < 7'd75) &&
-                (pixel_y >= 6'd42) && (pixel_y < 6'd49)) begin
-                // Portfolio label: 9 characters x 6 pixels.
-                text_start_x = 7'd21;
-                text_start_y = 6'd42;
-                text_length = 9;
-                text_active = 1'b1;
-            end else if ((pixel_x >= 7'd30) && (pixel_x < 7'd66) &&
-                         (pixel_y >= 6'd54) && (pixel_y < 6'd61)) begin
-                // Stocks label: 6 characters x 6 pixels.
-                text_start_x = 7'd30;
-                text_start_y = 6'd54;
-                text_length = 6;
-                text_active = 1'b1;
-            end
-        end
-
-        if (text_active) begin
-            char_position = (pixel_x - text_start_x) / 6;
-            glyph_x = (pixel_x - text_start_x) % 6;
-            glyph_y = pixel_y - text_start_y;
-            char_code = button_char(screen_state,
-                                    (screen_state == TITLE) ? 2'd0 :
-                                    ((pixel_y < 6'd50) ? 2'd0 : 2'd1),
-                                    char_position);
-        end
-
-        text_pixel = text_active && (char_position < text_length) &&
-                     (glyph_x < 5) && (glyph_y < 7) && glyph_pixel;
-    end
-
-endmodule
-
 // Current menu-label renderer. Coordinates match menu_buttons above.
 module menu_button_text (
     input  [12:0] pixel_index,
@@ -701,7 +319,7 @@ module menu_button_text (
     localparam NAV_PORTFOLIO = 4'd0;
     localparam NAV_STOCKS    = 4'd1;
     localparam STOCK_AMD     = 4'd2;
-    localparam STOCK_AVGO    = 4'd3;
+    localparam STOCK_MCD     = 4'd3;
     localparam STOCK_NVDA    = 4'd4;
     localparam STOCK_GME     = 4'd5;
     localparam ACTION_BUY    = 4'd6;
@@ -774,15 +392,6 @@ module menu_button_text (
                         0: label_char = 8'h41; // A
                         1: label_char = 8'h4D; // M
                         2: label_char = 8'h44; // D
-                        default: label_char = 8'h20;
-                    endcase
-                end
-                STOCK_AVGO: begin
-                    case (position)
-                        0: label_char = 8'h41; // A
-                        1: label_char = 8'h56; // V
-                        2: label_char = 8'h47; // G
-                        3: label_char = 8'h4F; // O
                         default: label_char = 8'h20;
                     endcase
                 end
@@ -911,36 +520,6 @@ module menu_button_text (
                 text_start_x = 7'd43;
                 text_start_y = 6'd47;
                 text_length = 2;
-                label_active = 1'b1;
-            end
-        end else if (screen_state == STOCKS) begin
-            if ((pixel_x >= 7'd39) && (pixel_x < 7'd57) &&
-                (pixel_y >= 6'd25) && (pixel_y < 6'd32)) begin
-                label_kind = STOCK_AMD;
-                text_start_x = 7'd39;
-                text_start_y = 6'd25;
-                text_length = 3;
-                label_active = 1'b1;
-            end else if ((pixel_x >= 7'd39) && (pixel_x < 7'd57) &&
-                         (pixel_y >= 6'd34) && (pixel_y < 6'd41)) begin
-                label_kind = STOCK_AVGO;
-                text_start_x = 7'd36;
-                text_start_y = 6'd34;
-                text_length = 4;
-                label_active = 1'b1;
-            end else if ((pixel_x >= 7'd36) && (pixel_x < 7'd60) &&
-                         (pixel_y >= 6'd43) && (pixel_y < 6'd50)) begin
-                label_kind = STOCK_NVDA;
-                text_start_x = 7'd36;
-                text_start_y = 6'd43;
-                text_length = 4;
-                label_active = 1'b1;
-            end else if ((pixel_x >= 7'd39) && (pixel_x < 7'd57) &&
-                         (pixel_y >= 6'd52) && (pixel_y < 6'd59)) begin
-                label_kind = STOCK_GME;
-                text_start_x = 7'd39;
-                text_start_y = 6'd52;
-                text_length = 3;
                 label_active = 1'b1;
             end
         end else if (screen_state == SPECIFIC) begin

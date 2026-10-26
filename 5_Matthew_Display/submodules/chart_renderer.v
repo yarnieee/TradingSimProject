@@ -2,12 +2,11 @@
 
 // Small resource-friendly chart renderer.
 //
-// The original renderer calculated 29 line segments for every pixel.  That
-// inferred hundreds of variable multipliers/dividers and exceeded the
-// Artix-7 35T resources when used by both OLEDs.  This version keeps the
-// live chart behaviour but renders eight sampled vertical bars.  The eight
-// samples are normalized against their own min/max range so both 16-bit stock
-// prices and 32-bit portfolio values use the full visible chart height.
+// Eight samples of the 30-day history (every fourth day), drawn as a step
+// line in a frame at x=4..91, y=22..37 (between the price line and the
+// buttons on the specific-stock screen). The samples are scaled against their
+// own min/max with a power-of-two shift, so no divider is needed. A rising
+// stock is green, a falling one red.
 //
 // chart_mode:
 //   2'b00 = disabled
@@ -36,6 +35,11 @@ module chart_renderer (
     reg [4:0] scale_shift;
     reg [5:0] point_height;
     reg [5:0] point_top;
+    reg [31:0] prev_value;
+    reg [5:0] prev_height;
+    reg [5:0] prev_top;
+    reg [6:0] bin_start;
+    integer   s;
 
     always @(*) begin
         pixel_active = 1'b0;
@@ -47,7 +51,11 @@ module chart_renderer (
         value_range  = 32'd0;
         scale_shift  = 5'd0;
         point_height = 6'd0;
-        point_top    = 6'd41;
+        point_top    = 6'd36;
+        prev_value   = 32'd0;
+        prev_height  = 6'd0;
+        prev_top     = 6'd36;
+        bin_start    = 7'd4;
 
         // Sample indices 0, 4, 8, ..., 28 keep the displayed bins
         // chronological while reducing the 30-point history to eight bars.
@@ -92,37 +100,15 @@ module chart_renderer (
         if (sample_value[7] > max_value) max_value = sample_value[7];
         value_range = max_value - min_value;
 
-        // Select a power-of-two scale.  This avoids a hardware divider while
-        // keeping the largest bar within the 18-pixel chart height.
-        if      (value_range > 32'h12000000) scale_shift = 5'd24;
-        else if (value_range > 32'h09000000) scale_shift = 5'd23;
-        else if (value_range > 32'h04800000) scale_shift = 5'd22;
-        else if (value_range > 32'h02400000) scale_shift = 5'd21;
-        else if (value_range > 32'h01200000) scale_shift = 5'd20;
-        else if (value_range > 32'h00900000) scale_shift = 5'd19;
-        else if (value_range > 32'h00480000) scale_shift = 5'd18;
-        else if (value_range > 32'h00240000) scale_shift = 5'd17;
-        else if (value_range > 32'h00120000) scale_shift = 5'd16;
-        else if (value_range > 32'h00090000) scale_shift = 5'd15;
-        else if (value_range > 32'h00048000) scale_shift = 5'd14;
-        else if (value_range > 32'h00024000) scale_shift = 5'd13;
-        else if (value_range > 32'h00012000) scale_shift = 5'd12;
-        else if (value_range > 32'h00009000) scale_shift = 5'd11;
-        else if (value_range > 32'h00004800) scale_shift = 5'd10;
-        else if (value_range > 32'h00002400) scale_shift = 5'd9;
-        else if (value_range > 32'h00001200) scale_shift = 5'd8;
-        else if (value_range > 32'h00000900) scale_shift = 5'd7;
-        else if (value_range > 32'h00000480) scale_shift = 5'd6;
-        else if (value_range > 32'h00000240) scale_shift = 5'd5;
-        else if (value_range > 32'h00000120) scale_shift = 5'd4;
-        else if (value_range > 32'h00000090) scale_shift = 5'd3;
-        else if (value_range > 32'h00000048) scale_shift = 5'd2;
-        else if (value_range > 32'h00000024) scale_shift = 5'd1;
+        // Smallest power-of-two scale that fits the range in the 13-pixel
+        // plot height. Constant shifts only: no divider.
+        scale_shift = 5'd24;
+        for (s = 24; s >= 0; s = s - 1)
+            if ((value_range >> s) <= 32'd13) scale_shift = s;
 
         if ((chart_mode == MODE_STOCK) ||
             (chart_mode == MODE_PORTFOLIO)) begin
-            // The chart occupies x=4..91. Eight fixed bins avoid a
-            // run-time divide by the number of samples.
+            // The chart frame is x=4..91, y=22..37; eight bins of 11 columns.
             if (pixel_x >= 7'd4 && pixel_x <= 7'd91) begin
                 if      (pixel_x < 7'd15) x_bin = 3'd0;
                 else if (pixel_x < 7'd26) x_bin = 3'd1;
@@ -133,43 +119,40 @@ module chart_renderer (
                 else if (pixel_x < 7'd81) x_bin = 3'd6;
                 else                       x_bin = 3'd7;
             end
+            bin_start = (x_bin == 3'd0) ? 7'd4 : 7'd4 + 7'd11 * x_bin;
 
-            case (x_bin)
-                3'd0: selected_value = sample_value[0];
-                3'd1: selected_value = sample_value[1];
-                3'd2: selected_value = sample_value[2];
-                3'd3: selected_value = sample_value[3];
-                3'd4: selected_value = sample_value[4];
-                3'd5: selected_value = sample_value[5];
-                3'd6: selected_value = sample_value[6];
-                default: selected_value = sample_value[7];
-            endcase
+            selected_value = sample_value[x_bin];
+            prev_value     = sample_value[(x_bin == 3'd0) ? 3'd0 : x_bin - 3'd1];
 
-            // A flat history is drawn as a centered line. Otherwise the
-            // normalized sample height is clamped to the chart's 18 pixels.
+            // A flat history is drawn as a line across the middle.
             if (value_range == 0) begin
-                point_top = 6'd32;
+                point_top = 6'd30;
+                prev_top  = 6'd30;
             end else begin
                 point_height = (selected_value - min_value) >> scale_shift;
-                if (point_height > 6'd18)
-                    point_height = 6'd18;
-                point_top = 6'd41 - point_height;
+                prev_height  = (prev_value - min_value) >> scale_shift;
+                if (point_height > 6'd13) point_height = 6'd13;
+                if (prev_height > 6'd13)  prev_height = 6'd13;
+                point_top = 6'd36 - point_height;
+                prev_top  = 6'd36 - prev_height;
             end
 
-            if ((pixel_y >= 6'd23) && (pixel_y <= 6'd41)) begin
+            if ((pixel_y >= 6'd22) && (pixel_y <= 6'd37) &&
+                (pixel_x >= 7'd4) && (pixel_x <= 7'd91)) begin
                 if ((pixel_x == 7'd4) || (pixel_x == 7'd91) ||
-                    (pixel_y == 6'd23) || (pixel_y == 6'd41)) begin
+                    (pixel_y == 6'd22) || (pixel_y == 6'd37)) begin
                     pixel_active = 1'b1;
-                    pixel_color = 16'h07FF;
-                end else if ((value_range == 0 && pixel_y == 6'd32) ||
-                             (value_range != 0 && pixel_y >= point_top)) begin
+                    pixel_color = 16'h4208;             // grey frame
+                end else if ((pixel_y == point_top) ||
+                             // the step up or down between two bins
+                             ((pixel_x == bin_start) && (x_bin != 3'd0) &&
+                              (((pixel_y >= prev_top) && (pixel_y <= point_top)) ||
+                               ((pixel_y <= prev_top) && (pixel_y >= point_top))))) begin
                     pixel_active = 1'b1;
                     if (chart_mode == MODE_STOCK)
-                        pixel_color = 16'h07E0;
+                        pixel_color = (sample_value[7] >= sample_value[0]) ? 16'h07E0 : 16'hF800;
                     else
                         pixel_color = 16'h07FF;
-                end else begin
-                    pixel_color = 16'h0000;
                 end
             end
         end

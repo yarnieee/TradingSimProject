@@ -225,3 +225,21 @@ module); README lists the rule and the two top modules their owners still need t
   was confirmed to fail when the feature is broken on purpose.
 
 `B_order_top`'s ports are unchanged.
+
+## 2026-10-26: display clean-up (branch-team-integration-v2)
+
+**Asked for:** the board's graphics were garbled; clean up Matthew's display in place, and show
+Douglas's order ticket on the left OLED.
+
+**Found:** layers drawing over each other on most screens; `portfolio_info_layer` used
+`pixel_index[6:0]`/`[12:7]` (rows of 128) on a 96-wide screen; the portfolio table and prices were
+printed in hexadecimal and cut to 16 bits; the table header overlapped row 1; stock 1 was labelled
+AVGO but its data is MCD; the font had no H, J, U, W, X, Y, Z, `.` or `/`; placeholder text.
+
+**Done by the AI:** `text_layer` rewritten as one 16-column text grid for every right-OLED screen
+(so nothing overlaps); new `display_numbers` (one sequential binary-to-decimal converter for all
+displayed numbers) and `tb_display_numbers`; chart moved to its own frame and drawn as a step
+line; stock list buttons moved to leave room for live prices; missing glyphs added to
+`font_renderer`; left OLED shows the order ticket (title art on the title screen). The left-mirror
+renderer and the five layers only it used moved to `9_Not_Used/matthew_left_mirror/`. Ticket
+tickers now AMD/MCD/NVDA/GME. All 18 testbenches pass.

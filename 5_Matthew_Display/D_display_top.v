@@ -4,16 +4,13 @@
 
 // D_display_top: Matthew's complete display component.
 //
-// SHOW_GAME_ON_JA = 1 reproduces the earlier two-game-screen behaviour:
-//   JB: normal game screen
-//   JA: the same game screen rotated 180 degrees, with live button indicators
+//   JB (right OLED): the game screens (OLED_Renderer); title artwork on the title screen
+//   JA (left OLED):  the page given on left_pixel (Douglas's order ticket);
+//                    title artwork on the title screen
 //
-// SHOW_GAME_ON_JA = 0 keeps the team-integration arrangement:
-//   JB: game screen
-//   JA: the external page supplied through left_pixel
+// Every number on the right OLED comes from display_numbers as decimal digits.
 module D_display_top #(
-    parameter DEBOUNCE_CTR    = 32'd1_999_999,
-    parameter SHOW_GAME_ON_JA = 1'b1
+    parameter DEBOUNCE_CTR    = 32'd1_999_999
 ) (
     input  wire        clk,
     input  wire        rst,
@@ -27,7 +24,7 @@ module D_display_top #(
     input  wire        order_fill,
     input  wire        order_reject,
     input  wire [2:0]  order_reject_code,
-    // External page for JA when SHOW_GAME_ON_JA == 0.
+    // The page shown on JA (left OLED) after the title screen.
     input  wire [15:0] left_pixel,
     output wire [6:0]  left_x,
     output wire [5:0]  left_y,
@@ -155,17 +152,8 @@ module D_display_top #(
     wire [9:0] selected_position = (selected_stock == 3'd0) ? portfolio_pos0 :
                                    (selected_stock == 3'd1) ? portfolio_pos1 :
                                    (selected_stock == 3'd2) ? portfolio_pos2 : portfolio_pos3;
-    wire [31:0] selected_cost_basis = (selected_stock == 3'd0) ? portfolio_cb0 :
-                                      (selected_stock == 3'd1) ? portfolio_cb1 :
-                                      (selected_stock == 3'd2) ? portfolio_cb2 : portfolio_cb3;
-    wire [31:0] selected_value = selected_position * selected_price;
-    wire signed [32:0] selected_pnl = $signed({1'b0, selected_value}) -
-                                       $signed({1'b0, selected_cost_basis});
+    // the selected stock's price 30 days ago (oldest of the 30 samples)
     wire [15:0] selected_reference_price = selected_samples_30[15:0];
-    wire selected_change_negative = selected_price < selected_reference_price;
-    wire [15:0] selected_change = selected_change_negative ?
-                                  (selected_reference_price - selected_price) :
-                                  (selected_price - selected_reference_price);
     wire [16:0] selected_ask_full = {1'b0, selected_price} + 17'd5;
     wire [15:0] selected_ask = selected_ask_full[16] ? 16'hFFFF : selected_ask_full[15:0];
     wire [31:0] buy_notional = {16'd0, selected_ask} * {18'd0, quantity};
@@ -232,36 +220,39 @@ module D_display_top #(
     wire        sending_pixels_R;
     wire        sample_pixel_R;
 
+    // ================================================================ numbers on the right OLED
+    wire [`DN_N*32-1:0] numbers_bcd;
+    wire [`DN_N-1:0]    numbers_neg;
+    display_numbers display_numbers_inst (
+        .clk(clk), .rst(rst),
+        .cash(portfolio_cash), .portfolio_value(portfolio_value),
+        .price0(price0), .price1(price1), .price2(price2), .price3(price3),
+        .pos0(portfolio_pos0), .pos1(portfolio_pos1),
+        .pos2(portfolio_pos2), .pos3(portfolio_pos3),
+        .cb0(portfolio_cb0), .cb1(portfolio_cb1),
+        .cb2(portfolio_cb2), .cb3(portfolio_cb3),
+        .sel_stock(selected_stock[1:0]), .sel_ref_price(selected_reference_price),
+        .quantity(quantity), .days_left(time_remaining), .sell(trade_side),
+        .bcd(numbers_bcd), .neg(numbers_neg)
+    );
+
+    // each stock against its price 30 days ago (oldest sample), for green/red
+    wire [3:0] stock_up = {price3 >= stock3_samples_30[15:0], price2 >= stock2_samples_30[15:0],
+                           price1 >= stock1_samples_30[15:0], price0 >= stock0_samples_30[15:0]};
+
     OLED_Renderer oled_renderer_R (
         .pixel_index(pixel_index_R),
         .screen_state(screen_state),
         .selected_stock(selected_stock),
-        .quantity(quantity),
         .menu_selection(menu_selection),
+        .quantity_cursor(quantity_cursor),
+        .trade_side(trade_side),
+        .trade_result_success(trade_result_success),
+        .trade_result_code(trade_result_code),
         .stock_samples(selected_samples_30),
-         .stock0_samples(stock0_samples_30),
-         .stock1_samples(stock1_samples_30),
-         .stock2_samples(stock2_samples_30),
-         .stock3_samples(stock3_samples_30),
-        .portfolio_samples(portfolio_samples_30),
-        .portfolio_cash(portfolio_cash),
-        .portfolio_pos0(portfolio_pos0),
-        .portfolio_pos1(portfolio_pos1),
-        .portfolio_pos2(portfolio_pos2),
-        .portfolio_pos3(portfolio_pos3),
-        .price0(price0), .price1(price1), .price2(price2), .price3(price3),
-        .portfolio_cb0(portfolio_cb0),
-        .portfolio_cb1(portfolio_cb1),
-        .portfolio_cb2(portfolio_cb2),
-        .portfolio_cb3(portfolio_cb3),
-         .time_remaining(time_remaining),
-        .portfolio_value(portfolio_value),
-        .selected_price(selected_price),
-        .selected_change(selected_change),
-        .selected_change_negative(selected_change_negative),
-        .selected_position(selected_position),
-        .selected_value(selected_value),
-        .selected_pnl(selected_pnl),
+        .numbers_bcd(numbers_bcd),
+        .numbers_neg(numbers_neg),
+        .stock_up(stock_up),
         .pixel_data(pixel_data_game_R)
     );
 
@@ -286,11 +277,10 @@ module D_display_top #(
 
     // ================================================================ left OLED (JA)
     wire [12:0] pixel_index_L;
-    wire [15:0] pixel_data_game_L;
     wire [15:0] title_pixel_L;
     wire [15:0] pixel_data_L;
-    wire [6:0] title_display_x_L;
-    wire [5:0] title_display_y_L;
+    wire [6:0]  title_display_x_L;
+    wire [5:0]  title_display_y_L;
     wire [12:0] title_pixel_index_L;
     wire        frame_begin_L;
     wire        sending_pixels_L;
@@ -298,6 +288,7 @@ module D_display_top #(
 
     assign left_x = pixel_index_L % 96;
     assign left_y = pixel_index_L / 96;
+    // JA sits upside down: read the title artwork rotated 180 degrees
     assign title_display_x_L = 7'd95 - (pixel_index_L % 96);
     assign title_display_y_L = 6'd63 - (pixel_index_L / 96);
     assign title_pixel_index_L = (title_display_y_L * 13'd96) + title_display_x_L;
@@ -311,48 +302,8 @@ module D_display_top #(
 
     assign pixel_data_R = (screen_state == `UI_TITLE) ?
                           title_pixel_R : pixel_data_game_R;
-
-    OLED_Button_Renderer oled_renderer_L (
-        .pixel_index(pixel_index_L),
-        .screen_state(screen_state),
-        .selected_stock(selected_stock),
-        .quantity(quantity),
-        .menu_selection(menu_selection),
-        .stock_samples(selected_samples_30),
-        .stock0_samples(stock0_samples_30),
-        .stock1_samples(stock1_samples_30),
-        .stock2_samples(stock2_samples_30),
-        .stock3_samples(stock3_samples_30),
-        .portfolio_samples(portfolio_samples_30),
-        .portfolio_cash(portfolio_cash),
-        .portfolio_pos0(portfolio_pos0),
-        .portfolio_pos1(portfolio_pos1),
-        .portfolio_pos2(portfolio_pos2),
-        .portfolio_pos3(portfolio_pos3),
-        .price0(price0), .price1(price1), .price2(price2), .price3(price3),
-        .portfolio_cb0(portfolio_cb0),
-        .portfolio_cb1(portfolio_cb1),
-        .portfolio_cb2(portfolio_cb2),
-        .portfolio_cb3(portfolio_cb3),
-         .time_remaining(time_remaining),
-        .portfolio_value(portfolio_value),
-        .selected_price(selected_price),
-        .selected_change(selected_change),
-        .selected_change_negative(selected_change_negative),
-        .selected_position(selected_position),
-        .selected_value(selected_value),
-        .selected_pnl(selected_pnl),
-        .btnU(btnU_db),
-        .btnD(btnD_db),
-        .btnL(btnL_db),
-        .btnR(btnR_db),
-        .btnC(btnC_db),
-        .pixel_data(pixel_data_game_L)
-    );
-
-    assign pixel_data_L = SHOW_GAME_ON_JA ?
-                          ((screen_state == `UI_TITLE) ? title_pixel_L :
-                           pixel_data_game_L) : left_pixel;
+    assign pixel_data_L = (screen_state == `UI_TITLE) ?
+                          title_pixel_L : left_pixel;
 
     oled_display oled_L (
         .clk(clk_6_25MHz),

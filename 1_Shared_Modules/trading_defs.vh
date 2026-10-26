@@ -65,6 +65,22 @@
 `define UI_TRADE_RESULT 4'd9
 `define UI_GAME_END     4'd10
 
+// ---------------------------------------------------------------- display numbers (Matthew)
+// Fields of display_numbers: each is 8 decimal digits (32-bit BCD) plus a
+// minus flag. Money is in cents unless noted.
+`define DN_CASH    0    // cash
+`define DN_NET     1    // portfolio value (cash + holdings)
+`define DN_PX0     2    // price of stock 0..3: DN_PX0 + k
+`define DN_POS0    6    // shares held of stock 0..3: DN_POS0 + k
+`define DN_PNL0    10   // profit/loss of stock 0..3 (value - cost basis): DN_PNL0 + k
+`define DN_CHG     14   // selected stock: price now - price 30 days ago
+`define DN_QTY     15   // quantity being entered
+`define DN_DAYS    16   // trading days left
+`define DN_ORDPX   17   // order price: ask for a buy, bid for a sell
+`define DN_ORDTOT  18   // order total: buy pays price x qty + fee, sell gets price x qty - fee
+`define DN_NETPNL  19   // portfolio value - starting cash
+`define DN_N       20
+
 // btn_pulse bit positions, in Basys3 master XDC order (btnC, btnU, btnL, btnR, btnD)
 `define BTN_C 0
 `define BTN_U 1

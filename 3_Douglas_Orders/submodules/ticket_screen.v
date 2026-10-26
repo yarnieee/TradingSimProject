@@ -7,7 +7,7 @@
 //
 // Ticket view (every field except ORDERS focused):
 //   y 0-5    left black: the top level overlays D's tab bar
-//   y 7-11   >AMD B123.25 A123.35          stock (focusable), bid, ask
+//   y 7-11   >NVDA B123.25 A123.35         stock (focusable), bid, ask
 //   y 15-24  [ BUY ][ SELL ]  [ MKT ]     side buttons + type button
 //   y 27-31  >QTY 010                     focused field yellow
 //   y 35-39  >TRG 120.00   >SL/TP  5%     TRG grey when type = MKT
@@ -16,7 +16,7 @@
 //
 // ORDERS view (ORDERS focused): every book slot, one per row
 //   y 7-11   ORDERS 3/8  C=CANCEL
-//   y 14-59  >1 AMD LMT B010@120.00       cursor yellow; SL legs red, TP legs green
+//   y 14-59  >1 NVDA LMT B010@120.00      cursor yellow; SL legs red, TP legs green
 //             2 -                         empty slot
 //
 // ticket_pix is purely combinational from (pix_x, pix_y) and registered
@@ -254,11 +254,11 @@ module ticket_screen #(
                 L_B2:       s = " 2%     ";
                 L_B5:       s = " 5%     ";
                 L_B10:      s = "10%     ";
-                // stock 0..3: Yi An's AMD and MCD; 2 and 3 have no data yet
+                // stock 0..3: Yi An's AMD, MCD, NVDA, GME
                 L_TK0:      s = "AMD     ";
                 L_TK0 + 1:  s = "MCD     ";
-                L_TK0 + 2:  s = "ST3     ";
-                L_TK0 + 3:  s = "ST4     ";
+                L_TK0 + 2:  s = "NVDA    ";
+                L_TK0 + 3:  s = "GME     ";
                 default:    s = "        ";
             endcase
             lbl_char = (k > 5'd7) ? `CH_SPACE : asc(s[63 - 8*k -: 8]);
@@ -390,9 +390,9 @@ module ticket_screen #(
         sy0 = 6'd0;
         if (orders_view) begin
             if      (in_text(px, py, 7'd0, 5'd20, Y_HDR))                         begin seg = SEG_OHDR; sy0 = Y_HDR; end
-            else if (in_row && in_text(px, py, 7'd0, 5'd22, Y_ROW0 + 6'd6 * row)) begin seg = SEG_OROW; sy0 = Y_ROW0 + 6'd6 * row; end
+            else if (in_row && in_text(px, py, 7'd0, 5'd23, Y_ROW0 + 6'd6 * row)) begin seg = SEG_OROW; sy0 = Y_ROW0 + 6'd6 * row; end
         end else begin
-            if      (in_text(px, py, 7'd0,  5'd20, Y_HDR))       begin seg = SEG_HDR;  sx0 = 7'd0;  sy0 = Y_HDR;       end
+            if      (in_text(px, py, 7'd0,  5'd21, Y_HDR))       begin seg = SEG_HDR;  sx0 = 7'd0;  sy0 = Y_HDR;       end
             else if (in_text(px, py, 7'd8,  5'd3,  Y_BTN))       begin seg = SEG_BUY;  sx0 = 7'd8;  sy0 = Y_BTN;       end
             else if (in_text(px, py, 7'd34, 5'd4,  Y_BTN))       begin seg = SEG_SELL; sx0 = 7'd34; sy0 = Y_BTN;       end
             else if (in_text(px, py, 7'd72, 5'd3,  Y_BTN))       begin seg = SEG_TYPE; sx0 = 7'd72; sy0 = Y_BTN;       end
@@ -420,14 +420,14 @@ module ticket_screen #(
         tcol = C_WHITE;
         case (seg)
             SEG_HDR: begin
-                // ">AMD B123.25 A123.35"
+                // ">NVDA B123.25 A123.35"
                 if (ci == 5'd0)                     ch = (focus == F_STK) ? `CH_GT : `CH_SPACE;
-                else if (ci <= 5'd3)                ch = lbl_char(L_TK0 + stock, ci - 5'd1);
-                else if (ci == 5'd5)                ch = asc("B");
-                else if (ci >= 5'd6 && ci <= 5'd11) ch = price_char(bcd_bid, ci - 5'd6);
-                else if (ci == 5'd13)               ch = asc("A");
-                else if (ci >= 5'd14)               ch = price_char(bcd_ask, ci - 5'd14);
-                if (ci == 5'd0 || (ci <= 5'd3 && focus == F_STK)) tcol = C_YELLOW;
+                else if (ci <= 5'd4)                ch = lbl_char(L_TK0 + stock, ci - 5'd1);
+                else if (ci == 5'd6)                ch = asc("B");
+                else if (ci >= 5'd7 && ci <= 5'd12) ch = price_char(bcd_bid, ci - 5'd7);
+                else if (ci == 5'd14)               ch = asc("A");
+                else if (ci >= 5'd15)               ch = price_char(bcd_ask, ci - 5'd15);
+                if (ci == 5'd0 || (ci <= 5'd4 && focus == F_STK)) tcol = C_YELLOW;
             end
             SEG_BUY: begin
                 ch   = lbl_char(L_BUY, ci);
@@ -497,18 +497,18 @@ module ticket_screen #(
                 if (ci >= 5'd12)           tcol = C_GREY;
             end
             SEG_OROW: begin
-                // ">1 AMD LMT B010@120.00"; SL/TP legs show SL or TP as their type
+                // ">1 NVDA LMT B010@120.00"; SL/TP legs show SL or TP as their type
                 if (ci == 5'd0)                       ch = (ord_sel == row) ? `CH_GT : `CH_SPACE;
                 else if (ci == 5'd1)                  ch = {3'b000, row} + 6'd1;
                 else if (!rw_valid) begin
                     if (ci == 5'd3)                   ch = `CH_MINUS;
-                end else if (ci >= 5'd3 && ci <= 5'd5) ch = lbl_char(L_TK0 + rw_stock, ci - 5'd3);
-                else if (ci >= 5'd7 && ci <= 5'd9)    ch = lbl_char(rw_leg ? ((rw_type == `OT_STP) ? L_SL : L_TP)
-                                                                           : ((rw_type == `OT_LMT) ? L_LMT : L_STP), ci - 5'd7);
-                else if (ci == 5'd11)                 ch = asc(rw_side ? "S" : "B");
-                else if (ci >= 5'd12 && ci <= 5'd14)  ch = qty_char(rw_qty, ci - 5'd12);
-                else if (ci == 5'd15)                 ch = `CH_AT;
-                else if (ci >= 5'd16)                 ch = price_char(rw_trig, ci - 5'd16);
+                end else if (ci >= 5'd3 && ci <= 5'd6) ch = lbl_char(L_TK0 + rw_stock, ci - 5'd3);
+                else if (ci >= 5'd8 && ci <= 5'd10)   ch = lbl_char(rw_leg ? ((rw_type == `OT_STP) ? L_SL : L_TP)
+                                                                           : ((rw_type == `OT_LMT) ? L_LMT : L_STP), ci - 5'd8);
+                else if (ci == 5'd12)                 ch = asc(rw_side ? "S" : "B");
+                else if (ci >= 5'd13 && ci <= 5'd15)  ch = qty_char(rw_qty, ci - 5'd13);
+                else if (ci == 5'd16)                 ch = `CH_AT;
+                else if (ci >= 5'd17)                 ch = price_char(rw_trig, ci - 5'd17);
                 if (ci == 5'd0 || (ci == 5'd1 && ord_sel == row)) tcol = C_YELLOW;
                 else if (!rw_valid)                              tcol = C_GREY;
                 else if (rw_leg)                                 tcol = (rw_type == `OT_STP) ? C_RED : C_GREEN;

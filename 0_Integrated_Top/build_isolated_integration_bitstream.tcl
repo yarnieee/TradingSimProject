@@ -12,54 +12,18 @@ set project_dir $build_root
 file mkdir $build_root
 create_project -force I $project_dir -part xc7a35tcpg236-1
 
-set source_files [list \
-    "$repo/1_Shared_Modules/trading_defs.vh" \
-    "$repo/1_Shared_Modules/debouncer.v" \
-    "$repo/1_Shared_Modules/oled_display.v" \
-    "$repo/1_Shared_Modules/slower_clk.v" \
-    "$repo/2_YiAn_Market_Engine/A_top.v" \
-    "$repo/2_YiAn_Market_Engine/submodules/day_ticker.v" \
-    "$repo/2_YiAn_Market_Engine/submodules/get_30_values.v" \
-    "$repo/2_YiAn_Market_Engine/submodules/get_latest_values.v" \
-    "$repo/2_YiAn_Market_Engine/submodules/lfsr.v" \
-    "$repo/2_YiAn_Market_Engine/submodules/market_events.v" \
-    "$repo/2_YiAn_Market_Engine/submodules/market_state.v" \
-    "$repo/2_YiAn_Market_Engine/submodules/normalise_lfsr.v" \
-    "$repo/2_YiAn_Market_Engine/submodules/startup_seed.v" \
-    "$repo/2_YiAn_Market_Engine/submodules/stock.v" \
-    "$repo/2_YiAn_Market_Engine/submodules/storage_buffer.v" \
-    "$repo/3_Douglas_Orders/B_order_top.v" \
-    "$repo/3_Douglas_Orders/submodules/b_bin2bcd_seq.v" \
-    "$repo/3_Douglas_Orders/submodules/exec_engine.v" \
-    "$repo/3_Douglas_Orders/submodules/font_3x5.v" \
-    "$repo/3_Douglas_Orders/submodules/order_book.v" \
-    "$repo/3_Douglas_Orders/submodules/order_entry.v" \
-    "$repo/3_Douglas_Orders/submodules/order_validate.v" \
-    "$repo/3_Douglas_Orders/submodules/spread_calc.v" \
-    "$repo/3_Douglas_Orders/submodules/ticket_screen.v" \
-    "$repo/4_Tricia_Ledger/ledger.v" \
-    "$repo/4_Tricia_Ledger/submodules/ledger_fsm.v" \
-    "$repo/4_Tricia_Ledger/submodules/ledger_validate.v" \
-    "$repo/4_Tricia_Ledger/submodules/seq_divider.v" \
-    "$repo/5_Matthew_Display/D_display_top.v" \
-    "$repo/5_Matthew_Display/OLED_Renderer.v" \
-    "$repo/5_Matthew_Display/quantity_7seg.v" \
-    "$repo/5_Matthew_Display/game_fsm.v" \
-    "$repo/5_Matthew_Display/submodules/binary_to_bcd_14bit.v" \
-    "$repo/5_Matthew_Display/submodules/chart_renderer.v" \
-    "$repo/5_Matthew_Display/submodules/countdown_layer.v" \
-    "$repo/5_Matthew_Display/submodules/font_renderer.v" \
-    "$repo/5_Matthew_Display/submodules/portfolio_history.v" \
-    "$repo/5_Matthew_Display/submodules/portfolio_info_layer.v" \
-    "$repo/5_Matthew_Display/submodules/portfolio_status_layer.v" \
-    "$repo/5_Matthew_Display/submodules/portfolio_table_layer.v" \
-    "$repo/5_Matthew_Display/submodules/stocks_overview_layer.v" \
-    "$repo/5_Matthew_Display/submodules/text_layer.v" \
-    "$repo/5_Matthew_Display/submodules/title_art_renderer.v" \
-    "$repo/5_Matthew_Display/title_art_left.mem" \
-    "$repo/5_Matthew_Display/title_art_right.mem" \
-    "$repo/0_Integrated_Top/Integration_Top.v"
-]
+# Same file set as create_integration_project.tcl: each person's top
+# module(s), everything in their submodules/ folder, and the .mem data.
+set source_files [list "$repo/0_Integrated_Top/Integration_Top.v"]
+foreach pattern [list \
+    "$repo/1_Shared_Modules/*" \
+    "$repo/2_YiAn_Market_Engine/*.v" "$repo/2_YiAn_Market_Engine/submodules/*" \
+    "$repo/3_Douglas_Orders/*.v"     "$repo/3_Douglas_Orders/submodules/*" \
+    "$repo/4_Tricia_Ledger/*.v"      "$repo/4_Tricia_Ledger/submodules/*" \
+    "$repo/5_Matthew_Display/*.v"    "$repo/5_Matthew_Display/submodules/*" \
+    "$repo/5_Matthew_Display/title_art_*.mem"] {
+    set source_files [concat $source_files [glob $pattern]]
+}
 
 foreach source_file $source_files {
     if {![file exists $source_file]} {

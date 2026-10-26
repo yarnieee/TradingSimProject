@@ -22,15 +22,28 @@ C Tricia, D Matthew). Still to rename by their owners: `A_top` to `A_market_top`
 
 ## Open in Vivado
 
-1. Clone to a short path with no spaces:
+This README is on `branch-team-integration-v2` (the redesigned display, order switches, bot view).
+
+1. Clone **this branch** to a short path with no spaces:
    ```
-   git clone -b branch-team-integration https://github.com/yarnieee/TradingSimProject.git C:/EE2026/TradingSimProject
+   git clone -b branch-team-integration-v2 https://github.com/yarnieee/TradingSimProject.git C:/EE2026/TradingSimProject
    ```
-2. Open Vivado 2025.2 and type in the Tcl Console:
+   If `C:/EE2026/TradingSimProject` already exists from an earlier clone, switch it instead:
+   ```
+   cd C:/EE2026/TradingSimProject
+   git fetch
+   git checkout branch-team-integration-v2
+   git pull
+   ```
+   Check with `git branch --show-current` (should print `branch-team-integration-v2`).
+2. Open Vivado 2025.2 on its own (not an old project) and type in the Tcl Console:
    ```
    source C:/EE2026/TradingSimProject/0_Integrated_Top/create_integration_project.tcl
    ```
-3. Generate Bitstream, then program the board.
+   This makes a fresh `C:/EE2026/Integration_vivado` (replacing any old one) with this branch's files.
+3. Generate Bitstream, then program the board with the new bitstream.
+4. Check: after the title screen the right OLED has a navy bar `HOME  MARKET  D60` at the top.
+   If it shows `Portfolio` / `Stocks` boxes and `AVGO`, the board is still running the old version.
 
 After a `git pull`, run step 2 again.
 

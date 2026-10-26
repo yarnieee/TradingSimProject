@@ -76,6 +76,7 @@ module OLED_Renderer (
         .selected_value(selected_value),
         .selected_pnl(selected_pnl),
         .specific_metrics_enable(1'b1),
+        .capital_info_enable(1'b1),
         .text_pixel(info_pixel)
     );
 
@@ -243,6 +244,7 @@ module OLED_Button_Renderer (
         .selected_value(selected_value),
         .selected_pnl(selected_pnl),
         .specific_metrics_enable(1'b0),
+        .capital_info_enable(1'b0),
         .text_pixel(info_pixel)
     );
 

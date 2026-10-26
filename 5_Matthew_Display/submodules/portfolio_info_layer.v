@@ -17,11 +17,14 @@ module portfolio_info_layer (
     input  wire [31:0] selected_value,
     input  wire signed [32:0] selected_pnl,
     input  wire        specific_metrics_enable,
+    input  wire        capital_info_enable,
     output reg         text_pixel
 );
 
     localparam [3:0] PORTFOLIO = 4'd1;
     localparam [3:0] SPECIFIC  = 4'd3;
+    localparam [3:0] BUY_STOCK = 4'd4;
+    localparam [3:0] SELL_STOCK = 4'd5;
 
     wire [6:0] pixel_x = pixel_index[6:0];
     wire [5:0] pixel_y = pixel_index[12:7];
@@ -83,6 +86,14 @@ module portfolio_info_layer (
                 line_length = 5'd8; // PNL plus sign and four nibbles
                 line_active = 1'b1;
             end
+        end else if (capital_info_enable &&
+                     ((screen_state == BUY_STOCK) ||
+                      (screen_state == SELL_STOCK)) &&
+                     (pixel_y >= 6'd32) && (pixel_y < 6'd39)) begin
+            line_select = 2'd3;
+            line_y = 6'd32;
+            line_length = 5'd9; // CASH plus four capital nibbles
+            line_active = 1'b1;
         end
 
         if (line_active && (pixel_x >= line_start_x)) begin
@@ -142,6 +153,20 @@ module portfolio_info_layer (
                             default: char_code = hex_char(pnl_magnitude[3:0]);
                         endcase
                     end
+                endcase
+            end else if (capital_info_enable &&
+                         ((screen_state == BUY_STOCK) ||
+                          (screen_state == SELL_STOCK))) begin
+                case (char_position)
+                    5'd0: char_code = 8'h43; // C
+                    5'd1: char_code = 8'h41; // A
+                    5'd2: char_code = 8'h53; // S
+                    5'd3: char_code = 8'h48; // H
+                    5'd4: char_code = 8'h20;
+                    5'd5: char_code = hex_char(cash[15:12]);
+                    5'd6: char_code = hex_char(cash[11:8]);
+                    5'd7: char_code = hex_char(cash[7:4]);
+                    default: char_code = hex_char(cash[3:0]);
                 endcase
             end
         end

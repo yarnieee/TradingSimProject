@@ -13,12 +13,17 @@
 //   PORTFOLIO        NET, CASH, then one row per stock: shares and profit/loss
 //   STOCKS           one row per stock: price and an up/down arrow (30-day trend)
 //   SPECIFIC         price, 30-day change, shares held; chart on rows 3-5
-//   BUY / SELL       price, quantity, total, cash or shares; a warning if the
-//                    order would be rejected; BACK / QTY / NEXT
+//   BUY / SELL       quantity, price (limit / stop price for those orders), total,
+//                    cash or shares; a warning if the order would be rejected;
+//                    BACK / QTY / TYPE / OK
+//   ORDER_TYPE       order type (market, limit, stop), trigger price, SL/TP, and
+//                    what the chosen type does
 //   QUANTITY         the quantity in big digits, the digit being changed in yellow
-//   ORDER_REVIEW     the order and its total; SEND
-//   TRADE_RESULT     FILLED or REJECTED in big letters, and why
+//   ORDER_REVIEW     the order, its type and SL/TP, and its total; SEND
+//   TRADE_RESULT     FILLED, PLACED (in the book) or REJECTED in big letters, and why
 //   GAME_END         net worth in big digits and the final profit/loss
+//   bot view (sw1)   the bot's value against yours, and per stock its signal
+//                    (price above / below the 8-day average), shares and P/L
 // Numbers come from display_numbers (bcd, neg).
 module text_layer (
     input  [2:0]  row,
@@ -35,6 +40,11 @@ module text_layer (
     input  [`DN_N*32-1:0] bcd,
     input  [`DN_N-1:0]    neg,
     input  [3:0]  up,                  // stock k is at or above its price 30 days ago
+    input         trade_result_placed, // a limit / stop order went into the book
+    input  [1:0]  order_type,          // the order's type, trigger and SL/TP (game_fsm)
+    input  [1:0]  order_brk,
+    input         bot_view,            // sw1: show the bot instead of the player
+    input  [7:0]  bot_signal,          // per stock [2k+1:2k]: 1 above its 8-day average, 2 below
     output reg        big,             // this screen uses the big row
     output reg        chart_on,        // rows 3-5 are the chart (SPECIFIC)
     output reg [7:0]  ch,
@@ -49,6 +59,7 @@ module text_layer (
                       RED     = 16'hF8A2,     // a little lighter than pure red: easier to read
                       GREY    = 16'h8C51,     // labels that matter less
                       HDR     = 16'h0012,     // header bar (navy)
+                      BOTHDR  = 16'h4808,     // header bar in the bot view (plum)
                       BTN     = 16'h3186;     // unselected button (dark grey)
 
     // ------------------------------------------------------------ helpers
@@ -113,7 +124,7 @@ module text_layer (
 
     function [31:0] field;
         input [`DN_N*32-1:0] all;
-        input [4:0] f;
+        input [5:0] f;
         begin
             field = all[32*f +: 32];
         end
@@ -148,6 +159,33 @@ module text_layer (
         end
     endfunction
 
+    // the four buttons on the BUY / SELL row 6: cells 0-3, 5-7, 9-12, 14-15
+    function [2:0] bar4_button;            // 4 = a gap
+        input [3:0] c;
+        begin
+            if (c <= 4'd3)       bar4_button = 3'd0;
+            else if (c == 4'd4)  bar4_button = 3'd4;
+            else if (c <= 4'd7)  bar4_button = 3'd1;
+            else if (c == 4'd8)  bar4_button = 3'd4;
+            else if (c <= 4'd12) bar4_button = 3'd2;
+            else if (c == 4'd13) bar4_button = 3'd4;
+            else                 bar4_button = 3'd3;
+        end
+    endfunction
+
+    function [7:0] brk_ch;                 // OFF, 2%, 5%, 10% in 3 cells
+        input [1:0] v;
+        input [3:0] c;
+        begin
+            case (v)
+                `BRK_2:  brk_ch = str_ch(" 2%             ", c);
+                `BRK_5:  brk_ch = str_ch(" 5%             ", c);
+                `BRK_10: brk_ch = str_ch("10%             ", c);
+                default: brk_ch = str_ch("OFF             ", c);
+            endcase
+        end
+    endfunction
+
     // ------------------------------------------------------------ numbers used here
     wire [1:0]  s       = selected_stock[1:0];
     wire [31:0] n_cash  = field(bcd, `DN_CASH);
@@ -158,6 +196,15 @@ module text_layer (
     wire [31:0] n_ordpx = field(bcd, `DN_ORDPX);
     wire [31:0] n_ordt  = field(bcd, `DN_ORDTOT);
     wire [31:0] n_npnl  = field(bcd, `DN_NETPNL);
+    wire [31:0] n_trig  = field(bcd, `DN_TRIG);
+    wire [31:0] n_bnet  = field(bcd, `DN_BNET);
+    wire [31:0] n_bnpnl = field(bcd, `DN_BNETPNL);
+    wire [1:0]  bk      = row[1:0] - 2'd3;            // bot view: rows 3-6 = stocks 0-3
+    wire [31:0] n_bpos  = field(bcd, `DN_BPOS0 + bk);
+    wire [31:0] n_bpnl  = field(bcd, `DN_BPNL0 + bk);
+    wire        g_bpnl  = neg[`DN_BPNL0 + bk];
+    wire [1:0]  b_sig   = bot_signal[2*bk +: 2];
+    wire        days_low = (n_days[31:4] == 28'd0) && (n_days[3:0] <= 4'd5);   // 5 days or fewer
     wire [31:0] n_spx   = field(bcd, `DN_PX0  + s);
     wire [31:0] n_spos  = field(bcd, `DN_POS0 + s);
     // the stock on this row: PORTFOLIO rows 3-6, STOCKS rows 1-4
@@ -183,17 +230,19 @@ module text_layer (
         ch       = " ";
         fg       = WHITE;
         bg       = BLACK;
-        big      = (screen_state == `UI_QUANTITY) || (screen_state == `UI_TRADE_RESULT) ||
-                   (screen_state == `UI_GAME_END);
-        chart_on = (screen_state == `UI_SPECIFIC);
+        big      = !bot_view && ((screen_state == `UI_QUANTITY) || (screen_state == `UI_TRADE_RESULT) ||
+                                     (screen_state == `UI_GAME_END));
+        chart_on = !bot_view && (screen_state == `UI_SPECIFIC);
         b        = 2'd3;
 
         if (row == 3'd0) begin
             // ---------------------------------------------------- header bar
-            bg = HDR;
+            bg = bot_view ? BOTHDR : HDR;
             if (col >= 4'd13 && screen_state != `UI_GAME_END) begin
                 ch = (col == 4'd13) ? "D" : num_ch(n_days, 1'b0, 1'b0, 1'b0, 8'd0, 4'd2, col - 4'd14);
-                fg = YELLOW;
+                fg = days_low ? RED : YELLOW;
+            end else if (bot_view) begin
+                ch = str_ch("BOT VS YOU      ", col);
             end else if (tabs) begin
                 // HOME (cells 0-3) and MARKET (5-10): the cursor's tab in yellow
                 if (col <= 4'd3 || (col >= 4'd5 && col <= 4'd10)) begin
@@ -213,6 +262,7 @@ module text_layer (
                         else if (col >= 4'd5 && col <= 4'd8) ch = ticker_ch(s, col - 4'd5);
                     end
                     `UI_QUANTITY:     ch = str_ch("SET QUANTITY    ", col);
+                    `UI_ORDER_TYPE:   ch = str_ch("ORDER TYPE      ", col);
                     `UI_ORDER_REVIEW: ch = str_ch("REVIEW ORDER    ", col);
                     `UI_ORDER_RESULT: ch = str_ch("SENDING         ", col);
                     `UI_TRADE_RESULT: ch = str_ch("RESULT          ", col);
@@ -220,6 +270,41 @@ module text_layer (
                     default: ;
                 endcase
             end
+        end else if (bot_view && screen_state != `UI_TITLE) begin
+            // ---------------------------------------------------- bot view (sw1)
+            big = 1'b0;
+            chart_on = 1'b0;
+            case (row)
+                3'd1: begin                                             // BOT  $10123.45
+                    if (col <= 4'd2) begin ch = str_ch("BOT             ", col); fg = CYAN; end
+                    else begin
+                        ch = num_ch(n_bnet, 1'b0, 1'b0, 1'b1, "$", 4'd13, col - 4'd3);
+                        fg = neg[`DN_BNETPNL] ? RED : GREEN;
+                    end
+                end
+                3'd2: begin                                             // YOU  $13079.50
+                    if (col <= 4'd2) begin ch = str_ch("YOU             ", col); fg = CYAN; end
+                    else begin
+                        ch = num_ch(n_net, 1'b0, 1'b0, 1'b1, "$", 4'd13, col - 4'd3);
+                        fg = neg[`DN_NETPNL] ? RED : GREEN;
+                    end
+                end
+                default: begin                                          // AMD ^  10   +123
+                    if (col <= 4'd3) begin ch = ticker_ch(bk, col); fg = CYAN; end
+                    else if (col == 4'd5) begin
+                        ch = (b_sig == 2'd1) ? 8'h80 : (b_sig == 2'd2) ? 8'h81 : "-";
+                        fg = (b_sig == 2'd1) ? GREEN : (b_sig == 2'd2) ? RED : GREY;
+                    end
+                    else if (col >= 4'd6 && col <= 4'd9) begin
+                        ch = num_ch(n_bpos, 1'b0, 1'b0, 1'b0, 8'd0, 4'd4, col - 4'd6);
+                        fg = (n_bpos == 32'd0) ? GREY : WHITE;
+                    end
+                    else if (col >= 4'd10) begin
+                        ch = num_ch(n_bpnl >> 8, (n_bpnl >> 8) != 32'd0, g_bpnl, 1'b0, 8'd0, 4'd6, col - 4'd10);
+                        fg = ((n_bpnl >> 8) == 32'd0) ? GREY : g_bpnl ? RED : GREEN;
+                    end
+                end
+            endcase
         end else begin
             // ---------------------------------------------------- body
             case (screen_state)
@@ -296,8 +381,12 @@ module text_layer (
                                 else ch = num_ch(n_qty, 1'b0, 1'b0, 1'b0, 8'd0, 4'd13, col - 4'd3);
                             end
                         end
-                        3'd2: begin                                     // PRICE   $305.15
-                            if (col <= 4'd4) begin ch = str_ch("PRICE           ", col); fg = CYAN; end
+                        3'd2: begin                                     // PRICE / LIMIT / STOP  $305.15
+                            if (col <= 4'd4) begin
+                                ch = str_ch((order_type == `OT_LMT) ? "LIMIT           " :
+                                            (order_type == `OT_STP) ? "STOP            " : "PRICE           ", col);
+                                fg = CYAN;
+                            end
                             else ch = num_ch(n_ordpx, 1'b0, 1'b0, 1'b1, "$", 4'd11, col - 4'd5);
                         end
                         3'd3: begin                                     // TOTAL  $3662.80
@@ -308,8 +397,17 @@ module text_layer (
                             end
                         end
                         3'd4: begin
-                            if (screen_state == `UI_ORDER_REVIEW) ;
-                            else if (!sell) begin                       // CASH   $8423.50
+                            if (screen_state == `UI_ORDER_REVIEW) begin // MKT    SL/TP  5%
+                                if (col <= 4'd2) begin
+                                    ch = str_ch((order_type == `OT_LMT) ? "LMT             " :
+                                                (order_type == `OT_STP) ? "STP             " : "MKT             ", col);
+                                    bg = BTN;
+                                end else if (!sell && col >= 4'd7 && col <= 4'd11) begin ch = str_ch("SL/TP           ", col - 4'd7); fg = GREY; end
+                                else if (!sell && col >= 4'd13) begin
+                                    ch = brk_ch(order_brk, col - 4'd13);
+                                    fg = (order_brk == `BRK_OFF) ? GREY : YELLOW;
+                                end
+                            end else if (!sell) begin                       // CASH   $8423.50
                                 if (col <= 4'd3) begin ch = str_ch("CASH            ", col); fg = GREY; end
                                 else begin ch = num_ch(n_cash, 1'b0, 1'b0, 1'b1, "$", 4'd12, col - 4'd4); fg = GREY; end
                             end else begin                              // OWN           5
@@ -324,13 +422,67 @@ module text_layer (
                             if (screen_state == `UI_ORDER_REVIEW) begin //   C: SEND ORDER
                                 ch = str_ch(" C: SEND ORDER  ", col);
                                 if (col <= 4'd14) begin bg = YELLOW; fg = BLACK; end
-                            end else begin                              //  BACK   QTY  NEXT
-                                ch = str_ch(" BACK  QTY  NEXT", col);
-                                b  = bar_button(col);
+                            end else begin                              // BACK QTY TYPE OK
+                                ch = str_ch("BACK QTY TYPE OK", col);
+                                if (bar4_button(col) != 3'd4) begin
+                                    if (bar4_button(col) == menu_selection[2:0]) begin bg = YELLOW; fg = BLACK; end
+                                    else                                         begin bg = BTN;    fg = WHITE; end
+                                end
                             end
                         end
                         default: ;
                     endcase
+                end
+
+                `UI_ORDER_TYPE: begin
+                    case (row)
+                        3'd1: begin                                     // TYPE   < LIMIT >
+                            if (col <= 4'd3) begin ch = str_ch("TYPE            ", col); fg = CYAN; end
+                            else if (col >= 4'd7)
+                                ch = str_ch((order_type == `OT_LMT) ? "< LIMIT >       " :
+                                            (order_type == `OT_STP) ? "< STOP  >       " : "< MARKET>       ", col - 4'd7);
+                        end
+                        3'd2: begin                                     // TRIGGER  $126.00
+                            if (col <= 4'd6) begin ch = str_ch("TRIGGER         ", col); fg = CYAN; end
+                            else begin
+                                ch = num_ch(n_trig, 1'b0, 1'b0, 1'b1, "$", 4'd9, col - 4'd7);
+                                if (order_type == `OT_MKT) fg = GREY;
+                            end
+                        end
+                        3'd3: begin                                     // SL/TP        5%
+                            if (col <= 4'd4) begin ch = str_ch("SL/TP           ", col); fg = CYAN; end
+                            else if (sell) begin ch = str_ch("BUY ONLY        ", col - 4'd8); fg = GREY; end
+                            else if (col >= 4'd13) begin
+                                ch = brk_ch(order_brk, col - 4'd13);
+                                if (order_brk == `BRK_OFF) fg = GREY;
+                            end
+                        end
+                        3'd4: begin                                     // what this order does
+                            fg = GREY;
+                            case (order_type)
+                                `OT_LMT: ch = str_ch(sell ? "SELL AT >= TRG  " : "BUY AT <= TRG   ", col);
+                                `OT_STP: ch = str_ch(sell ? "SELL WHEN <= TRG" : "BUY WHEN >= TRG ", col);
+                                default: ch = str_ch("FILLS RIGHT AWAY", col);
+                            endcase
+                        end
+                        3'd5: begin
+                            fg = GREY;
+                            if (!sell && order_brk != `BRK_OFF) begin   // AUTO SELL -/+ 5%
+                                if (col <= 9)       ch = str_ch("AUTO SELL -/+   ", col);
+                                else if (col >= 4'd13) begin ch = brk_ch(order_brk, col - 4'd13); fg = YELLOW; end
+                            end else
+                                ch = str_ch("U/D ROW  L/R SET", col);
+                        end
+                        3'd6: begin
+                            ch = str_ch("    C: DONE     ", col);
+                            if (col >= 4'd3 && col <= 4'd11) begin bg = YELLOW; fg = BLACK; end
+                        end
+                        default: ;
+                    endcase
+                    // the field being changed: black on yellow
+                    if (row >= 3'd1 && row <= 3'd3 && {1'b0, row} == menu_selection[2:0] + 3'd1 && col >= 4'd7) begin
+                        bg = YELLOW; fg = BLACK;
+                    end
                 end
 
                 `UI_QUANTITY: begin
@@ -362,7 +514,8 @@ module text_layer (
                 `UI_TRADE_RESULT: begin
                     case (row)
                         3'd1: begin                                     // big: FILLED / REJECTED
-                            if (trade_result_success) begin ch = str_ch(" FILLED         ", col); fg = GREEN; end
+                            if (trade_result_success && trade_result_placed) begin ch = str_ch(" PLACED         ", col); fg = CYAN; end
+                            else if (trade_result_success) begin ch = str_ch(" FILLED         ", col); fg = GREEN; end
                             else                      begin ch = str_ch("REJECTED        ", col); fg = RED; end
                         end
                         3'd3: begin

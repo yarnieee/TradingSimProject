@@ -18,6 +18,13 @@ module tb_display_numbers;
     reg [13:0] qty = 12;
     reg [31:0] days = 17;
     reg        sell = 0;
+    reg [1:0]  otype = `OT_MKT;
+    reg [15:0] otrig = 16'd30000;
+    reg [31:0] bcash = 32'd950_000, bval = 32'd1_012_345;
+    reg [9:0]  bp0 = 10, bp1 = 0, bp2 = 0, bp3 = 0;
+    reg [31:0] bcb0 = 220_000, bcb1 = 0, bcb2 = 0, bcb3 = 0;
+    reg [79:0] lpx = {16'd0, 16'd0, 16'd0, 16'd21000, 16'd21350};
+    reg [39:0] lday = {8'd0, 8'd0, 8'd0, 8'd4, 8'd9};
     wire [`DN_N*32-1:0] bcd;
     wire [`DN_N-1:0]    neg;
 
@@ -27,12 +34,16 @@ module tb_display_numbers;
         .pos0(p0), .pos1(p1), .pos2(p2), .pos3(p3),
         .cb0(cb0), .cb1(cb1), .cb2(cb2), .cb3(cb3),
         .sel_stock(sel), .sel_ref_price(ref), .quantity(qty), .days_left(days),
-        .sell(sell), .bcd(bcd), .neg(neg)
+        .sell(sell), .order_type(otype), .order_trig(otrig), .sel_sl(16'd28990), .sel_tp(16'd0),
+        .bot_cash(bcash), .bot_value(bval), .bot_pos0(bp0), .bot_pos1(bp1), .bot_pos2(bp2), .bot_pos3(bp3),
+        .bot_cb0(bcb0), .bot_cb1(bcb1), .bot_cb2(bcb2), .bot_cb3(bcb3),
+        .log_price(lpx), .log_day(lday),
+        .bcd(bcd), .neg(neg)
     );
 
     integer n_pass = 0, n_fail = 0;
     task check;
-        input [4:0]    f;
+        input [5:0]    f;
         input [31:0]   want_bcd;
         input          want_neg;
         input [8*40:1] name;
@@ -67,6 +78,22 @@ module tb_display_numbers;
         check(`DN_ORDPX,   32'h00030515, 0, "buy at ask 305.15");
         check(`DN_ORDTOT,  32'h00366280, 0, "buy total 12 x 305.15 + 1.00");
         check(`DN_NETPNL,  32'h00307950, 0, "net P/L +3079.50");
+        check(`DN_TRIG,    32'h00030000, 0, "trigger 300.00");
+        check(`DN_SL,      32'h00028990, 0, "stop-loss level 289.90");
+        check(`DN_TP,      32'h00000000, 0, "no take-profit: 0");
+        check(`DN_BCASH,   32'h00950000, 0, "bot cash 9500.00");
+        check(`DN_BNETPNL, 32'h00012345, 0, "bot P/L +123.45");
+        check(`DN_BPOS0,   32'h00000010, 0, "bot AMD shares 10");
+        check(`DN_BPNL0,   32'h00006550, 1, "bot AMD P/L 10 x 213.45 - 2200.00 = -65.50");
+        check(`DN_LOGPX0,  32'h00021350, 0, "bot log newest price 213.50");
+        check(`DN_LOGPX0+1,32'h00021000, 0, "bot log second price 210.00");
+        check(`DN_LOGDAY0, 32'h00000009, 0, "bot log newest day 9");
+
+        otype = `OT_LMT; qty = 2;
+        refresh;
+        check(`DN_ORDPX,   32'h00030000, 0, "limit order shows its trigger 300.00");
+        check(`DN_ORDTOT,  32'h00060100, 0, "limit buy total 2 x 300.00 + 1.00");
+        otype = `OT_MKT;
 
         sell = 1; pv = 32'd950_000; qty = 0; cash = 32'hFFFF_FFFF;
         refresh;

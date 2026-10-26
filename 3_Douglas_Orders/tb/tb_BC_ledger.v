@@ -62,7 +62,7 @@ module tb_BC_ledger;
         .clk(clk), .sys_reset(sys_reset), .game_state(game_state),
         .price0(price0), .price1(price1), .price2(price2), .price3(price3), .tick(tick),
         .sel_stock(sel_stock), .page_R(page_R), .btn_pulse(btn_pulse),
-        .ord_req(1'b0), .ord_side(1'b0), .ord_type(2'd0), .ord_qty(14'd0), .ord_trig(16'd0),
+        .ord_req(1'b0), .ord_side(1'b0), .ord_type(2'd0), .ord_qty(14'd0), .ord_trig(16'd0), .ord_brk(`BRK_OFF),
         .cash(cash), .pos0(pos0), .pos1(pos1), .pos2(pos2), .pos3(pos3),
         .ledger_busy(ledger_busy), .xR(xR), .yR(yR),
         .fill(fill), .fill_stock(fill_stock), .fill_side(fill_side),

@@ -7,10 +7,12 @@
 //   JB (right OLED): the game screens (OLED_Renderer); title artwork on the title screen
 //   JA (left OLED):  the page given on left_pixel (Douglas's order ticket);
 //                    title artwork on the title screen
+//   bot_view (sw1):  JB shows the bot against the player, JA the bot's last trades
 //
-// Every number on the right OLED comes from display_numbers as decimal digits.
+// Every number on the screens comes from display_numbers as decimal digits.
 module D_display_top #(
-    parameter DEBOUNCE_CTR    = 32'd1_999_999
+    parameter DEBOUNCE_CTR      = 32'd1_999_999,
+    parameter FINAL_TRADING_DAY = 32'd30        // for the game-progress bar
 ) (
     input  wire        clk,
     input  wire        rst,
@@ -24,6 +26,28 @@ module D_display_top #(
     input  wire        order_fill,
     input  wire        order_reject,
     input  wire [2:0]  order_reject_code,
+    input  wire        order_placed,      // a LMT/STP order went into the book
+    input  wire        order_from_submit, // the fill/reject is the order just sent
+    input  wire [63:0] sl_price,          // stop-loss / take-profit levels per stock (0 = none)
+    input  wire [63:0] tp_price,
+    // bot (sw1 shows it)
+    input  wire        bot_view,
+    input  wire [31:0] bot_cash,
+    input  wire [31:0] bot_value,
+    input  wire [9:0]  bot_pos0,
+    input  wire [9:0]  bot_pos1,
+    input  wire [9:0]  bot_pos2,
+    input  wire [9:0]  bot_pos3,
+    input  wire [31:0] bot_cb0,
+    input  wire [31:0] bot_cb1,
+    input  wire [31:0] bot_cb2,
+    input  wire [31:0] bot_cb3,
+    input  wire [7:0]  bot_signal,
+    input  wire [4:0]  bot_log_valid,
+    input  wire [4:0]  bot_log_side,
+    input  wire [9:0]  bot_log_stock,
+    input  wire [79:0] bot_log_price,
+    input  wire [39:0] bot_log_day,
     // The page shown on JA (left OLED) after the title screen.
     input  wire [15:0] left_pixel,
     output wire [6:0]  left_x,
@@ -57,6 +81,9 @@ module D_display_top #(
     input  wire [959:0] portfolio_samples_30,
     output wire        ord_req,
     output wire        ord_side,
+    output wire [1:0]  ord_type,          // the order's type, trigger and SL/TP (ORDER TYPE screen)
+    output wire [15:0] ord_trig,
+    output wire [1:0]  ord_brk,
     output wire [2:0]  trade_result_code,
     output wire        trade_result_success,
     output wire [1:0]  game_state,
@@ -106,6 +133,14 @@ module D_display_top #(
     wire       trade_side;
     reg        order_valid;
     reg  [2:0] validation_code;
+    wire       trade_result_placed;
+    wire [1:0] type_field;
+
+    // The chart and selected-stock price follow the same four-stock index
+    // that is sent to the order engine.
+    wire [15:0] selected_price = (selected_stock == 3'd0) ? price0 :
+                                 (selected_stock == 3'd1) ? price1 :
+                                 (selected_stock == 3'd2) ? price2 : price3;
 
     game_fsm game_fsm_inst (
         .clk(clk),
@@ -119,8 +154,11 @@ module D_display_top #(
         .order_fill(order_fill),
         .order_reject(order_reject),
         .order_reject_code(order_reject_code),
+        .order_placed(order_placed),
+        .order_from_submit(order_from_submit),
         .order_valid(order_valid),
         .validation_code(validation_code),
+        .selected_price(selected_price),
         .screen_state(screen_state),
         .quantity(quantity),
         .selected_stock(selected_stock),
@@ -128,17 +166,15 @@ module D_display_top #(
         .menu_selection(menu_selection),
         .trade_result_code(trade_result_code),
         .trade_result_success(trade_result_success),
-        .trade_side(trade_side)
+        .trade_result_placed(trade_result_placed),
+        .trade_side(trade_side),
+        .order_type(ord_type),
+        .order_trig(ord_trig),
+        .order_brk(ord_brk),
+        .type_field(type_field)
     );
 
     assign sel_stock = selected_stock[1:0];
-
-    // The chart and selected-stock price follow the same four-stock index
-    // that is sent to the order engine. This keeps the specific-stock screen
-    // and its live graph on the same stock after the model expansion.
-    wire [15:0] selected_price = (selected_stock == 3'd0) ? price0 :
-                                 (selected_stock == 3'd1) ? price1 :
-                                 (selected_stock == 3'd2) ? price2 : price3;
     wire [479:0] selected_samples_30 = (selected_stock == 3'd0) ?
                                        stock0_samples_30 :
                                        (selected_stock == 3'd1) ?
@@ -156,11 +192,14 @@ module D_display_top #(
     wire [15:0] selected_reference_price = selected_samples_30[15:0];
     wire [16:0] selected_ask_full = {1'b0, selected_price} + 17'd5;
     wire [15:0] selected_ask = selected_ask_full[16] ? 16'hFFFF : selected_ask_full[15:0];
-    wire [31:0] buy_notional = {16'd0, selected_ask} * {18'd0, quantity};
+    // a market buy pays the ask; a limit / stop buy is checked at its trigger (as B does)
+    wire [15:0] buy_price    = (ord_type == `OT_MKT) ? selected_ask : ord_trig;
+    wire [31:0] buy_notional = {16'd0, buy_price} * {18'd0, quantity};
     wire [32:0] buy_total = {1'b0, buy_notional} + 33'd100;
 
     // Validate before the order-review screen can submit to B_order_top.
-    // The ask and fee match B_order_top's market-order parameters.
+    // The ask and fee match B_order_top's parameters. (A full order book is
+    // only known to B: that order is rejected there.)
     always @(*) begin
         order_valid = 1'b1;
         validation_code = `RJ_NONE;
@@ -221,6 +260,10 @@ module D_display_top #(
     wire        sample_pixel_R;
 
     // ================================================================ numbers on the right OLED
+    // the selected stock's stop-loss / take-profit levels
+    wire [15:0] sel_sl = sl_price[16*selected_stock[1:0] +: 16];
+    wire [15:0] sel_tp = tp_price[16*selected_stock[1:0] +: 16];
+
     wire [`DN_N*32-1:0] numbers_bcd;
     wire [`DN_N-1:0]    numbers_neg;
     display_numbers display_numbers_inst (
@@ -233,8 +276,23 @@ module D_display_top #(
         .cb2(portfolio_cb2), .cb3(portfolio_cb3),
         .sel_stock(selected_stock[1:0]), .sel_ref_price(selected_reference_price),
         .quantity(quantity), .days_left(time_remaining), .sell(trade_side),
+        .order_type(ord_type), .order_trig(ord_trig),
+        .sel_sl(sel_sl), .sel_tp(sel_tp),
+        .bot_cash(bot_cash), .bot_value(bot_value),
+        .bot_pos0(bot_pos0), .bot_pos1(bot_pos1), .bot_pos2(bot_pos2), .bot_pos3(bot_pos3),
+        .bot_cb0(bot_cb0), .bot_cb1(bot_cb1), .bot_cb2(bot_cb2), .bot_cb3(bot_cb3),
+        .log_price(bot_log_price), .log_day(bot_log_day),
         .bcd(numbers_bcd), .neg(numbers_neg)
     );
+
+
+    // game progress bar: days gone / all days, as 0..96 pixels (registered)
+    wire [31:0] days_gone = (time_remaining < FINAL_TRADING_DAY) ? FINAL_TRADING_DAY - time_remaining : 32'd0;
+    reg  [6:0]  progress_w;
+    always @(posedge clk) begin
+        if (rst) progress_w <= 7'd0;
+        else     progress_w <= (FINAL_TRADING_DAY == 0) ? 7'd0 : (days_gone * 32'd96) / FINAL_TRADING_DAY;
+    end
 
     // each stock against its price 30 days ago (oldest sample), for green/red
     wire [3:0] stock_up = {price3 >= stock3_samples_30[15:0], price2 >= stock2_samples_30[15:0],
@@ -255,6 +313,14 @@ module D_display_top #(
         .numbers_bcd(numbers_bcd),
         .numbers_neg(numbers_neg),
         .stock_up(stock_up),
+        .trade_result_placed(trade_result_placed),
+        .order_type(ord_type),
+        .order_brk(ord_brk),
+        .bot_view(bot_view),
+        .bot_signal(bot_signal),
+        .sel_sl(sel_sl),
+        .sel_tp(sel_tp),
+        .progress_w(progress_w),
         .pixel_data(pixel_data_game_R)
     );
 
@@ -304,8 +370,17 @@ module D_display_top #(
 
     assign pixel_data_R = (screen_state == `UI_TITLE) ?
                           title_pixel_R : pixel_data_game_R;
-    assign pixel_data_L = (screen_state == `UI_TITLE) ?
-                          title_pixel_L : left_pixel;
+    // bot view: the bot's last trades (drawn turned 180 degrees: JA is upside down)
+    wire [15:0] bot_log_pixel;
+    bot_log_page #(.FLIP_180(1)) bot_log_page_inst (
+        .pix_x(left_x), .pix_y(left_y),
+        .bcd(numbers_bcd),
+        .log_valid(bot_log_valid), .log_side(bot_log_side), .log_stock(bot_log_stock),
+        .pixel(bot_log_pixel)
+    );
+
+    assign pixel_data_L = (screen_state == `UI_TITLE) ? title_pixel_L :
+                          bot_view                    ? bot_log_pixel : left_pixel;
 
     oled_display oled_L (
         .clk(clk_6_25MHz),

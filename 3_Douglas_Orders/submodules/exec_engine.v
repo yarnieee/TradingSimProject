@@ -82,7 +82,8 @@ module exec_engine #(
     output reg  [15:0] fill_fee,
     // reject to Matthew
     output reg         reject,
-    output reg  [2:0]  reject_code
+    output reg  [2:0]  reject_code,
+    output reg         res_submit      // with fill/reject: 1 = result of a new order, 0 = of the book
 );
     localparam ST_IDLE  = 3'd0,
                ST_CHECK = 3'd1,
@@ -212,6 +213,7 @@ module exec_engine #(
             fill_fee    <= 16'd0;
             reject      <= 1'b0;
             reject_code <= `RJ_NONE;
+            res_submit  <= 1'b0;
         end else begin
             // pulses default low
             trq_ack <= 1'b0;
@@ -275,6 +277,7 @@ module exec_engine #(
                 end
 
                 ST_EVAL: begin
+                    res_submit <= !cand_book;
                     if (v_ok) begin
                         if (cand_book || cand_type == `OT_MKT) begin
                             fill       <= 1'b1;
@@ -311,6 +314,7 @@ module exec_engine #(
                     end else begin
                         reject      <= 1'b1;
                         reject_code <= `RJ_BOOK_FULL;
+                        res_submit  <= 1'b0;        // the order itself already filled
                     end
                     pair_pend <= 1'b0;
                     state     <= ST_IDLE;

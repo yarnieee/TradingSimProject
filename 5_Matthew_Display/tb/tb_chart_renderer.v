@@ -11,6 +11,7 @@ module tb_chart_renderer;
     reg  [479:0] stock_samples;
     reg  [959:0] portfolio_samples;
     reg  [31:0]  live_value;
+    reg  [15:0]  sl_price = 16'd0, tp_price = 16'd0;
     wire         pixel_active;
     wire [15:0]  pixel_color;
 
@@ -25,6 +26,8 @@ module tb_chart_renderer;
         .stock_samples(stock_samples),
         .portfolio_samples(portfolio_samples),
         .live_value(live_value),
+        .sl_price(sl_price),
+        .tp_price(tp_price),
         .pixel_active(pixel_active),
         .pixel_color(pixel_color)
     );
@@ -95,6 +98,23 @@ module tb_chart_renderer;
         check(!pixel_active, "nothing drawn left of the frame");
         pixel_x = 7'd95; pixel_y = 6'd53; #1;
         check(!pixel_active, "nothing drawn right of the frame");
+
+        // stock chart with SL / TP lines: history flat at $100.00 except
+        // sample 3 at $101.00, so the range is 100 cents, shift 3 (100 >> 3 = 12).
+        chart_mode = 2'b01;
+        for (i = 0; i < 30; i = i + 1) stock_samples[16*i +: 16] = 16'd10000;
+        stock_samples[16*3 +: 16] = 16'd10100;
+        sl_price = 16'd9000;                       // below the chart: on the bottom line
+        tp_price = 16'd10080;                      // (80 >> 3) = 10 up: y 43
+        pixel_x = 7'd20; pixel_y = 6'd43; #1;      // x[1] = 0: a dash
+        check(pixel_active && pixel_color == 16'h07E0, "take-profit dashed green at its level");
+        pixel_x = 7'd22; #1;                       // x[1] = 1: a gap
+        check(!pixel_active, "take-profit line is dashed");
+        pixel_x = 7'd40; pixel_y = 6'd53; #1;
+        check(pixel_active, "stop-loss below the range sits on the bottom line");
+        sl_price = 16'd0; tp_price = 16'd0;
+        pixel_x = 7'd20; pixel_y = 6'd43; #1;
+        check(!pixel_active, "no levels: no dashed lines");
 
         if (fail_count == 0)
             $display("PASS: tb_chart_renderer (%0d checks)", pass_count);

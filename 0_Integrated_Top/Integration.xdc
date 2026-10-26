@@ -7,6 +7,8 @@ create_clock -add -name sys_clk_pin -period 10.00 -waveform {0 5} [get_ports clk
 
 ## Reset: sw[0], as in D's constraints (top port rst)
 set_property -dict { PACKAGE_PIN V17   IOSTANDARD LVCMOS33 } [get_ports rst]
+## Bot view: sw[1] (top port bot_sw)
+set_property -dict { PACKAGE_PIN W16   IOSTANDARD LVCMOS33 } [get_ports bot_sw]
 
 ## LEDs
 set_property -dict { PACKAGE_PIN U16   IOSTANDARD LVCMOS33 } [get_ports {led[0]}]

@@ -257,3 +257,20 @@ same layout (no more 3x5 font). Arrow and punctuation glyphs added to `font_rend
 `Integration.xdc` now declares the 6.25 MHz OLED clock so Vivado times the pixel path (it was
 unconstrained). `menu_buttons`, `font_3x5`, `ticket_layout.vh` moved to `9_Not_Used`. Testbenches
 `tb_ticket_screen` and `tb_chart_renderer` rewritten for the new layout; all testbenches pass.
+
+## 2026-10-26: order types in the game, SL/TP and timer visuals, bot trader, bot view
+
+**Asked for:** visuals for stop-loss and the timer; a bot with trading patterns and activity; a
+screen for every state, including other buy/sell types; a switch between bot and player views.
+
+**Done by the AI (branch-team-integration-v2):**
+- `game_fsm`: new ORDER TYPE screen (type MKT/LMT/STP, trigger in ~1% steps, SL/TP), BUY/SELL bar
+  BACK/QTY/TYPE/OK, PLACED result for pending orders, results only from the order just sent.
+- `B_order_top`: `ord_brk` in; `ord_placed`, `res_submit`, per-stock `sl_price`/`tp_price` out.
+- `chart_renderer`: SL/TP levels as dashed red/green lines; header progress bar for the game's
+  days; days counter red in the last 5 days.
+- `4_Tricia_Ledger/submodules/bot_trader.v` (AI-written for Tricia to review): own cash/shares,
+  8-day moving-average momentum rule, 5-entry trade log; `tb_bot_trader`.
+- sw[1] (`bot_sw`, pin W16): bot view on both OLEDs (`text_layer` bot screen, new `bot_log_page`).
+- `display_numbers` extended (trigger, SL/TP, bot fields; 44 fields); tests extended
+  (`tb_display_numbers` 31, `tb_matthew_game_fsm` 55, `tb_chart_renderer` 14, `tb_integration` 27).

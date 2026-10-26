@@ -41,9 +41,10 @@
 //                         now: tied to 0
 //   ord_req        1      Matthew: D_display_top          places his order (entering the CONFIRM screen)
 //   ord_side       1      Matthew: D_display_top          BUY or SELL screen he came from
-//   ord_type       [1:0]  Matthew                       now: tied to MKT
+//   ord_type       [1:0]  Matthew: ORDER TYPE screen    MKT / LMT / STP
 //   ord_qty        [13:0] Matthew: game_fsm quantity    1-255 accepted, else BAD QTY
-//   ord_trig       [15:0] Matthew                       now: tied to 0 (market orders only)
+//   ord_trig       [15:0] Matthew: ORDER TYPE screen    trigger price for LMT / STP
+//   ord_brk        [1:0]  Matthew: ORDER TYPE screen    SL/TP for a buy (OFF, 2, 5, 10%)
 //   cash           [31:0] Tricia: ledger                buy checks (cost + fee <= cash)
 //   pos0..3        [9:0]  Tricia: ledger                sell checks (qty <= position)
 //   ledger_busy    1      Tricia: ledger                waits for it to drop before the next order
@@ -63,6 +64,10 @@
 //                         plan: Matthew (reject screen)
 //   reject_code    [2:0]  plan: Matthew                 why (codes in trading_defs.vh); now unused
 //   pending_count  [3:0]  Integration_Top: led[11:8]    orders waiting in the book, 0-8
+//   ord_placed     1      Matthew: game_fsm             a LMT/STP order went into the book (PLACED)
+//   res_submit     1      Matthew: game_fsm             with fill/reject: the order just sent, not the book's
+//   sl_price,      [63:0] Matthew: chart                SL / TP levels in the book per stock (0 = none),
+//   tp_price                                            drawn as dashed lines on the stock chart
 //   ticket_pixel   [15:0] Matthew: D_display_top          RGB565 colour of the ticket page at (xR, yR),
 //                         (left_pixel) -> left OLED JA  drawn rotated 180 degrees (TICKET_FLIP_180)
 module B_order_top #(
@@ -93,6 +98,7 @@ module B_order_top #(
     input  wire [1:0]  ord_type,       // `OT_MKT for prototype 1
     input  wire [13:0] ord_qty,        // Matthew's 0..9999; accepted 1..255, else RJ_BAD_QTY
     input  wire [15:0] ord_trig,       // LMT/STP only
+    input  wire [1:0]  ord_brk,        // SL/TP for a BUY: `BRK_OFF, _2, _5, _10
     // ledger (Tricia), read-only
     input  wire [31:0] cash,
     input  wire [9:0]  pos0,
@@ -114,6 +120,12 @@ module B_order_top #(
     output wire        reject,
     output wire [2:0]  reject_code,
     output wire [3:0]  pending_count,
+    output wire        ord_placed,     // pulse: a LMT/STP order went into the book
+    output wire        res_submit,     // with fill/reject: 1 = a new order's result, 0 = the book's
+    // stop-loss / take-profit levels waiting in the book, per stock (0 = none);
+    // stock k is bits [16k+15:16k]
+    output reg  [63:0] sl_price,
+    output reg  [63:0] tp_price,
     // Ticket page pixel (Matthew)
     output wire [15:0] ticket_pixel
 );
@@ -167,7 +179,7 @@ module B_order_top #(
         .key_up(key_up), .key_down(key_down), .key_left(key_left),
         .key_right(key_right), .key_center(key_center),
         .ext_load(ord_req), .ext_side(ord_side), .ext_type(ord_type),
-        .ext_qty(ord_qty8), .ext_trig(ord_trig),
+        .ext_qty(ord_qty8), .ext_trig(ord_trig), .ext_brk(ord_brk),
         .stock(e_stock), .side(e_side), .otype(e_type), .qty(e_qty), .trig(e_trig),
         .brk(e_brk), .ord_sel(e_ord_sel), .focus(e_focus),
         .submit_req(submit_req), .sub_stock(sub_stock), .sub_side(sub_side),
@@ -219,8 +231,9 @@ module B_order_top #(
         .pair_sl(pair_sl), .pair_tp(pair_tp),
         .fill(fill), .fill_stock(fill_stock), .fill_side(fill_side),
         .fill_qty(fill_qty), .fill_price(fill_price), .fill_fee(fill_fee),
-        .reject(reject), .reject_code(reject_code)
+        .reject(reject), .reject_code(reject_code), .res_submit(res_submit)
     );
+    assign ord_placed = placed;
 
     // rd_* is for testbenches; the ORDERS view reads every slot through all_*
     order_book #(.SPREAD(SPREAD)) u_book (
@@ -240,6 +253,18 @@ module B_order_top #(
         .all_valid(bk_valid), .all_side(bk_side), .all_stock(bk_stock), .all_type(bk_type),
         .all_qty(bk_qty), .all_trig(bk_trig), .all_leg(bk_leg)
     );
+
+    // ------------------------------------------------------------ SL/TP levels per stock (for the chart)
+    integer k;
+    always @* begin
+        sl_price = 64'd0;
+        tp_price = 64'd0;
+        for (k = 0; k < 8; k = k + 1)
+            if (bk_leg[k]) begin
+                if (bk_type[2*k +: 2] == `OT_STP) sl_price[16*bk_stock[2*k +: 2] +: 16] = bk_trig[16*k +: 16];
+                else                              tp_price[16*bk_stock[2*k +: 2] +: 16] = bk_trig[16*k +: 16];
+            end
+    end
 
     // ------------------------------------------------------------ screen
     ticket_screen #(.REJ_SHOW_CYCLES(REJ_SHOW_CYCLES), .FLIP_180(TICKET_FLIP_180)) u_screen (

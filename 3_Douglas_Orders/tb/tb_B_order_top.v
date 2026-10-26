@@ -25,6 +25,7 @@ module tb_B_order_top;
     reg [1:0]  ord_type = 0;
     reg [13:0] ord_qty = 0;
     reg [15:0] ord_trig = 0;
+    reg [1:0]  ord_brk = 0;
     reg [6:0]  xR = 0;
     reg [5:0]  yR = 0;
 
@@ -66,7 +67,7 @@ module tb_B_order_top;
         .price0(price0), .price1(price1), .price2(price2), .price3(price3), .tick(tick),
         .sel_stock(sel_stock), .page_R(page_R),
         .btn_pulse(btn_pulse),
-        .ord_req(ord_req), .ord_side(ord_side), .ord_type(ord_type), .ord_qty(ord_qty), .ord_trig(ord_trig),
+        .ord_req(ord_req), .ord_side(ord_side), .ord_type(ord_type), .ord_qty(ord_qty), .ord_trig(ord_trig), .ord_brk(ord_brk),
         .cash(cash), .pos0(pos0), .pos1(pos1), .pos2(pos2), .pos3(pos3),
         .ledger_busy(ledger_busy), .xR(xR), .yR(yR),
         .fill(fill), .fill_stock(fill_stock), .fill_side(fill_side),
@@ -587,12 +588,14 @@ module tb_B_order_top;
         set_stock(0);
 
         // ------------------------------------------------ 21
-        scenario("21 Matthew's market order takes the ticket's SL/TP");
+        scenario("21 Matthew's market order with SL/TP 10% (ord_brk)");
         set_price(0, 10000);
-        set_brk(`BRK_10);
+        set_brk(`BRK_OFF);                             // the ticket's own setting is not used
         page_R = `PG_R_PORTFOLIO;
         mark;
+        ord_brk = `BRK_10;
         send_ord(`SIDE_BUY, 2);
+        ord_brk = `BRK_OFF;
         // fill at 100.05; distance 10005 * 6560 >> 16 = 1001 -> SL 90.04, TP 110.06
         check(n_fill == b_fill + 1 && pending_count == 2, "S21 buy fills, pair placed");
         check(u_dut.u_book.s_trig[0] == 9004 && u_dut.u_book.s_trig[1] == 11006, "S21 SL 90.04, TP 110.06");

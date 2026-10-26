@@ -7,6 +7,9 @@
 // are drawn as a step line in columns of 6 pixels, scaled against their own
 // min/max with a power-of-two shift (no divider) to at most 24 pixels tall.
 // A stock that is up over the period is green, down is red.
+// Stop-loss / take-profit levels waiting in the order book (sl_price,
+// tp_price; 0 = none) are dashed lines, red and green, behind the price line;
+// a level outside the chart's range sits on the bottom or top edge.
 //
 // chart_mode:
 //   2'b00 = disabled
@@ -19,6 +22,8 @@ module chart_renderer (
     input  wire [479:0] stock_samples,
     input  wire [959:0] portfolio_samples,
     input  wire [31:0]  live_value,
+    input  wire [15:0]  sl_price,
+    input  wire [15:0]  tp_price,
     output reg          pixel_active,
     output reg  [15:0]  pixel_color
 );
@@ -35,6 +40,23 @@ module chart_renderer (
     reg [6:0]  bin_x0;
     reg [5:0]  h_cur, h_prev, y_cur, y_prev;
     integer    i, s;
+
+    // y of a price level on this chart (clamped to the plot)
+    function [5:0] level_y;
+        input [31:0] p;
+        input [31:0] lo, rng;
+        input [4:0]  sh;
+        reg   [31:0] h;
+        begin
+            if (p <= lo)                    level_y = BASE;
+            else if (p - lo > rng)          level_y = BASE - 6'd24;
+            else begin
+                h = (rng == 0) ? 32'd12 : (p - lo) >> sh;
+                level_y = (h > 32'd24) ? BASE - 6'd24 : BASE - h[5:0];
+            end
+        end
+    endfunction
+    reg [5:0] y_sl, y_tp;
 
     always @(*) begin
         pixel_active = 1'b0;
@@ -72,6 +94,8 @@ module chart_renderer (
         if (h_prev > 6'd24) h_prev = 6'd24;
         y_cur  = BASE - h_cur;
         y_prev = BASE - h_prev;
+        y_sl   = level_y({16'd0, sl_price}, min_v, range, shift);
+        y_tp   = level_y({16'd0, tp_price}, min_v, range, shift);
 
         if ((chart_mode != 2'b00) &&
             (pixel_x >= LEFT) && (pixel_x <= RIGHT) &&
@@ -90,6 +114,12 @@ module chart_renderer (
                     pixel_color = (v[14] >= v[0]) ? 16'h07E0 : 16'hF8A2;
                 else
                     pixel_color = 16'h07FF;
+            end else if ((chart_mode == MODE_STOCK) && !pixel_x[1] && (sl_price != 16'd0) && (pixel_y == y_sl)) begin
+                pixel_active = 1'b1;
+                pixel_color  = 16'hF800;                 // stop-loss: red dashes
+            end else if ((chart_mode == MODE_STOCK) && !pixel_x[1] && (tp_price != 16'd0) && (pixel_y == y_tp)) begin
+                pixel_active = 1'b1;
+                pixel_color  = 16'h07E0;                 // take-profit: green dashes
             end
         end
     end

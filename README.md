@@ -45,10 +45,15 @@ Each test prints `PASS` or `FAIL`.
 ## Using the board
 
 - **sw[0]:** reset
+- **sw[1]:** bot view: the right OLED shows the bot against you, the left its last trades
 - **Buttons:** move through the game screens
 - **Right OLED:** game screens
 - **Left OLED:** order ticket
 - **7-seg:** quantity
 - **LEDs:** fill / reject flash, pending orders
 
-To buy: pick a stock, choose BUY, set the quantity, then choose confirm.
+To buy: pick a stock, choose BUY, set QTY, then OK and send. For a limit or stop order, or a
+stop-loss / take-profit, choose TYPE first (U/D picks a row, L/R changes it).
+
+The bot trades on its own from the start: it buys 10 shares of a stock when the price is above its
+8-day average and sells when it falls below.

@@ -3,14 +3,16 @@
 
 // tb_matthew_game_fsm: checks Matthew's game_fsm on its own (button pulses in,
 // screen_state and quantity out). Covers every screen transition in the
-// current flow and the quantity editor's digits and limits.
+// current flow, the quantity editor's digits and limits, the ORDER TYPE
+// screen (type, trigger price, SL/TP) and placed (pending) results.
 module tb_matthew_game_fsm;
     reg clk = 0;
     always #5 clk = ~clk;
     reg rst = 1;
     reg U = 0, D = 0, L = 0, R = 0, C = 0;
     reg final_day_reached = 0;
-    reg order_fill = 0, order_reject = 0;
+    reg order_fill = 0, order_reject = 0, order_placed = 0, order_from_submit = 1;
+    reg [15:0] selected_price = 16'd12800;           // $128.00: trigger step 128 >> 7 = $1.00
     reg [2:0] order_reject_code = 0;
     reg order_valid = 1;
     reg [2:0] validation_code = `RJ_NONE;
@@ -19,22 +21,29 @@ module tb_matthew_game_fsm;
     wire [2:0]  selected_stock;
     wire [3:0]  menu_selection;
     wire        trade_side;
+    wire        trade_result_success, trade_result_placed;
+    wire [1:0]  order_type, order_brk, type_field;
+    wire [15:0] order_trig;
 
     game_fsm dut (.clk(clk), .rst(rst), .btnU(U), .btnD(D), .btnL(L), .btnR(R), .btnC(C),
                   .final_day_reached(final_day_reached),
                   .order_fill(order_fill), .order_reject(order_reject),
                   .order_reject_code(order_reject_code),
+                  .order_placed(order_placed), .order_from_submit(order_from_submit),
                   .order_valid(order_valid), .validation_code(validation_code),
+                  .selected_price(selected_price),
                   .screen_state(screen_state), .quantity(quantity),
                   .selected_stock(selected_stock), .menu_selection(menu_selection),
-                  .trade_side(trade_side));
+                  .trade_result_success(trade_result_success), .trade_result_placed(trade_result_placed),
+                  .trade_side(trade_side), .order_type(order_type), .order_trig(order_trig),
+                  .order_brk(order_brk), .type_field(type_field));
 
     localparam TITLE = `UI_TITLE, PORTFOLIO = `UI_PORTFOLIO,
                STOCKS = `UI_STOCKS, SPECIFIC = `UI_SPECIFIC,
                BUY = `UI_BUY_STOCK, SELL = `UI_SELL_STOCK,
                QUANTITY = `UI_QUANTITY, ORDER_REVIEW = `UI_ORDER_REVIEW,
                ORDER_RESULT = `UI_ORDER_RESULT, TRADE_RESULT = `UI_TRADE_RESULT,
-               GAME_END = `UI_GAME_END;
+               GAME_END = `UI_GAME_END, ORDER_TYPE = `UI_ORDER_TYPE;
     localparam BU = 0, BD = 1, BL = 2, BR = 3, BC = 4;
 
     integer n_pass = 0, n_fail = 0;
@@ -133,17 +142,67 @@ module tb_matthew_game_fsm;
         check(quantity == 9122, "ones digit carries: 9122");
         press(BC);
         check(screen_state == BUY && quantity == 9122, "quantity --C--> back to buy, quantity kept");
-        press(BR); press(BR); press(BC);
-        check(screen_state == ORDER_REVIEW, "buy --R, R, C--> order review");
+        check(order_type == `OT_MKT && order_brk == `BRK_OFF && order_trig == 16'd12800,
+              "a new buy starts as a market order, trigger at the price");
+        press(BR); press(BR); press(BR); press(BC);
+        check(screen_state == ORDER_REVIEW, "buy --R, R, R, C--> order review (OK)");
         press(BC);
         check(screen_state == ORDER_RESULT, "order review --C--> order result");
-        order_fill = 1;
+        order_fill = 1; order_from_submit = 0;          // a book order filling: not this one
         @(negedge clk);
         order_fill = 0;
         @(negedge clk);
-        check(screen_state == TRADE_RESULT, "order fill --> trade result");
+        check(screen_state == ORDER_RESULT, "a book fill does not count as this order's result");
+        order_fill = 1; order_from_submit = 1;
+        @(negedge clk);
+        order_fill = 0;
+        @(negedge clk);
+        check(screen_state == TRADE_RESULT && trade_result_success && !trade_result_placed,
+              "order fill --> trade result (filled)");
         press(BC);
         check(screen_state == PORTFOLIO && quantity == 0, "trade result --C--> portfolio and reset quantity");
+
+        // ORDER TYPE screen: limit buy with SL/TP 5%
+        press(BR); press(BC); press(BD); press(BC);    // stocks, stock 0
+        press(BC);                                     // specific: buy
+        check(screen_state == BUY, "back on the buy screen");
+        press(BR); press(BR); press(BC);
+        check(screen_state == ORDER_TYPE && menu_selection == 4'd0, "buy --R, R, C--> order type screen, type field");
+        press(BR);
+        check(order_type == `OT_LMT, "R on type: MKT -> LMT");
+        press(BR); press(BR);
+        check(order_type == `OT_MKT, "type wraps LMT -> STP -> MKT");
+        press(BL);
+        check(order_type == `OT_STP, "L on type: MKT -> STP");
+        press(BL);
+        check(order_type == `OT_LMT, "L on type: STP -> LMT");
+        press(BD);
+        check(type_field == 2'd1 && menu_selection == 4'd1, "D: trigger field");
+        presses(BL, 3);
+        check(order_trig == 16'd12500, "L x3 on trigger: 128.00 -> 125.00 (steps of 1%)");
+        press(BR);
+        check(order_trig == 16'd12600, "R on trigger: 126.00");
+        press(BD);
+        check(type_field == 2'd2, "D: SL/TP field");
+        press(BR); press(BR);
+        check(order_brk == `BRK_5, "R x2 on SL/TP: OFF -> 2% -> 5%");
+        press(BD);
+        check(type_field == 2'd2, "D on the last field stays");
+        press(BU); press(BU); press(BU);
+        check(type_field == 2'd0, "U back to the type field");
+        press(BC);
+        check(screen_state == BUY && menu_selection == 4'd2, "C: back to buy, cursor on TYPE");
+        check(order_type == `OT_LMT && order_trig == 16'd12600 && order_brk == `BRK_5,
+              "the order keeps LMT @ 126.00 with SL/TP 5%");
+        press(BR); press(BC); press(BC);
+        check(screen_state == ORDER_RESULT, "OK, send");
+        order_placed = 1;
+        @(negedge clk);
+        order_placed = 0;
+        @(negedge clk);
+        check(screen_state == TRADE_RESULT && trade_result_success && trade_result_placed,
+              "a limit order placed in the book --> trade result (placed)");
+        press(BC);
 
         // sell path
         press(BR); press(BC); press(BD); press(BC);    // stocks, stock 0

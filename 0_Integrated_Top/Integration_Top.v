@@ -10,11 +10,14 @@
 //   yian_market      A_top           Yi An    4 stock channels, one trading day every 2 s
 //   douglas_orders   B_order_top     Douglas  validates and fills orders, order book, ticket page
 //   tricia_ledger    ledger          Tricia   cash, positions, cost basis, ledger_busy handshake
+//   tricia_bot       bot_trader      Tricia   the computer player (8-day average rule) [AI-written, to review]
 //   matthew_display  D_display_top   Matthew  buttons, game screens, 7-seg, both OLEDs
 //
 // Board:
 //   sw[0] (rst)   reset, as in Matthew's constraints
-//   buttons       Matthew's game FSM (title > portfolio > stocks > stock > buy/sell > quantity > confirm)
+//   sw[1] (bot_sw) up: bot view (JB the bot against you, JA the bot's last trades)
+//   buttons       Matthew's game FSM (title > portfolio > stocks > stock > buy/sell
+//                 > quantity / order type > review > result)
 //   JB (right)    Matthew's game screens
 //   JA (left)     Douglas's order ticket (title artwork on the title screen)
 //   7-seg         Matthew's quantity
@@ -26,6 +29,7 @@ module Integration_Top #(
 ) (
     input  wire        clk,
     input  wire        rst,
+    input  wire        bot_sw,          // sw[1]: show the bot
     input  wire        btnU,
     input  wire        btnD,
     input  wire        btnL,
@@ -83,19 +87,44 @@ module Integration_Top #(
     wire [13:0] quantity;
     wire [1:0]  sel_stock, game_state;
     wire        ord_req, ord_side;
+    wire [1:0]  ord_type, ord_brk;
+    wire [15:0] ord_trig;
+    wire        ord_placed, res_submit;
+    wire [63:0] sl_price, tp_price;
     wire        fill, reject;
+    // bot
+    wire [31:0] bot_cash, bot_value, bot_cb0, bot_cb1, bot_cb2, bot_cb3;
+    wire [9:0]  bot_pos0, bot_pos1, bot_pos2, bot_pos3;
+    wire [7:0]  bot_signal, bot_trades;
+    wire [4:0]  bot_log_valid, bot_log_side;
+    wire [9:0]  bot_log_stock;
+    wire [79:0] bot_log_price;
+    wire [39:0] bot_log_day;
+    reg         bot_s0, bot_view;           // sw[1], synchronised
+    always @(posedge clk) begin
+        bot_s0   <= bot_sw;
+        bot_view <= bot_s0;
+    end
     wire [2:0]  reject_code;
     wire [15:0] ticket_pixel;
     wire [6:0]  xL;
     wire [5:0]  yL;
     D_display_top #(
-        .DEBOUNCE_CTR(DEBOUNCE_CTR)
+        .DEBOUNCE_CTR(DEBOUNCE_CTR),
+        .FINAL_TRADING_DAY(FINAL_TRADING_DAY)
     ) matthew_display (
         .clk(clk), .rst(sys_reset),
         .btnU(btnU), .btnD(btnD), .btnL(btnL), .btnR(btnR), .btnC(btnC),
         .final_day_reached(final_day_reached),
         .time_remaining(time_remaining),
         .order_fill(fill), .order_reject(reject), .order_reject_code(reject_code),
+        .order_placed(ord_placed), .order_from_submit(res_submit),
+        .sl_price(sl_price), .tp_price(tp_price),
+        .bot_view(bot_view), .bot_cash(bot_cash), .bot_value(bot_value),
+        .bot_pos0(bot_pos0), .bot_pos1(bot_pos1), .bot_pos2(bot_pos2), .bot_pos3(bot_pos3),
+        .bot_cb0(bot_cb0), .bot_cb1(bot_cb1), .bot_cb2(bot_cb2), .bot_cb3(bot_cb3),
+        .bot_signal(bot_signal), .bot_log_valid(bot_log_valid), .bot_log_side(bot_log_side),
+        .bot_log_stock(bot_log_stock), .bot_log_price(bot_log_price), .bot_log_day(bot_log_day),
         .left_pixel(ticket_pixel), .left_x(xL), .left_y(yL),
         .screen_state(screen_state), .quantity(quantity), .sel_stock(sel_stock),
         .price0(price0), .price1(price1), .price2(price2), .price3(price3),
@@ -111,7 +140,8 @@ module Integration_Top #(
         .portfolio_cb0(cb0), .portfolio_cb1(cb1),
         .portfolio_cb2(cb2), .portfolio_cb3(cb3),
         .portfolio_samples_30(portfolio_samples_30),
-        .ord_req(ord_req), .ord_side(ord_side), .game_state(game_state),
+        .ord_req(ord_req), .ord_side(ord_side),
+        .ord_type(ord_type), .ord_trig(ord_trig), .ord_brk(ord_brk), .game_state(game_state),
         .JA(JA), .JB(JB), .an(an), .seg(seg)
     );
 
@@ -223,6 +253,20 @@ module Integration_Top #(
         .portfolio_samples(portfolio_samples_30)
     );
 
+    // The bot: its own cash and shares, trading on each market tick.
+    bot_trader tricia_bot (
+        .clk(clk), .rst(sys_reset), .tick(tick), .game_live(game_state == `GS_PLAYING),
+        .day(trading_day_count[7:0] + 8'd1),
+        .price0(price0), .price1(price1), .price2(price2), .price3(price3),
+        .samples0(amd_samples_30), .samples1(mcd_samples_30),
+        .samples2(stock2_samples_30), .samples3(stock3_samples_30),
+        .cash(bot_cash), .pos0(bot_pos0), .pos1(bot_pos1), .pos2(bot_pos2), .pos3(bot_pos3),
+        .cb0(bot_cb0), .cb1(bot_cb1), .cb2(bot_cb2), .cb3(bot_cb3), .value(bot_value),
+        .signal(bot_signal), .trades(bot_trades),
+        .log_valid(bot_log_valid), .log_side(bot_log_side), .log_stock(bot_log_stock),
+        .log_price(bot_log_price), .log_day(bot_log_day)
+    );
+
     // ================================================================ DOUGLAS: orders, ticket page
     wire [3:0]  pending_count;
     // The left OLED (JA) sits upside down on the board: draw the ticket rotated 180 degrees.
@@ -232,13 +276,15 @@ module Integration_Top #(
         .sel_stock(sel_stock),
         .page_R(`PG_R_PORTFOLIO),        // Matthew owns the buttons: Douglas's own button entry is off
         .btn_pulse(5'd0),
-        .ord_req(ord_req), .ord_side(ord_side), .ord_type(`OT_MKT),
-        .ord_qty(quantity), .ord_trig(16'd0),
+        .ord_req(ord_req), .ord_side(ord_side), .ord_type(ord_type),
+        .ord_qty(quantity), .ord_trig(ord_trig), .ord_brk(ord_brk),
         .cash(cash), .pos0(pos0), .pos1(pos1), .pos2(pos2), .pos3(pos3),
         .ledger_busy(ledger_busy), .xR(xL), .yR(yL),
         .fill(fill), .fill_stock(fill_stock), .fill_side(fill_side),
         .fill_qty(fill_qty), .fill_price(fill_price), .fill_fee(fill_fee),
         .reject(reject), .reject_code(reject_code), .pending_count(pending_count),
+        .ord_placed(ord_placed), .res_submit(res_submit),
+        .sl_price(sl_price), .tp_price(tp_price),
         .ticket_pixel(ticket_pixel)
     );
 

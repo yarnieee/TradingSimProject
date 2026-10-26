@@ -64,6 +64,7 @@
 `define UI_ORDER_RESULT 4'd8
 `define UI_TRADE_RESULT 4'd9
 `define UI_GAME_END     4'd10
+`define UI_ORDER_TYPE   4'd11   // order type, trigger price, SL/TP (from BUY / SELL)
 
 // ---------------------------------------------------------------- display numbers (Matthew)
 // Fields of display_numbers: each is 8 decimal digits (32-bit BCD) plus a
@@ -79,7 +80,17 @@
 `define DN_ORDPX   17   // order price: ask for a buy, bid for a sell
 `define DN_ORDTOT  18   // order total: buy pays price x qty + fee, sell gets price x qty - fee
 `define DN_NETPNL  19   // portfolio value - starting cash
-`define DN_N       20
+`define DN_TRIG    20   // trigger price on the ORDER TYPE screen
+`define DN_SL      21   // selected stock's stop-loss level in the book (0 = none)
+`define DN_TP      22   // selected stock's take-profit level in the book (0 = none)
+`define DN_BCASH   23   // bot: cash
+`define DN_BNET    24   // bot: value (cash + holdings)
+`define DN_BNETPNL 25   // bot: value - starting cash
+`define DN_BPOS0   26   // bot: shares of stock 0..3: DN_BPOS0 + k
+`define DN_BPNL0   30   // bot: profit/loss of stock 0..3: DN_BPNL0 + k
+`define DN_LOGPX0  34   // bot log entry 0..4 (0 newest): price, DN_LOGPX0 + n
+`define DN_LOGDAY0 39   // bot log entry 0..4: day, DN_LOGDAY0 + n
+`define DN_N       44
 
 // btn_pulse bit positions, in Basys3 master XDC order (btnC, btnU, btnL, btnR, btnD)
 `define BTN_C 0

@@ -8,8 +8,8 @@
 //
 // ext_load: copies the external order into the ticket fields (so the page
 // shows what was sent) and submits it on the same clock, for Matthew's
-// sel_stock. It wins over a button press on the same clock. The ticket's SL/TP
-// setting goes with it. ext_qty 0 is passed through so the order engine
+// sel_stock, with its own SL/TP setting (ext_brk). It wins over a button press
+// on the same clock. ext_qty 0 is passed through so the order engine
 // rejects it as RJ_BAD_QTY; B_order_top maps out-of-range quantities to 0.
 //
 // Buttons are only acted on while the Ticket page is showing (ticket_active).
@@ -46,6 +46,7 @@ module order_entry #(
     input  wire [1:0]  ext_type,
     input  wire [7:0]  ext_qty,
     input  wire [15:0] ext_trig,
+    input  wire [1:0]  ext_brk,
     // live fields (for ticket_screen)
     output reg  [1:0]  stock,
     output reg         side,
@@ -176,6 +177,7 @@ module order_entry #(
                 side  <= ext_side;
                 otype <= ext_type;
                 qty   <= ext_qty;
+                brk   <= ext_brk;
                 if (ext_type != `OT_MKT) trig <= ext_trig;
             end else begin
                 if (sel_stock != prev_sel)
@@ -228,7 +230,7 @@ module order_entry #(
                 sub_type  <= ext_type;
                 sub_qty   <= ext_qty;
                 sub_trig  <= ext_trig;
-                sub_brk   <= brk;
+                sub_brk   <= ext_brk;
             end else if (do_submit) begin
                 sub_stock <= stock;
                 sub_side  <= side;

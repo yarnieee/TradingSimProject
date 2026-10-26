@@ -77,5 +77,6 @@ reject (led 14) and show pending orders (led 11-8).
 left its last trades. It shows "NO BOT YET" until Tricia's bot strategy is written
 (`4_Tricia_Ledger/submodules/bot_trader.v` is a stub with its ports defined).
 
-**Days**: the header shows the days left (`D17`, red in the last 5) and a yellow bar along its
-bottom edge fills as the game goes on. After the last day the GAME OVER screen shows your result.
+**Days**: a game is 60 trading days of 2 seconds each, about 2 minutes (`FINAL_TRADING_DAY` in
+`Integration_Top`). The header shows the days left (`D57`, red in the last 5) and a yellow bar along
+its bottom edge fills as the game goes on. After the last day the GAME OVER screen shows your result.

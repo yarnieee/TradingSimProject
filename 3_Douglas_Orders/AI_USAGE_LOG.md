@@ -290,3 +290,8 @@ for a limit sell / stop buy); `view_sw` (sw[15], pin R2) is the bot view. `D_dis
 sent order's fill/reject reaches `game_fsm`, a placed order counts as its result and a latch makes the
 screen say PLACED; buttons ignored in the bot view. BUY/SELL back to BACK/QTY/NEXT and show the
 switch settings. The earlier sw[1] pin (W16) was actually sw[2]; replaced. README has a usage guide.
+
+## 2026-10-26: longer game
+
+**Asked for:** play for about 2 minutes. **Done by the AI:** `FINAL_TRADING_DAY` 30 -> 60 in
+`Integration_Top` (60 trading days x 2 s); README updated. Market speed unchanged.

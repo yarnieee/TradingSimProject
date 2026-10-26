@@ -29,7 +29,7 @@
 module Integration_Top #(
     parameter DAY_MAX_COUNT = 199_999_999,      // Yi An: 2 s per trading day
     parameter DEBOUNCE_CTR  = 32'd1_999_999,    // Matthew: 20 ms
-    parameter FINAL_TRADING_DAY = 32'd30       // Game ends after this many days
+    parameter FINAL_TRADING_DAY = 32'd60       // Game ends after this many days (60 x 2 s = 2 minutes)
 ) (
     input  wire        clk,
     input  wire        rst,

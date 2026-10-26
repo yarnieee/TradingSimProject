@@ -19,7 +19,7 @@
 // Every number on the screens comes from display_numbers as decimal digits.
 module D_display_top #(
     parameter DEBOUNCE_CTR      = 32'd1_999_999,
-    parameter FINAL_TRADING_DAY = 32'd30        // for the game-progress bar
+    parameter FINAL_TRADING_DAY = 32'd60        // for the game-progress bar (set by Integration_Top)
 ) (
     input  wire        clk,
     input  wire        rst,

@@ -15,11 +15,8 @@ module game_fsm (
     input        order_fill,
     input        order_reject,
     input  [2:0] order_reject_code,
-    input        order_placed,       // a LMT/STP order went into the book
-    input        order_from_submit,  // the fill/reject is this order's, not the book's
     input        order_valid,
     input  [2:0] validation_code,
-    input  [15:0] selected_price,    // for the trigger price on the ORDER TYPE screen
     output reg [3:0]  screen_state,
     output reg [13:0] quantity,
     output reg [2:0]  selected_stock,
@@ -27,13 +24,7 @@ module game_fsm (
     output     [3:0]  menu_selection,
     output reg [2:0]  trade_result_code,
     output reg        trade_result_success,
-    output reg        trade_result_placed,   // success = a pending order was placed (not filled)
-    output reg        trade_side,
-    // the order's type, set on the ORDER TYPE screen
-    output reg [1:0]  order_type,        // `OT_MKT, `OT_LMT, `OT_STP
-    output reg [15:0] order_trig,        // trigger price for LMT / STP (cents)
-    output reg [1:0]  order_brk,         // SL/TP for a buy: `BRK_OFF, _2, _5, _10
-    output reg [1:0]  type_field         // ORDER TYPE screen: 0 type, 1 trigger, 2 SL/TP
+    output reg        trade_side
 );
 
     localparam RETURN_BUY  = 1'b0;
@@ -53,19 +44,10 @@ module game_fsm (
     reg [2:0] next_stocks_cursor;
     reg [2:0] specific_cursor;     // 0 buy, 1 sell, 2 back, 3 portfolio, 4 stocks
     reg [2:0] next_specific_cursor;
-    reg [1:0] buy_cursor;          // 0 back, 1 quantity, 2 order type, 3 OK (review)
+    reg [1:0] buy_cursor;          // 0 cancel, 1 quantity, 2 confirmation
     reg [1:0] next_buy_cursor;
-    reg [1:0] sell_cursor;         // 0 back, 1 quantity, 2 order type, 3 OK (review)
+    reg [1:0] sell_cursor;         // 0 cancel, 1 quantity, 2 confirmation
     reg [1:0] next_sell_cursor;
-    reg [1:0]  next_order_type;
-    reg [15:0] next_order_trig;
-    reg [1:0]  next_order_brk;
-    reg [1:0]  next_type_field;
-    reg        next_trade_result_placed;
-
-    // trigger step: about 1% of the price (price / 128), at least 1 cent
-    wire [15:0] trig_step = (selected_price[15:7] == 9'd0) ? 16'd1 : {7'd0, selected_price[15:7]};
-    wire [16:0] trig_up   = {1'b0, order_trig} + {1'b0, trig_step};
 
     reg [2:0] next_selected_stock;
     reg [2:0] next_trade_result_code;
@@ -82,9 +64,7 @@ module game_fsm (
                             (screen_state == `UI_BUY_STOCK) ?
                             {2'b00, buy_cursor} :
                             (screen_state == `UI_SELL_STOCK) ?
-                            {2'b00, sell_cursor} :
-                            (screen_state == `UI_ORDER_TYPE) ?
-                            {2'b00, type_field} : 4'd0;
+                            {2'b00, sell_cursor} : 4'd0;
 
     always @(*) begin
         next_state = screen_state;
@@ -94,11 +74,6 @@ module game_fsm (
         next_selected_stock = selected_stock;
         next_trade_result_code = trade_result_code;
         next_trade_result_success = trade_result_success;
-        next_trade_result_placed = trade_result_placed;
-        next_order_type = order_type;
-        next_order_trig = order_trig;
-        next_order_brk = order_brk;
-        next_type_field = type_field;
         next_quantity_cursor = quantity_cursor;
         next_portfolio_cursor = portfolio_cursor;
         next_stocks_cursor = stocks_cursor;
@@ -203,17 +178,11 @@ module game_fsm (
                             next_state = `UI_BUY_STOCK;
                             next_buy_cursor = 0;
                             next_trade_side = RETURN_BUY;
-                            next_order_type = `OT_MKT;
-                            next_order_trig = selected_price;
-                            next_order_brk = `BRK_OFF;
                         end
                         1: begin
                             next_state = `UI_SELL_STOCK;
                             next_sell_cursor = 0;
                             next_trade_side = RETURN_SELL;
-                            next_order_type = `OT_MKT;
-                            next_order_trig = selected_price;
-                            next_order_brk = `BRK_OFF;
                         end
                         2: begin
                             next_state = `UI_STOCKS;
@@ -234,7 +203,7 @@ module game_fsm (
 
             `UI_BUY_STOCK: begin
                 next_trade_side = RETURN_BUY;
-                if (btnR && (buy_cursor < 3))
+                if (btnR && (buy_cursor < 2))
                     next_buy_cursor = buy_cursor + 1'b1;
                 if (btnL && (buy_cursor > 0))
                     next_buy_cursor = buy_cursor - 1'b1;
@@ -251,17 +220,16 @@ module game_fsm (
                             next_quantity_cursor = 0;
                         end
                         2: begin
-                            next_state = `UI_ORDER_TYPE;
-                            next_type_field = 0;
+                            next_state = `UI_ORDER_REVIEW;
                         end
-                        default: next_state = `UI_ORDER_REVIEW;
+                        default: next_state = `UI_BUY_STOCK;
                     endcase
                 end
             end
 
             `UI_SELL_STOCK: begin
                 next_trade_side = RETURN_SELL;
-                if (btnR && (sell_cursor < 3))
+                if (btnR && (sell_cursor < 2))
                     next_sell_cursor = sell_cursor + 1'b1;
                 if (btnL && (sell_cursor > 0))
                     next_sell_cursor = sell_cursor - 1'b1;
@@ -278,10 +246,9 @@ module game_fsm (
                             next_quantity_cursor = 0;
                         end
                         2: begin
-                            next_state = `UI_ORDER_TYPE;
-                            next_type_field = 0;
+                            next_state = `UI_ORDER_REVIEW;
                         end
-                        default: next_state = `UI_ORDER_REVIEW;
+                        default: next_state = `UI_SELL_STOCK;
                     endcase
                 end
             end
@@ -343,20 +310,13 @@ module game_fsm (
             `UI_ORDER_RESULT: begin
                 // B_order_top reports exactly one fill or reject pulse for
                 // the submitted order.  Wait here until that result arrives.
-                if (order_fill && order_from_submit) begin
+                if (order_fill) begin
                     next_trade_result_code = 3'd0;
                     next_trade_result_success = 1'b1;
-                    next_trade_result_placed = 1'b0;
                     next_state = `UI_TRADE_RESULT;
-                end else if (order_placed) begin
-                    next_trade_result_code = 3'd0;
-                    next_trade_result_success = 1'b1;
-                    next_trade_result_placed = 1'b1;
-                    next_state = `UI_TRADE_RESULT;
-                end else if (order_reject && order_from_submit) begin
+                end else if (order_reject) begin
                     next_trade_result_code = order_reject_code;
                     next_trade_result_success = 1'b0;
-                    next_trade_result_placed = 1'b0;
                     next_state = `UI_TRADE_RESULT;
                 end
             end
@@ -366,34 +326,6 @@ module game_fsm (
                     next_state = `UI_PORTFOLIO;
                     next_portfolio_cursor = 0;
                     next_quantity = 0;
-                end
-            end
-
-            `UI_ORDER_TYPE: begin
-                // U/D: field (type, trigger, SL/TP); L/R: change it; C: back to buy/sell
-                if (btnU && (type_field > 0)) next_type_field = type_field - 1'b1;
-                if (btnD && (type_field < 2)) next_type_field = type_field + 1'b1;
-                if (btnR || btnL) begin
-                    case (type_field)
-                        2'd0: begin                              // MKT -> LMT -> STP
-                            if (btnR) next_order_type = (order_type == `OT_STP) ? `OT_MKT : order_type + 1'b1;
-                            else      next_order_type = (order_type == `OT_MKT) ? `OT_STP : order_type - 1'b1;
-                            if (order_type == `OT_MKT) next_order_trig = selected_price;
-                        end
-                        2'd1: begin                              // trigger +/- about 1%
-                            if (btnR) next_order_trig = trig_up[16] ? 16'hFFFF : trig_up[15:0];
-                            else      next_order_trig = (order_trig > trig_step) ? order_trig - trig_step : 16'd1;
-                        end
-                        default: begin                           // SL/TP: OFF, 2, 5, 10%
-                            if (trade_side == RETURN_BUY)
-                                next_order_brk = btnR ? order_brk + 1'b1 : order_brk - 1'b1;
-                        end
-                    endcase
-                end
-                if (btnC) begin
-                    next_state = (trade_side == RETURN_BUY) ? `UI_BUY_STOCK : `UI_SELL_STOCK;
-                    if (trade_side == RETURN_BUY) next_buy_cursor = 2;
-                    else                          next_sell_cursor = 2;
                 end
             end
 
@@ -414,12 +346,7 @@ module game_fsm (
             quantity_return_state <= RETURN_BUY;
             trade_result_code <= 3'd0;
             trade_result_success <= 1'b0;
-            trade_result_placed <= 1'b0;
             trade_side <= RETURN_BUY;
-            order_type <= `OT_MKT;
-            order_trig <= 16'd0;
-            order_brk <= `BRK_OFF;
-            type_field <= 2'd0;
             quantity_cursor <= 0;
             portfolio_cursor <= 0;
             stocks_cursor <= 0;
@@ -432,12 +359,7 @@ module game_fsm (
             selected_stock <= next_selected_stock;
             trade_result_code <= next_trade_result_code;
             trade_result_success <= next_trade_result_success;
-            trade_result_placed <= next_trade_result_placed;
             trade_side <= next_trade_side;
-            order_type <= next_order_type;
-            order_trig <= next_order_trig;
-            order_brk <= next_order_brk;
-            type_field <= next_type_field;
             quantity_return_state <= next_quantity_return_state;
             quantity_cursor <= next_quantity_cursor;
             portfolio_cursor <= next_portfolio_cursor;

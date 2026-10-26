@@ -15,9 +15,13 @@
 //
 // Board:
 //   sw[0] (rst)   reset, as in Matthew's constraints
-//   sw[1] (bot_sw) up: bot view (JB the bot against you, JA the bot's last trades)
+//   sw[3:2]       order type: 00 market, 01 limit, 10 stop          (order_sw[1:0])
+//   sw[5:4]       SL/TP for a buy: 00 off, 01 2%, 10 5%, 11 10%     (order_sw[3:2])
+//   sw[7:6]       trigger distance from the price: 1, 2, 5, 10%     (order_sw[5:4])
+//                 (limit buy / stop sell below the price, limit sell / stop buy above)
+//   sw[15] (view_sw) up: bot view (JB the bot against you, JA its last trades); buttons ignored
 //   buttons       Matthew's game FSM (title > portfolio > stocks > stock > buy/sell
-//                 > quantity / order type > review > result)
+//                 > quantity > review > result)
 //   JB (right)    Matthew's game screens
 //   JA (left)     Douglas's order ticket (title artwork on the title screen)
 //   7-seg         Matthew's quantity
@@ -29,7 +33,8 @@ module Integration_Top #(
 ) (
     input  wire        clk,
     input  wire        rst,
-    input  wire        bot_sw,          // sw[1]: show the bot
+    input  wire [5:0]  order_sw,        // sw[7:2]: order type, SL/TP, trigger distance
+    input  wire        view_sw,         // sw[15]: show the bot
     input  wire        btnU,
     input  wire        btnD,
     input  wire        btnL,
@@ -101,10 +106,14 @@ module Integration_Top #(
     wire [9:0]  bot_log_stock;
     wire [79:0] bot_log_price;
     wire [39:0] bot_log_day;
-    reg         bot_s0, bot_view;           // sw[1], synchronised
+    // switches, synchronised to clk
+    reg  [5:0]  osw_s0, osw;
+    reg         view_s0, bot_view;
     always @(posedge clk) begin
-        bot_s0   <= bot_sw;
-        bot_view <= bot_s0;
+        osw_s0   <= order_sw;
+        osw      <= osw_s0;
+        view_s0  <= view_sw;
+        bot_view <= view_s0;
     end
     wire [2:0]  reject_code;
     wire [15:0] ticket_pixel;
@@ -145,6 +154,33 @@ module Integration_Top #(
         .ord_type(ord_type), .ord_trig(ord_trig), .ord_brk(ord_brk), .game_state(game_state),
         .JA(JA), .JB(JB), .an(an), .seg(seg)
     );
+
+    // ================================================================ order settings from the switches
+    // B_order_top latches them with the order on ord_req (sending from the review
+    // screen); until then the screens show the current settings.
+    assign ord_type = (osw[1:0] == 2'b01) ? `OT_LMT :
+                      (osw[1:0] == 2'b10) ? `OT_STP : `OT_MKT;
+    assign ord_brk  = (ord_side == `SIDE_BUY) ? osw[3:2] : `BRK_OFF;   // codes match BRK_*
+    // trigger = the selected stock's price -/+ 1, 2, 5 or 10% (price x k >> 16)
+    reg  [15:0] sw_px;
+    always @(*) begin
+        case (sel_stock)
+            2'd0:    sw_px = price0;
+            2'd1:    sw_px = price1;
+            2'd2:    sw_px = price2;
+            default: sw_px = price3;
+        endcase
+    end
+    wire [12:0] trig_k    = (osw[5:4] == 2'b00) ? 13'd656  : (osw[5:4] == 2'b01) ? 13'd1312 :
+                            (osw[5:4] == 2'b10) ? 13'd3280 : 13'd6560;
+    wire [28:0] trig_prod = sw_px * trig_k;
+    wire [15:0] trig_dist = (trig_prod[28:16] == 13'd0) ? 16'd1 : {3'd0, trig_prod[28:16]};
+    wire        trig_below = ((ord_type == `OT_LMT) && (ord_side == `SIDE_BUY)) ||
+                             ((ord_type == `OT_STP) && (ord_side == `SIDE_SELL));
+    wire [16:0] trig_up   = {1'b0, sw_px} + {1'b0, trig_dist};
+    assign ord_trig = (ord_type == `OT_MKT) ? 16'd0 :
+                      trig_below ? ((sw_px > trig_dist) ? sw_px - trig_dist : 16'd1) :
+                                   (trig_up[16] ? 16'hFFFF : trig_up[15:0]);
 
     // ================================================================ YI AN: market engine
     // Yi An's A_top asks for "storage/data/AMD_seed.mem". In this repo the files are

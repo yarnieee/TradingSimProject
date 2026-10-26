@@ -13,14 +13,15 @@ module tb_integration;
 
     reg  rst = 1;
     reg  btnU = 0, btnD = 0, btnL = 0, btnR = 0, btnC = 0;
-    reg  bot_sw = 0;
+    reg  [5:0] order_sw = 6'd0;     // sw[7:2]: type, SL/TP, trigger distance
+    reg  view_sw = 0;               // sw[15]: bot view
     wire [7:0]  JA, JB, seg;
     wire [15:0] led;
     wire [3:0]  an;
 
     localparam DAY = 4000;
     Integration_Top #(.DAY_MAX_COUNT(DAY), .DEBOUNCE_CTR(32'd50)) dut (
-        .clk(clk), .rst(rst), .bot_sw(bot_sw),
+        .clk(clk), .rst(rst), .order_sw(order_sw), .view_sw(view_sw),
         .btnU(btnU), .btnD(btnD), .btnL(btnL), .btnR(btnR), .btnC(btnC),
         .JA(JA), .JB(JB), .led(led), .an(an), .seg(seg)
     );
@@ -80,13 +81,13 @@ module tb_integration;
             press(R); press(C);                         // "quantity" -> quantity screen (qty 0)
             for (k = 0; k < qty; k = k + 1) press(U);   // ones digit
             press(C);                                   // back to buy / sell screen (cursor 0)
-            press(R); press(R); press(R); press(C);     // BACK QTY TYPE OK: OK -> ORDER_REVIEW
+            press(R); press(R); press(C);               // -> ORDER_REVIEW
             press(C);                                   // review -> ORDER_RESULT: submit to B
             repeat (300) @(posedge clk);                // Douglas -> Tricia: fill and ledger update
         end
     endtask
 
-    integer cash0, f0, r0, o0, k0;
+    integer cash0, f0, r0, o0;
     reg [15:0] p0;
 
     initial begin
@@ -153,42 +154,39 @@ module tb_integration;
         check(dut.cash + dut.cb0 + dut.cb1 + dut.cb2 + dut.cb3 == 32'd1_000_000 + dut.realised,
               "Tricia: ledger invariant holds");
 
-        // ---------------- limit buy 2 AMD, $5+ below the market, SL/TP 5%: placed in the book
+        // ---------------- limit buy 2 AMD 5% below the market, SL/TP 5%, set on the switches
         press(C);                                       // trade result -> portfolio
+        order_sw = {2'b10, 2'b10, 2'b01};               // sw[7:6] 5%, sw[5:4] SL/TP 5%, sw[3:2] LMT
         o0 = n_ord_req; f0 = n_fill;
-        press(R); press(C); press(D); press(C);         // stocks, AMD, specific
-        press(C);                                       // buy
-        press(R); press(C); press(U); press(U); press(C);   // quantity 2
-        press(R); press(R); press(C);                   // TYPE -> order type screen
-        check(dut.screen_state == `UI_ORDER_TYPE, "Matthew: buy --TYPE--> order type screen");
-        press(R);                                       // MKT -> LMT
-        press(D); for (k0 = 0; k0 < 5; k0 = k0 + 1) press(L);   // trigger 5 steps down (~4%)
-        press(D); press(R); press(R);                   // SL/TP 5%
-        press(C);                                       // back to buy
-        check(dut.ord_type == `OT_LMT && dut.ord_brk == `BRK_5 && dut.ord_trig < dut.price0,
-              "Matthew: LMT below the price, SL/TP 5% set on the order type screen");
-        press(R); press(C);                             // OK -> review
-        press(C);                                       // send
-        repeat (300) @(posedge clk);
+        trade(0, 0, 2);
         check(n_ord_req == o0 + 1 && n_fill == f0 && dut.pending_count == 4'd1,
-              "Douglas: the limit buy rests in the book");
+              "switches: the limit buy rests in the book (no fill)");
         check(dut.screen_state == S_TRADE_RESULT && dut.matthew_display.trade_result_placed,
-              "Matthew: trade result says PLACED");
-        check(dut.douglas_orders.u_book.s_brk[0] == `BRK_5 && dut.douglas_orders.u_book.s_trig[0] == dut.ord_trig,
-              "Douglas: book keeps the trigger and the SL/TP setting");
+              "Matthew's unchanged FSM reaches the trade result; the screen says PLACED");
+        check(dut.douglas_orders.u_book.s_type[0] == `OT_LMT && dut.douglas_orders.u_book.s_brk[0] == `BRK_5,
+              "Douglas: book holds a LMT with SL/TP 5%");
+        check(dut.douglas_orders.u_book.s_trig[0] < dut.price0 &&
+              dut.douglas_orders.u_book.s_trig[0] > dut.price0 - dut.price0 / 16,
+              "switches: limit buy trigger is about 5% below the price");
+        order_sw = 6'd0;
+        press(C);
 
-        // ---------------- the bot (Tricia's stub for now); sw[1] shows it
+        // ---------------- sw[15]: bot view (Tricia's stub for now); buttons ignored there
         repeat (6 * DAY) @(posedge clk);               // a few more trading days
         check(!dut.bot_active && dut.bot_trades == 0 && dut.bot_value == 32'd1_000_000,
               "Bot stub: inactive, no trades, value stays at the starting cash");
-        bot_sw = 1;
+        view_sw = 1;
         repeat (5) @(posedge clk);
         check(dut.matthew_display.pixel_data_L == dut.matthew_display.bot_log_pixel,
-              "sw1 up: left OLED shows the bot's trades");
-        bot_sw = 0;
+              "sw15 up: left OLED shows the bot's trades");
+        press(R); press(C);
+        check(dut.screen_state == S_PORTFOLIO, "sw15 up: buttons are ignored");
+        view_sw = 0;
         repeat (5) @(posedge clk);
         check(dut.matthew_display.pixel_data_L == dut.ticket_pixel,
-              "sw1 down: left OLED back to the order ticket");
+              "sw15 down: left OLED back to the order ticket");
+        press(R); press(C);
+        check(dut.screen_state == S_STOCKS, "sw15 down: buttons work again");
 
         check(n_err == 0, "Tricia's ledger never rejected a fill from Douglas");
         $display("     cash %0d c, AMD position %0d, realised %0d c, %0d fills, %0d rejects",

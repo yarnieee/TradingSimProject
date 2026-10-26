@@ -64,7 +64,6 @@
 `define UI_ORDER_RESULT 4'd8
 `define UI_TRADE_RESULT 4'd9
 `define UI_GAME_END     4'd10
-`define UI_ORDER_TYPE   4'd11   // order type, trigger price, SL/TP (from BUY / SELL)
 
 // ---------------------------------------------------------------- display numbers (Matthew)
 // Fields of display_numbers: each is 8 decimal digits (32-bit BCD) plus a

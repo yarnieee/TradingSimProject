@@ -2,13 +2,13 @@
 `default_nettype none
 `include "trading_defs.vh"
 
-// bot_log_page: the left OLED in the bot view (sw1 up), on the text_grid layout.
+// bot_log_page: the left OLED in the bot view (sw15 up), on the text_grid layout.
 //
 //   row 0     BOT TRADES          header (plum, as the bot view on the right OLED)
 //   rows 1-5  09 B AMD   213.50   the bot's last 5 trades, newest first (NO BOT YET
 //                                 while bot_trader is still the stub):
 //                                 day, Buy / Sell (green / red), stock, price
-//   row 6     SW1 DOWN: GAME      how to leave the bot view
+//   row 6     SW15 DOWN: GAME     how to leave the bot view
 //
 // FLIP_180 = 1 turns the page for the upside-down left OLED, as the ticket does.
 module bot_log_page #(
@@ -118,7 +118,7 @@ module bot_log_page #(
                 ch = price_ch(e_px, col - 4'd10);
             end
         end else begin
-            ch = str_ch("SW1 DOWN: GAME  ", col);
+            ch = str_ch("SW15 DOWN: GAME ", col);
             fg = GREY;
         end
     end

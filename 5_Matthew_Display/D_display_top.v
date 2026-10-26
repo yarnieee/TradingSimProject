@@ -7,7 +7,14 @@
 //   JB (right OLED): the game screens (OLED_Renderer); title artwork on the title screen
 //   JA (left OLED):  the page given on left_pixel (Douglas's order ticket);
 //                    title artwork on the title screen
-//   bot_view (sw1):  JB shows the bot against the player, JA the bot's last trades
+//   bot_view (sw15): JB shows the bot against the player, JA the bot's last trades;
+//                    the buttons are ignored while it is up
+//
+// The order's type, trigger price and SL/TP come from the switches (worked out
+// in Integration_Top) and are shown on the BUY / SELL and review screens.
+// game_fsm is Matthew's, unchanged: around it, only the result of the order
+// just sent reaches it (order_from_submit), and a limit / stop order placed in
+// the book counts as its result; trade_result_placed then says PLACED, not FILLED.
 //
 // Every number on the screens comes from display_numbers as decimal digits.
 module D_display_top #(
@@ -82,9 +89,9 @@ module D_display_top #(
     input  wire [959:0] portfolio_samples_30,
     output wire        ord_req,
     output wire        ord_side,
-    output wire [1:0]  ord_type,          // the order's type, trigger and SL/TP (ORDER TYPE screen)
-    output wire [15:0] ord_trig,
-    output wire [1:0]  ord_brk,
+    input  wire [1:0]  ord_type,          // the order's type, trigger and SL/TP (from the switches)
+    input  wire [15:0] ord_trig,
+    input  wire [1:0]  ord_brk,
     output wire [2:0]  trade_result_code,
     output wire        trade_result_success,
     output wire [1:0]  game_state,
@@ -134,8 +141,13 @@ module D_display_top #(
     wire       trade_side;
     reg        order_valid;
     reg  [2:0] validation_code;
-    wire       trade_result_placed;
-    wire [1:0] type_field;
+    reg        trade_result_placed;     // the result was a LMT/STP order placed in the book
+
+    // game_fsm sees only the order just sent: its fill or reject, or it being placed
+    wire fsm_fill   = (order_fill && order_from_submit) || order_placed;
+    wire fsm_reject = order_reject && order_from_submit;
+    // the buttons are ignored in the bot view
+    wire buttons_on = !bot_view;
 
     // The chart and selected-stock price follow the same four-stock index
     // that is sent to the order engine.
@@ -146,20 +158,17 @@ module D_display_top #(
     game_fsm game_fsm_inst (
         .clk(clk),
         .rst(rst),
-        .btnU(btnU_p),
-        .btnD(btnD_p),
-        .btnL(btnL_p),
-        .btnR(btnR_p),
-        .btnC(btnC_p),
+        .btnU(btnU_p && buttons_on),
+        .btnD(btnD_p && buttons_on),
+        .btnL(btnL_p && buttons_on),
+        .btnR(btnR_p && buttons_on),
+        .btnC(btnC_p && buttons_on),
         .final_day_reached(final_day_reached),
-        .order_fill(order_fill),
-        .order_reject(order_reject),
+        .order_fill(fsm_fill),
+        .order_reject(fsm_reject),
         .order_reject_code(order_reject_code),
-        .order_placed(order_placed),
-        .order_from_submit(order_from_submit),
         .order_valid(order_valid),
         .validation_code(validation_code),
-        .selected_price(selected_price),
         .screen_state(screen_state),
         .quantity(quantity),
         .selected_stock(selected_stock),
@@ -167,12 +176,7 @@ module D_display_top #(
         .menu_selection(menu_selection),
         .trade_result_code(trade_result_code),
         .trade_result_success(trade_result_success),
-        .trade_result_placed(trade_result_placed),
-        .trade_side(trade_side),
-        .order_type(ord_type),
-        .order_trig(ord_trig),
-        .order_brk(ord_brk),
-        .type_field(type_field)
+        .trade_side(trade_side)
     );
 
     assign sel_stock = selected_stock[1:0];
@@ -242,6 +246,12 @@ module D_display_top #(
     assign ord_req  = (screen_state == `UI_ORDER_RESULT) &&
                       (state_d == `UI_ORDER_REVIEW);
     assign ord_side = trade_side;
+
+    // PLACED or FILLED: cleared when an order is sent, set if it went into the book
+    always @(posedge clk) begin
+        if (rst || ord_req)                                         trade_result_placed <= 1'b0;
+        else if (order_placed && screen_state == `UI_ORDER_RESULT)  trade_result_placed <= 1'b1;
+    end
 
     assign game_state = ((screen_state == `UI_TITLE) ||
                          (screen_state == `UI_GAME_END)) ?

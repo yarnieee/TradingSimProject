@@ -7,8 +7,16 @@ create_clock -add -name sys_clk_pin -period 10.00 -waveform {0 5} [get_ports clk
 
 ## Reset: sw[0], as in D's constraints (top port rst)
 set_property -dict { PACKAGE_PIN V17   IOSTANDARD LVCMOS33 } [get_ports rst]
-## Bot view: sw[1] (top port bot_sw)
-set_property -dict { PACKAGE_PIN W16   IOSTANDARD LVCMOS33 } [get_ports bot_sw]
+## Order settings: sw[7:2] (top port order_sw[5:0])
+##   sw[3:2] type, sw[5:4] SL/TP, sw[7:6] trigger distance
+set_property -dict { PACKAGE_PIN W16   IOSTANDARD LVCMOS33 } [get_ports {order_sw[0]}]
+set_property -dict { PACKAGE_PIN W17   IOSTANDARD LVCMOS33 } [get_ports {order_sw[1]}]
+set_property -dict { PACKAGE_PIN W15   IOSTANDARD LVCMOS33 } [get_ports {order_sw[2]}]
+set_property -dict { PACKAGE_PIN V15   IOSTANDARD LVCMOS33 } [get_ports {order_sw[3]}]
+set_property -dict { PACKAGE_PIN W14   IOSTANDARD LVCMOS33 } [get_ports {order_sw[4]}]
+set_property -dict { PACKAGE_PIN W13   IOSTANDARD LVCMOS33 } [get_ports {order_sw[5]}]
+## Bot view: sw[15] (top port view_sw)
+set_property -dict { PACKAGE_PIN R2    IOSTANDARD LVCMOS33 } [get_ports view_sw]
 
 ## LEDs
 set_property -dict { PACKAGE_PIN U16   IOSTANDARD LVCMOS33 } [get_ports {led[0]}]

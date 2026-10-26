@@ -276,3 +276,17 @@ screen for every state, including other buy/sell types; a switch between bot and
 - `display_numbers` extended (trigger, SL/TP, bot fields; 44 fields); tests extended
   (`tb_display_numbers` 31, `tb_matthew_game_fsm` 55, `tb_chart_renderer` 14, `tb_integration`).
   Both bot screens show "NO BOT YET" while the stub's `active` is 0.
+
+## 2026-10-26: final plan for v2 (switches, Matthew's FSM unchanged)
+
+**Asked for (the user's final plan, via another session, confirmed in this one):** order types from
+switches instead of a new screen; Matthew's navigation unchanged; bot view on sw[15] with the buttons
+ignored; the bot stays a stub for Tricia.
+
+**Done by the AI:** `game_fsm.v` and `tb_matthew_game_fsm.v` restored to Matthew's version (the
+ORDER TYPE screen, its state and `UI_ORDER_TYPE` removed). `Integration_Top`: `order_sw` (sw[7:2]) gives
+the order type, SL/TP and a trigger 1/2/5/10% from the price (below for a limit buy / stop sell, above
+for a limit sell / stop buy); `view_sw` (sw[15], pin R2) is the bot view. `D_display_top`: only the
+sent order's fill/reject reaches `game_fsm`, a placed order counts as its result and a latch makes the
+screen say PLACED; buttons ignored in the bot view. BUY/SELL back to BACK/QTY/NEXT and show the
+switch settings. The earlier sw[1] pin (W16) was actually sw[2]; replaced. README has a usage guide.

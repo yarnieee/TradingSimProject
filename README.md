@@ -44,16 +44,38 @@ Each test prints `PASS` or `FAIL`.
 
 ## Using the board
 
-- **sw[0]:** reset
-- **sw[1]:** bot view: the right OLED shows the bot against you, the left its last trades
-- **Buttons:** move through the game screens
-- **Right OLED:** game screens
-- **Left OLED:** order ticket
-- **7-seg:** quantity
-- **LEDs:** fill / reject flash, pending orders
+| Control | What it does |
+|---|---|
+| sw[0] | reset (up = reset, down = play) |
+| Buttons | move through the game screens (U D L R move, C selects) |
+| sw[3:2] | order type: `00` market, `01` limit, `10` stop |
+| sw[5:4] | stop-loss / take-profit for a buy: `00` off, `01` 2%, `10` 5%, `11` 10% |
+| sw[7:6] | trigger distance from the price: `00` 1%, `01` 2%, `10` 5%, `11` 10% |
+| sw[15] | view: down = you (the game), up = the bot (buttons do nothing while up) |
 
-To buy: pick a stock, choose BUY, set QTY, then OK and send. For a limit or stop order, or a
-stop-loss / take-profit, choose TYPE first (U/D picks a row, L/R changes it).
+Screens: the right OLED shows the game, the left OLED your order ticket (and title artwork on the
+title screen). The 7-seg shows the quantity being set; LEDs flash on a fill (led 15) or a
+reject (led 14) and show pending orders (led 11-8).
 
-The bot view (sw[1]) shows "NO BOT YET" until Tricia's bot strategy is written
+**Buying or selling**
+1. From HOME, go to MARKET, pick a stock, then BUY or SELL.
+2. QTY: set the quantity (U/D change a digit, L/R move between digits, C to finish).
+3. Set the switches for the order type (the BUY / SELL screen shows what they say).
+4. NEXT, check the review screen, C to send.
+5. The result says FILLED (market orders), PLACED (limit / stop orders, now waiting in the book)
+   or REJECTED and why.
+
+**Order types**
+- Market: fills now, at price + 5c (buy) or price - 5c (sell), plus a $1 fee.
+- Limit: buy at or below a price under today's (sw[7:6] below), sell at or above one over it.
+- Stop: buy when the price rises to a level above today's, sell when it falls to one below.
+- Stop-loss / take-profit (buys): when the buy fills, a stop sell below and a limit sell above it
+  are placed; when one fills the other is cancelled. They show as dashed red / green lines on the
+  stock's chart.
+
+**Bot view (sw[15] up)**: the right OLED shows the bot's value against yours and its holdings, the
+left its last trades. It shows "NO BOT YET" until Tricia's bot strategy is written
 (`4_Tricia_Ledger/submodules/bot_trader.v` is a stub with its ports defined).
+
+**Days**: the header shows the days left (`D17`, red in the last 5) and a yellow bar along its
+bottom edge fills as the game goes on. After the last day the GAME OVER screen shows your result.

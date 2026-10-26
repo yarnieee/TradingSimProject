@@ -51,11 +51,13 @@ module tb_chart_renderer;
         end
     endtask
 
+    // Chart frame x 2..93, y 28..54; lowest line y 53; columns of 6 pixels
+    // from x 3 (column b shows sample 2b+1; the last one shows live_value).
     initial begin
         pass_count = 0;
         fail_count = 0;
         pixel_x = 7'd8;
-        pixel_y = 6'd32;
+        pixel_y = 6'd41;
         chart_mode = 2'b00;
         stock_samples = 480'd0;
         portfolio_samples = 960'd0;
@@ -63,59 +65,35 @@ module tb_chart_renderer;
         #1;
         check(!pixel_active, "disabled chart produces no pixels");
 
-        // A flat initialized portfolio history must be visible as a line in
-        // the middle of the chart, not as a full-height saturated bar.
+        // A flat history is a line across the middle (12 above the bottom: y 41).
         chart_mode = 2'b10;
         for (i = 0; i < 30; i = i + 1)
             set_portfolio_sample(i, 32'd1000000);
         live_value = 32'd1000000;
         pixel_x = 7'd8;
+        pixel_y = 6'd41;
+        #1;
+        check(pixel_active, "flat history draws a centre line");
         pixel_y = 6'd30;
         #1;
-        check(pixel_active, "flat portfolio history draws a center line");
-        pixel_y = 6'd24;
-        #1;
-        check(!pixel_active, "flat portfolio history does not fill the chart");
+        check(!pixel_active, "flat history does not fill the chart");
 
-        // A changing history must use the full available range.  Sample 0
-        // is the left/minimum bin; sample 4 is the second bin (x 15-25), the maximum.
-        for (i = 0; i < 30; i = i + 1)
-            set_portfolio_sample(i, 32'd1000000);
-        set_portfolio_sample(4, 32'd1004608);
-        live_value = 32'd1000000;
-
-        pixel_x = 7'd8;
-        pixel_y = 6'd36;
-        #1;
-        check(pixel_active, "minimum portfolio sample reaches the baseline");
-
-        // Power-of-two scaling puts the highest sample in the top half of the
-        // 13-pixel plot: range 4608 >> 9 = 9 pixels above the baseline (y 27).
-        pixel_x = 7'd20;
-        pixel_y = 6'd27;
-        #1;
-        check(pixel_active, "maximum portfolio sample drawn in the top half");
-
-        // it is a line, not a filled bar: below the top of bin 1 is empty
-        pixel_x = 7'd20;
-        pixel_y = 6'd30;
-        #1;
+        // Sample 3 (column 1, x 9..14) is the maximum; everything else the minimum.
+        // range 4608 >> 8 = 18 pixels above the bottom line: y 35.
+        set_portfolio_sample(3, 32'd1004608);
+        pixel_x = 7'd5;  pixel_y = 6'd53; #1;
+        check(pixel_active, "minimum sample sits on the bottom line");
+        pixel_x = 7'd11; pixel_y = 6'd35; #1;
+        check(pixel_active, "maximum sample drawn 18 pixels up");
+        pixel_x = 7'd11; pixel_y = 6'd45; #1;
         check(!pixel_active, "the chart is a line, not a filled bar");
-
-        // the step between bin 0 (low) and bin 1 (high) is drawn at bin 1's first column
-        pixel_x = 7'd15;
-        pixel_y = 6'd30;
-        #1;
-        check(pixel_active, "step from bin 0 up to bin 1 is drawn");
-
-        // nothing outside the frame (x 4..91)
-        pixel_x = 7'd2;
-        pixel_y = 6'd36;
-        #1;
+        pixel_x = 7'd9;  pixel_y = 6'd45; #1;
+        check(pixel_active, "step from column 0 up to column 1 is drawn");
+        pixel_x = 7'd2;  pixel_y = 6'd40; #1;
+        check(pixel_active && pixel_color == 16'h4208, "grey frame on the left edge");
+        pixel_x = 7'd1;  pixel_y = 6'd53; #1;
         check(!pixel_active, "nothing drawn left of the frame");
-        pixel_x = 7'd94;
-        pixel_y = 6'd36;
-        #1;
+        pixel_x = 7'd95; pixel_y = 6'd53; #1;
         check(!pixel_active, "nothing drawn right of the frame");
 
         if (fail_count == 0)

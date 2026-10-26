@@ -243,3 +243,17 @@ line; stock list buttons moved to leave room for live prices; missing glyphs add
 `font_renderer`; left OLED shows the order ticket (title art on the title screen). The left-mirror
 renderer and the five layers only it used moved to `9_Not_Used/matthew_left_mirror/`. Ticket
 tickers now AMD/MCD/NVDA/GME. All 18 testbenches pass.
+
+## 2026-10-26: display redesign for readability (branch-team-integration-v2)
+
+**Asked for:** text still hard to read on the board; redesign the display freely.
+
+**Done by the AI:** new shared layout `1_Shared_Modules/text_grid.v` used by both OLEDs (header bar,
+six rows of 16 cells 9 px apart, optional double-size row, per-cell text and background colour,
+Matthew's 5x7 font). `text_layer` rewritten as the per-screen cell content (buttons are coloured
+cells; HOME/MARKET tabs; warnings when an order would be rejected); `OLED_Renderer` reduced to
+layout + chart; `chart_renderer` redrawn (15 points, taller plot). The order ticket redrawn on the
+same layout (no more 3x5 font). Arrow and punctuation glyphs added to `font_renderer`. Timing:
+`Integration.xdc` now declares the 6.25 MHz OLED clock so Vivado times the pixel path (it was
+unconstrained). `menu_buttons`, `font_3x5`, `ticket_layout.vh` moved to `9_Not_Used`. Testbenches
+`tb_ticket_screen` and `tb_chart_renderer` rewritten for the new layout; all testbenches pass.

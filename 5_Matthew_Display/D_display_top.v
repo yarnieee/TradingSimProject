@@ -249,6 +249,8 @@ module D_display_top #(
         .trade_side(trade_side),
         .trade_result_success(trade_result_success),
         .trade_result_code(trade_result_code),
+        .order_valid(order_valid),
+        .validation_code(validation_code),
         .stock_samples(selected_samples_30),
         .numbers_bcd(numbers_bcd),
         .numbers_neg(numbers_neg),

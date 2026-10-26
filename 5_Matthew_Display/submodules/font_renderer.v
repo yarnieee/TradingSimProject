@@ -1,7 +1,8 @@
 `timescale 1ns / 1ps
 
 // Shared 5x7 bitmap font used by every OLED screen (ASCII codes).
-// Has A-Z, 0-9, most of a-z, and space $ % + - . / : = @.
+// Has A-Z, 0-9, most of a-z, space ! $ % + - . / : < = > ? @,
+// and arrows: 8'h80 up, 8'h81 down.
 module font_renderer (
     input  [7:0] char_code,
     input  [2:0] glyph_x,
@@ -224,6 +225,24 @@ module font_renderer (
                 8'h77: font_bitmap = {
                     5'b00000, 5'b00000, 5'b10001, 5'b10001,
                     5'b10101, 5'b10101, 5'b01010}; // w
+                8'h3E: font_bitmap = {
+                    5'b10000, 5'b01000, 5'b00100, 5'b00010,
+                    5'b00100, 5'b01000, 5'b10000}; // >
+                8'h3C: font_bitmap = {
+                    5'b00001, 5'b00010, 5'b00100, 5'b01000,
+                    5'b00100, 5'b00010, 5'b00001}; // <
+                8'h3F: font_bitmap = {
+                    5'b01110, 5'b10001, 5'b00001, 5'b00010,
+                    5'b00100, 5'b00000, 5'b00100}; // ?
+                8'h21: font_bitmap = {
+                    5'b00100, 5'b00100, 5'b00100, 5'b00100,
+                    5'b00100, 5'b00000, 5'b00100}; // !
+                8'h80: font_bitmap = {
+                    5'b00100, 5'b01110, 5'b11111, 5'b00100,
+                    5'b00100, 5'b00100, 5'b00100}; // up arrow
+                8'h81: font_bitmap = {
+                    5'b00100, 5'b00100, 5'b00100, 5'b00100,
+                    5'b11111, 5'b01110, 5'b00100}; // down arrow
                 default: font_bitmap = {
                     5'b00000, 5'b00000, 5'b00000, 5'b00000,
                     5'b00000, 5'b00000, 5'b00000};

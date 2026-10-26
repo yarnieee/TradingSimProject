@@ -1,64 +1,55 @@
 `timescale 1ns / 1ps
 `include "trading_defs.vh"
 
-// Text for every screen of the right OLED, on one grid: 16 columns of 6-pixel
-// cells, and these lines (5x7 font, each line 7 pixels tall):
+// text_layer: what every right-OLED screen shows, cell by cell, on the
+// text_grid layout (header row 0, body rows 1-6 of 16 cells; or a big row 1).
 //
-//   line 0..4   y = 13, 21, 29, 37, 45    (STOCKS: y = 13, 22, 31, 40, to sit in the list buttons)
-//   line 5      y = 55                    bottom line; columns 13-15 hold the days left ("D30")
+// For the cell (row, col) it gives the character and its colours. Buttons are
+// runs of cells with a background: the selected one is black on yellow, the
+// others white on dark grey. The three-button bar on row 6 always uses
+// cells 0-4, 6-10 and 12-15, matching menu_selection 0, 1, 2.
 //
-// Each screen says what goes in each cell, so no two pieces of text can land on
-// the same pixels. The tab bar (y 1-10), buttons, OK box and chart are drawn by
-// menu_buttons / menu_button_text / chart_renderer in the areas this layer leaves empty.
-// Numbers come from display_numbers as decimal digits (bcd, neg).
+//   header (row 0):  HOME / MARKET tabs, or the screen title; days left at the right
+//   PORTFOLIO        NET, CASH, then one row per stock: shares and profit/loss
+//   STOCKS           one row per stock: price and an up/down arrow (30-day trend)
+//   SPECIFIC         price, 30-day change, shares held; chart on rows 3-5
+//   BUY / SELL       price, quantity, total, cash or shares; a warning if the
+//                    order would be rejected; BACK / QTY / NEXT
+//   QUANTITY         the quantity in big digits, the digit being changed in yellow
+//   ORDER_REVIEW     the order and its total; SEND
+//   TRADE_RESULT     FILLED or REJECTED in big letters, and why
+//   GAME_END         net worth in big digits and the final profit/loss
+// Numbers come from display_numbers (bcd, neg).
 module text_layer (
-    input  [12:0] pixel_index,
+    input  [2:0]  row,
+    input  [3:0]  col,
     input  [3:0]  screen_state,
+    input  [3:0]  menu_selection,
     input  [2:0]  selected_stock,
     input  [1:0]  quantity_cursor,     // 0 ones .. 3 thousands
     input         trade_side,          // 0 buy, 1 sell
     input         trade_result_success,
     input  [2:0]  trade_result_code,
+    input         order_valid,         // the order on screen would pass the checks
+    input  [2:0]  validation_code,     // if not, why
     input  [`DN_N*32-1:0] bcd,
     input  [`DN_N-1:0]    neg,
-    input  [3:0]  up,                  // stock k is above its price 30 days ago
-    output reg        pixel_active,
-    output reg [15:0] pixel_color
+    input  [3:0]  up,                  // stock k is at or above its price 30 days ago
+    output reg        big,             // this screen uses the big row
+    output reg        chart_on,        // rows 3-5 are the chart (SPECIFIC)
+    output reg [7:0]  ch,
+    output reg [15:0] fg,
+    output reg [15:0] bg
 );
-    localparam [15:0] WHITE  = 16'hFFFF,
-                      CYAN   = 16'h07FF,
-                      YELLOW = 16'hFFE0,
-                      GREEN  = 16'h07E0,
-                      RED    = 16'hF800;
-
-    wire [6:0] pixel_x = pixel_index % 96;
-    wire [5:0] pixel_y = pixel_index / 96;
-    wire [3:0] col     = pixel_x / 6;
-    wire [2:0] gx      = pixel_x % 6;
-
-    // ------------------------------------------------------------ which line
-    reg       on_line;
-    reg [2:0] line;
-    reg [2:0] gy;
-    integer   ln;
-    always @* begin
-        on_line = 1'b0;
-        line    = 3'd0;
-        gy      = 3'd0;
-        if (pixel_y >= 6'd55 && pixel_y < 6'd62) begin
-            on_line = 1'b1; line = 3'd5; gy = pixel_y - 6'd55;
-        end else if (screen_state == `UI_STOCKS) begin
-            for (ln = 0; ln < 4; ln = ln + 1)
-                if (pixel_y >= 13 + 9*ln && pixel_y < 20 + 9*ln) begin
-                    on_line = 1'b1; line = ln; gy = pixel_y - (13 + 9*ln);
-                end
-        end else begin
-            for (ln = 0; ln < 5; ln = ln + 1)
-                if (pixel_y >= 13 + 8*ln && pixel_y < 20 + 8*ln) begin
-                    on_line = 1'b1; line = ln; gy = pixel_y - (13 + 8*ln);
-                end
-        end
-    end
+    localparam [15:0] BLACK   = 16'h0000,
+                      WHITE   = 16'hFFFF,
+                      CYAN    = 16'h07FF,
+                      YELLOW  = 16'hFFE0,
+                      GREEN   = 16'h07E0,
+                      RED     = 16'hF8A2,     // a little lighter than pure red: easier to read
+                      GREY    = 16'h8C51,     // labels that matter less
+                      HDR     = 16'h0012,     // header bar (navy)
+                      BTN     = 16'h3186;     // unselected button (dark grey)
 
     // ------------------------------------------------------------ helpers
     function [7:0] str_ch;                 // character c of a 16-character string
@@ -71,7 +62,7 @@ module text_layer (
 
     function [7:0] ticker_ch;              // AMD, MCD, NVDA, GME (Yi An's stocks 0-3)
         input [1:0] k;
-        input [3:0] p;                     // 0..3
+        input [3:0] p;
         reg [31:0] t;
         begin
             case (k)
@@ -84,11 +75,9 @@ module text_layer (
         end
     endfunction
 
-    // A right-aligned number field w characters wide; p is the position in it.
-    //   dp2:    show the last two digits as cents (".05")
-    //   prefix: a character just before the number ("$"), or 0 for none
-    //   sgn:    show + or - before the number (and before the prefix)
-    // Leading zeros are blank; the sign and prefix sit next to the first digit.
+    // A right-aligned number, w characters wide; p is the position in it.
+    //   dp2: last two digits are cents;  prefix: e.g. "$" (0 = none);
+    //   sgn: show + or -. Leading zeros blank; sign and prefix sit next to the digits.
     function [7:0] num_ch;
         input [31:0] d;
         input        sgn;
@@ -100,11 +89,11 @@ module text_layer (
         integer r, msd, rm, j, i;
         reg [7:0] sign_c;
         begin
-            r = w - 1 - p;                                 // 0 = rightmost
-            msd = dp2 ? 2 : 0;                             // always show "0.05" / "0"
+            r = w - 1 - p;
+            msd = dp2 ? 2 : 0;
             for (j = 0; j < 8; j = j + 1)
                 if (d[4*j +: 4] != 4'd0 && j > msd) msd = j;
-            rm = (dp2 && msd >= 2) ? msd + 1 : msd;        // position of the first digit
+            rm = (dp2 && msd >= 2) ? msd + 1 : msd;
             sign_c = is_neg ? "-" : "+";
             num_ch = " ";
             if (r <= rm) begin
@@ -122,7 +111,7 @@ module text_layer (
         end
     endfunction
 
-    function [31:0] field;                 // the digits of one display_numbers field
+    function [31:0] field;
         input [`DN_N*32-1:0] all;
         input [4:0] f;
         begin
@@ -130,7 +119,7 @@ module text_layer (
         end
     endfunction
 
-    function [7:0] reason_ch;              // why an order was rejected
+    function [7:0] reason_ch;              // why an order is / was rejected
         input [2:0] code;
         input [3:0] c;
         begin
@@ -138,7 +127,7 @@ module text_layer (
                 `RJ_NO_CASH:   reason_ch = str_ch("NOT ENOUGH CASH ", c);
                 `RJ_NO_POS:    reason_ch = str_ch("TOO FEW SHARES  ", c);
                 `RJ_BOOK_FULL: reason_ch = str_ch("ORDER BOOK FULL ", c);
-                `RJ_BAD_QTY:   reason_ch = str_ch("QTY NOT 1 TO 255", c);
+                `RJ_BAD_QTY:   reason_ch = str_ch("QTY: 1 TO 255   ", c);
                 `RJ_BAD_TRIG:  reason_ch = str_ch("BAD TRIGGER     ", c);
                 `RJ_TRIG_FAIL: reason_ch = str_ch("TRIGGER FAILED  ", c);
                 `RJ_NOT_LIVE:  reason_ch = str_ch("MARKET CLOSED   ", c);
@@ -147,7 +136,19 @@ module text_layer (
         end
     endfunction
 
-    // ------------------------------------------------------------ the numbers used here
+    // the three buttons on row 6: cells 0-4, 6-10, 12-15 (5 and 11 are gaps)
+    function [1:0] bar_button;             // 3 = a gap
+        input [3:0] c;
+        begin
+            if (c <= 4'd4)       bar_button = 2'd0;
+            else if (c == 4'd5)  bar_button = 2'd3;
+            else if (c <= 4'd10) bar_button = 2'd1;
+            else if (c == 4'd11) bar_button = 2'd3;
+            else                 bar_button = 2'd2;
+        end
+    endfunction
+
+    // ------------------------------------------------------------ numbers used here
     wire [1:0]  s       = selected_stock[1:0];
     wire [31:0] n_cash  = field(bcd, `DN_CASH);
     wire [31:0] n_net   = field(bcd, `DN_NET);
@@ -159,176 +160,255 @@ module text_layer (
     wire [31:0] n_npnl  = field(bcd, `DN_NETPNL);
     wire [31:0] n_spx   = field(bcd, `DN_PX0  + s);
     wire [31:0] n_spos  = field(bcd, `DN_POS0 + s);
-    wire [31:0] n_spnl  = field(bcd, `DN_PNL0 + s);
-    wire        g_spnl  = neg[`DN_PNL0 + s];
-    // stock row k on the portfolio and stock-list screens
-    wire [1:0]  rk      = (screen_state == `UI_STOCKS) ? line[1:0] : line[1:0] - 2'd1;
+    // the stock on this row: PORTFOLIO rows 3-6, STOCKS rows 1-4
+    wire [1:0]  rk      = (screen_state == `UI_PORTFOLIO) ? row[1:0] - 2'd3 : row[1:0] - 2'd1;
     wire [31:0] n_rpx   = field(bcd, `DN_PX0  + rk);
     wire [31:0] n_rpos  = field(bcd, `DN_POS0 + rk);
     wire [31:0] n_rpnl  = field(bcd, `DN_PNL0 + rk);
     wire        g_rpnl  = neg[`DN_PNL0 + rk];
 
-    wire        sell    = trade_side;
+    wire        sell     = trade_side;
     wire [15:0] side_col = sell ? RED : GREEN;
-    // cursor digit on the quantity screen: column 9 is ones, 6 is thousands
-    wire [3:0]  qcur_col = 4'd9 - {2'b00, quantity_cursor};
-    wire        days_on  = (screen_state != `UI_TITLE) && (screen_state != `UI_GAME_END);
+    wire        tabs     = (screen_state == `UI_PORTFOLIO) || (screen_state == `UI_STOCKS) ||
+                           (screen_state == `UI_SPECIFIC);
+    // which tab the cursor is on (3 = none): HOME 0, MARKET 1
+    wire [1:0]  tab_sel  = (screen_state == `UI_SPECIFIC) ?
+                               ((menu_selection == 4'd3) ? 2'd0 : (menu_selection == 4'd4) ? 2'd1 : 2'd3) :
+                               ((menu_selection == 4'd0) ? 2'd0 : (menu_selection == 4'd1) ? 2'd1 : 2'd3);
+    wire [3:0]  stock_row_sel = menu_selection - 4'd1;   // STOCKS: menu 2..5 = rows 1..4
 
-    // ------------------------------------------------------------ character and colour of each cell
-    reg [7:0]  ch;
-    reg [15:0] cc;
+    // ------------------------------------------------------------ the cell
+    reg [1:0] b;
     always @* begin
-        ch = " ";
-        cc = WHITE;
-        if (line == 3'd5 && col >= 4'd13) begin
-            // days left, bottom right of every game screen
-            if (days_on) begin
-                cc = YELLOW;
+        ch       = " ";
+        fg       = WHITE;
+        bg       = BLACK;
+        big      = (screen_state == `UI_QUANTITY) || (screen_state == `UI_TRADE_RESULT) ||
+                   (screen_state == `UI_GAME_END);
+        chart_on = (screen_state == `UI_SPECIFIC);
+        b        = 2'd3;
+
+        if (row == 3'd0) begin
+            // ---------------------------------------------------- header bar
+            bg = HDR;
+            if (col >= 4'd13 && screen_state != `UI_GAME_END) begin
                 ch = (col == 4'd13) ? "D" : num_ch(n_days, 1'b0, 1'b0, 1'b0, 8'd0, 4'd2, col - 4'd14);
-            end
-        end else begin
-            case (screen_state)
-                `UI_PORTFOLIO: begin
-                    if (line == 3'd0) begin                        // NET    $10372.15
-                        if (col <= 4'd2) begin ch = str_ch("NET             ", col); cc = CYAN; end
-                        else begin ch = num_ch(n_net, 1'b0, 1'b0, 1'b1, "$", 4'd13, col - 4'd3); cc = YELLOW; end
-                    end else if (line <= 3'd4) begin               // AMD   10 +123.45
-                        if (col <= 4'd3)      begin ch = ticker_ch(rk, col); cc = CYAN; end
-                        else if (col <= 4'd7) ch = num_ch(n_rpos, 1'b0, 1'b0, 1'b0, 8'd0, 4'd4, col - 4'd4);
-                        else begin
-                            ch = num_ch(n_rpnl, n_rpnl != 32'd0, g_rpnl, 1'b1, 8'd0, 4'd8, col - 4'd8);
-                            cc = (n_rpnl == 32'd0) ? WHITE : g_rpnl ? RED : GREEN;
-                        end
-                    end else if (line == 3'd5) begin               // CASH  $8423
-                        if (col <= 4'd3) begin ch = str_ch("CASH            ", col); cc = CYAN; end
-                        else if (col <= 4'd11) ch = num_ch(n_cash >> 8, 1'b0, 1'b0, 1'b0, "$", 4'd8, col - 4'd4);
+                fg = YELLOW;
+            end else if (tabs) begin
+                // HOME (cells 0-3) and MARKET (5-10): the cursor's tab in yellow
+                if (col <= 4'd3 || (col >= 4'd5 && col <= 4'd10)) begin
+                    ch = (col <= 4'd3) ? str_ch("HOME            ", col) : str_ch("MARKET          ", col - 4'd5);
+                    if ((col <= 4'd3) ? (tab_sel == 2'd0) : (tab_sel == 2'd1)) begin
+                        bg = YELLOW; fg = BLACK;
+                    end else if ((col <= 4'd3) == (screen_state == `UI_PORTFOLIO)) begin
+                        fg = WHITE;             // the tab you are on
+                    end else begin
+                        fg = GREY;
                     end
                 end
-
-                `UI_STOCKS: begin                                  // (in the button) AMD   213.45
-                    if (line <= 3'd3) begin
-                        if (col >= 4'd1 && col <= 4'd4) ch = ticker_ch(rk, col - 4'd1);
-                        else if (col >= 4'd6 && col <= 4'd11) begin
-                            ch = num_ch(n_rpx, 1'b0, 1'b0, 1'b1, 8'd0, 4'd6, col - 4'd6);
-                            cc = up[rk] ? GREEN : RED;
+            end else begin
+                case (screen_state)
+                    `UI_BUY_STOCK, `UI_SELL_STOCK: begin
+                        if (col <= 4'd3) begin ch = str_ch(sell ? "SELL            " : "BUY             ", col); fg = side_col; end
+                        else if (col >= 4'd5 && col <= 4'd8) ch = ticker_ch(s, col - 4'd5);
+                    end
+                    `UI_QUANTITY:     ch = str_ch("SET QUANTITY    ", col);
+                    `UI_ORDER_REVIEW: ch = str_ch("REVIEW ORDER    ", col);
+                    `UI_ORDER_RESULT: ch = str_ch("SENDING         ", col);
+                    `UI_TRADE_RESULT: ch = str_ch("RESULT          ", col);
+                    `UI_GAME_END:     begin ch = str_ch("   GAME OVER    ", col); fg = YELLOW; end
+                    default: ;
+                endcase
+            end
+        end else begin
+            // ---------------------------------------------------- body
+            case (screen_state)
+                `UI_PORTFOLIO: begin
+                    case (row)
+                        3'd1: begin                                     // NET   $13079.50
+                            if (col <= 4'd2) begin ch = str_ch("NET             ", col); fg = CYAN; end
+                            else begin ch = num_ch(n_net, 1'b0, 1'b0, 1'b1, "$", 4'd13, col - 4'd3); fg = YELLOW; end
                         end
+                        3'd2: begin                                     // CASH   $8423.50
+                            if (col <= 4'd3) begin ch = str_ch("CASH            ", col); fg = CYAN; end
+                            else ch = num_ch(n_cash, 1'b0, 1'b0, 1'b1, "$", 4'd12, col - 4'd4);
+                        end
+                        default: begin                                  // AMD   10  +84.50
+                            if (col <= 4'd3) begin
+                                ch = ticker_ch(rk, col);
+                                fg = (n_rpos == 32'd0) ? GREY : CYAN;
+                            end else if (col <= 4'd7) begin
+                                ch = num_ch(n_rpos, 1'b0, 1'b0, 1'b0, 8'd0, 4'd4, col - 4'd4);
+                                fg = (n_rpos == 32'd0) ? GREY : WHITE;
+                            end else begin
+                                ch = num_ch(n_rpnl, n_rpnl != 32'd0, g_rpnl, 1'b1, 8'd0, 4'd8, col - 4'd8);
+                                fg = (n_rpnl == 32'd0) ? GREY : g_rpnl ? RED : GREEN;
+                            end
+                        end
+                    endcase
+                end
+
+                `UI_STOCKS: begin                                       // > MCD   305.10 ^
+                    if (row <= 3'd4) begin
+                        if (col >= 4'd1 && col <= 4'd4)       begin ch = ticker_ch(rk, col - 4'd1); fg = CYAN; end
+                        else if (col >= 4'd6 && col <= 4'd11) ch = num_ch(n_rpx, 1'b0, 1'b0, 1'b1, 8'd0, 4'd6, col - 4'd6);
+                        else if (col == 4'd13)                begin ch = up[rk] ? 8'h80 : 8'h81; fg = up[rk] ? GREEN : RED; end
+                        if ({1'b0, row} == stock_row_sel) begin              // the cursor's row
+                            bg = YELLOW; fg = BLACK;
+                        end
+                    end else if (row == 3'd6) begin
+                        ch = str_ch("U/D PICK  C OPEN", col); fg = GREY;
                     end
                 end
 
                 `UI_SPECIFIC: begin
-                    if (line == 3'd0) begin                        // MCD 305.10 -1.25
-                        if (col <= 4'd3)      begin ch = ticker_ch(s, col); cc = CYAN; end
-                        else if (col <= 4'd9) ch = num_ch(n_spx, 1'b0, 1'b0, 1'b1, 8'd0, 4'd6, col - 4'd4);
-                        else begin
-                            ch = num_ch(n_chg, n_chg != 32'd0, neg[`DN_CHG], 1'b1, 8'd0, 4'd6, col - 4'd10);
-                            cc = neg[`DN_CHG] ? RED : GREEN;
+                    case (row)
+                        3'd1: begin                                     // MCD      $305.10
+                            if (col <= 4'd3) begin ch = ticker_ch(s, col); fg = CYAN; end
+                            else ch = num_ch(n_spx, 1'b0, 1'b0, 1'b1, "$", 4'd12, col - 4'd4);
                         end
-                    end else if (line == 3'd5) begin               // POS  10  +123 (P/L in whole dollars)
-                        if (col <= 4'd2)       begin ch = str_ch("POS             ", col); cc = CYAN; end
-                        else if (col <= 4'd6)  ch = num_ch(n_spos, 1'b0, 1'b0, 1'b0, 8'd0, 4'd4, col - 4'd3);
-                        else if (col <= 4'd11) begin
-                            ch = num_ch(n_spnl >> 8, (n_spnl >> 8) != 32'd0, g_spnl, 1'b0, 8'd0, 4'd5, col - 4'd7);
-                            cc = ((n_spnl >> 8) == 32'd0) ? WHITE : g_spnl ? RED : GREEN;
+                        3'd2: begin                                     // 30D -9.90  OWN  5
+                            if (col <= 4'd2)      begin ch = str_ch("30D             ", col); fg = GREY; end
+                            else if (col <= 4'd8) begin
+                                ch = num_ch(n_chg, n_chg != 32'd0, neg[`DN_CHG], 1'b1, 8'd0, 4'd6, col - 4'd3);
+                                fg = neg[`DN_CHG] ? RED : GREEN;
+                            end
+                            else if (col >= 4'd10 && col <= 4'd12) begin ch = str_ch("OWN             ", col - 4'd10); fg = GREY; end
+                            else if (col >= 4'd13) ch = num_ch(n_spos, 1'b0, 1'b0, 1'b0, 8'd0, 4'd3, col - 4'd13);
                         end
-                    end
+                        3'd6: begin                                     //  BUY   SELL  BACK
+                            ch = str_ch(" BUY  SELL  BACK", col);
+                            b  = bar_button(col);
+                        end
+                        default: ;                                      // rows 3-5: chart
+                    endcase
                 end
 
                 `UI_BUY_STOCK, `UI_SELL_STOCK, `UI_ORDER_REVIEW: begin
-                    if (line == 3'd0) begin                        // BUY    12 MCD
-                        if (col <= 4'd3)      begin ch = str_ch(sell ? "SELL            " : "BUY             ", col); cc = side_col; end
-                        else if (col <= 4'd7) ch = num_ch(n_qty, 1'b0, 1'b0, 1'b0, 8'd0, 4'd4, col - 4'd4);
-                        else if (col >= 4'd9 && col <= 4'd12) begin ch = ticker_ch(s, col - 4'd9); cc = CYAN; end
-                    end else if (line == 3'd1) begin               // AT   $305.15
-                        if (col <= 4'd1)      begin ch = str_ch("AT              ", col); cc = CYAN; end
-                        else ch = num_ch(n_ordpx, 1'b0, 1'b0, 1'b1, "$", 4'd14, col - 4'd2);
-                    end else if (line == 3'd2) begin               // TOTAL $3662.80
-                        if (col <= 4'd4)      begin ch = str_ch("TOTAL           ", col); cc = CYAN; end
-                        else begin
-                            ch = num_ch(n_ordt, neg[`DN_ORDTOT], 1'b1, 1'b1, "$", 4'd11, col - 4'd5);
-                            cc = YELLOW;
+                    case (row)
+                        3'd1: begin
+                            if (screen_state == `UI_ORDER_REVIEW) begin // BUY    12  MCD
+                                if (col <= 4'd3)       begin ch = str_ch(sell ? "SELL            " : "BUY             ", col); fg = side_col; end
+                                else if (col <= 4'd8)  ch = num_ch(n_qty, 1'b0, 1'b0, 1'b0, 8'd0, 4'd5, col - 4'd4);
+                                else if (col >= 4'd10 && col <= 4'd13) begin ch = ticker_ch(s, col - 4'd10); fg = CYAN; end
+                            end else begin                              // QTY        12
+                                if (col <= 4'd2) begin ch = str_ch("QTY             ", col); fg = CYAN; end
+                                else ch = num_ch(n_qty, 1'b0, 1'b0, 1'b0, 8'd0, 4'd13, col - 4'd3);
+                            end
                         end
-                    end else if (line == 3'd5 && screen_state != `UI_ORDER_REVIEW) begin
-                        if (!sell) begin                           // CASH $8423
-                            if (col <= 4'd3)       begin ch = str_ch("CASH            ", col); cc = CYAN; end
-                            else if (col <= 4'd11) ch = num_ch(n_cash >> 8, 1'b0, 1'b0, 1'b0, "$", 4'd8, col - 4'd4);
-                        end else begin                             // OWN   10
-                            if (col <= 4'd2)       begin ch = str_ch("OWN             ", col); cc = CYAN; end
-                            else if (col <= 4'd7)  ch = num_ch(n_spos, 1'b0, 1'b0, 1'b0, 8'd0, 4'd5, col - 4'd3);
+                        3'd2: begin                                     // PRICE   $305.15
+                            if (col <= 4'd4) begin ch = str_ch("PRICE           ", col); fg = CYAN; end
+                            else ch = num_ch(n_ordpx, 1'b0, 1'b0, 1'b1, "$", 4'd11, col - 4'd5);
                         end
-                    end
+                        3'd3: begin                                     // TOTAL  $3662.80
+                            if (col <= 4'd4) begin ch = str_ch("TOTAL           ", col); fg = CYAN; end
+                            else begin
+                                ch = num_ch(n_ordt, neg[`DN_ORDTOT], 1'b1, 1'b1, "$", 4'd11, col - 4'd5);
+                                fg = YELLOW;
+                            end
+                        end
+                        3'd4: begin
+                            if (screen_state == `UI_ORDER_REVIEW) ;
+                            else if (!sell) begin                       // CASH   $8423.50
+                                if (col <= 4'd3) begin ch = str_ch("CASH            ", col); fg = GREY; end
+                                else begin ch = num_ch(n_cash, 1'b0, 1'b0, 1'b1, "$", 4'd12, col - 4'd4); fg = GREY; end
+                            end else begin                              // OWN           5
+                                if (col <= 4'd2) begin ch = str_ch("OWN             ", col); fg = GREY; end
+                                else begin ch = num_ch(n_spos, 1'b0, 1'b0, 1'b0, 8'd0, 4'd13, col - 4'd3); fg = GREY; end
+                            end
+                        end
+                        3'd5: begin                                     // why it would be rejected
+                            if (!order_valid) begin ch = reason_ch(validation_code, col); fg = RED; end
+                        end
+                        3'd6: begin
+                            if (screen_state == `UI_ORDER_REVIEW) begin //   C: SEND ORDER
+                                ch = str_ch(" C: SEND ORDER  ", col);
+                                if (col <= 4'd14) begin bg = YELLOW; fg = BLACK; end
+                            end else begin                              //  BACK   QTY  NEXT
+                                ch = str_ch(" BACK  QTY  NEXT", col);
+                                b  = bar_button(col);
+                            end
+                        end
+                        default: ;
+                    endcase
                 end
 
                 `UI_QUANTITY: begin
-                    case (line)
-                        3'd0: begin ch = str_ch("SET QUANTITY    ", col); cc = CYAN; end
-                        3'd1: begin
-                            if (col <= 4'd3) begin ch = str_ch(sell ? "SELL            " : "BUY             ", col); cc = side_col; end
-                            else if (col >= 4'd5 && col <= 4'd8) begin ch = ticker_ch(s, col - 4'd5); cc = CYAN; end
-                        end
-                        3'd2: begin                                // 0012, the digit being changed in yellow
-                            if (col >= 4'd6 && col <= 4'd9) begin
-                                ch = "0" + n_qty[4*(9 - col) +: 4];
-                                cc = (col == qcur_col) ? YELLOW : WHITE;
+                    case (row)
+                        3'd1: begin                                     // big: 0012
+                            if (col >= 4'd2 && col <= 4'd5) begin
+                                ch = "0" + n_qty[4*(5 - col) +: 4];
+                                if (col == 4'd5 - {2'b00, quantity_cursor}) begin bg = YELLOW; fg = BLACK; end
                             end
                         end
-                        3'd3: ch = str_ch("UP/DOWN: CHANGE ", col);
-                        3'd4: ch = str_ch("LEFT/RIGHT: MOVE", col);
-                        3'd5: if (col <= 4'd7) begin ch = str_ch("C: DONE         ", col); cc = CYAN; end
+                        3'd3: begin                                     // BUY  MCD
+                            if (col <= 4'd3) begin ch = str_ch(sell ? "SELL            " : "BUY             ", col); fg = side_col; end
+                            else if (col >= 4'd5 && col <= 4'd8) begin ch = ticker_ch(s, col - 4'd5); fg = CYAN; end
+                        end
+                        3'd4: begin ch = str_ch("UP/DOWN: CHANGE ", col); fg = GREY; end
+                        3'd5: begin ch = str_ch("LEFT/RIGHT: MOVE", col); fg = GREY; end
+                        3'd6: begin
+                            ch = str_ch("    C: DONE     ", col);
+                            if (col >= 4'd3 && col <= 4'd11) begin bg = YELLOW; fg = BLACK; end
+                        end
                         default: ;
                     endcase
                 end
 
                 `UI_ORDER_RESULT: begin
-                    if (line == 3'd0)      begin ch = str_ch("SENDING ORDER   ", col); cc = CYAN; end
-                    else if (line == 3'd1) ch = str_ch("PLEASE WAIT     ", col);
+                    if (row == 3'd3) begin ch = str_ch(" PLEASE WAIT... ", col); fg = CYAN; end
                 end
 
                 `UI_TRADE_RESULT: begin
-                    if (line == 3'd0) begin
-                        ch = str_ch(trade_result_success ? "ORDER FILLED    " : "REJECTED        ", col);
-                        cc = trade_result_success ? GREEN : RED;
-                    end else if (line == 3'd1) begin
-                        if (!trade_result_success) ch = reason_ch(trade_result_code, col);
-                        else if (col <= 4'd3)      begin ch = str_ch(sell ? "SELL            " : "BUY             ", col); cc = side_col; end
-                        else if (col <= 4'd7)      ch = num_ch(n_qty, 1'b0, 1'b0, 1'b0, 8'd0, 4'd4, col - 4'd4);
-                        else if (col >= 4'd9 && col <= 4'd12) begin ch = ticker_ch(s, col - 4'd9); cc = CYAN; end
-                    end
+                    case (row)
+                        3'd1: begin                                     // big: FILLED / REJECTED
+                            if (trade_result_success) begin ch = str_ch(" FILLED         ", col); fg = GREEN; end
+                            else                      begin ch = str_ch("REJECTED        ", col); fg = RED; end
+                        end
+                        3'd3: begin
+                            if (!trade_result_success) ch = reason_ch(trade_result_code, col);
+                            else if (col <= 4'd3)      begin ch = str_ch(sell ? "SELL            " : "BUY             ", col); fg = side_col; end
+                            else if (col <= 4'd8)      ch = num_ch(n_qty, 1'b0, 1'b0, 1'b0, 8'd0, 4'd5, col - 4'd4);
+                            else if (col >= 4'd10 && col <= 4'd13) begin ch = ticker_ch(s, col - 4'd10); fg = CYAN; end
+                        end
+                        3'd6: begin
+                            ch = str_ch("  C: CONTINUE   ", col);
+                            if (col >= 4'd1 && col <= 4'd13) begin bg = YELLOW; fg = BLACK; end
+                        end
+                        default: ;
+                    endcase
                 end
 
                 `UI_GAME_END: begin
-                    if (line == 3'd0) begin ch = str_ch("GAME OVER       ", col); cc = YELLOW; end
-                    else if (line == 3'd2) begin
-                        if (col <= 4'd2) begin ch = str_ch("NET             ", col); cc = CYAN; end
-                        else ch = num_ch(n_net, 1'b0, 1'b0, 1'b1, "$", 4'd13, col - 4'd3);
-                    end else if (line == 3'd3) begin
-                        if (col <= 4'd2) begin ch = str_ch("P/L             ", col); cc = CYAN; end
-                        else begin
-                            ch = num_ch(n_npnl, n_npnl != 32'd0, neg[`DN_NETPNL], 1'b1, "$", 4'd13, col - 4'd3);
-                            cc = neg[`DN_NETPNL] ? RED : GREEN;
+                    case (row)
+                        3'd1: begin                                     // big: $13079 (whole dollars)
+                            ch = num_ch(n_net >> 8, 1'b0, 1'b0, 1'b0, "$", 4'd8, col);
+                            fg = neg[`DN_NETPNL] ? RED : GREEN;
                         end
-                    end
+                        3'd3: begin                                     // P/L  +$3079.50
+                            if (col <= 4'd2) begin ch = str_ch("P/L             ", col); fg = CYAN; end
+                            else begin
+                                ch = num_ch(n_npnl, n_npnl != 32'd0, neg[`DN_NETPNL], 1'b1, "$", 4'd13, col - 4'd3);
+                                fg = neg[`DN_NETPNL] ? RED : GREEN;
+                            end
+                        end
+                        3'd4: begin ch = str_ch("START  $10000.00", col); fg = GREY; end
+                        3'd6: begin ch = str_ch(" SW0: NEW GAME  ", col); fg = GREY; end
+                        default: ;
+                    endcase
                 end
 
-                default: ;     // title screen: artwork only
+                default: ;
             endcase
+
+            // three-button bar: the cursor's button yellow, the others dark grey
+            if (b != 2'd3) begin
+                if (b == menu_selection[1:0] && menu_selection[3:2] == 2'b00 && menu_selection != 4'd3) begin
+                    bg = YELLOW; fg = BLACK;
+                end else begin
+                    bg = BTN; fg = WHITE;
+                end
+            end
         end
-    end
-
-    // ------------------------------------------------------------ pixel
-    wire glyph_pixel;
-    font_renderer font_renderer_inst (
-        .char_code(ch),
-        .glyph_x(gx),
-        .glyph_y(gy),
-        .pixel_on(glyph_pixel)
-    );
-
-    // the quantity screen underlines the digit being changed (just below line 2)
-    wire underline = (screen_state == `UI_QUANTITY) && (pixel_y == 6'd36) &&
-                     (col == qcur_col) && (gx < 3'd5);
-
-    always @* begin
-        pixel_active = (on_line && glyph_pixel) || underline;
-        pixel_color  = underline ? YELLOW : cc;
     end
 endmodule

@@ -1,9 +1,9 @@
 `timescale 1ns / 1ps
 `include "trading_defs.vh"
-`include "ticket_layout.vh"
 
 // tb_ticket_screen: drives ticket_screen directly into five states, checks
-// a few key pixels, and writes one frame dump per state (96x64 RGB565, one
+// key pixels of the text_grid layout (header bar, rows 1-6 at y 10, 19, 28,
+// 37, 46, 55), and writes one frame dump per state (96x64 RGB565, one
 // hex value per line, row-major). hex2png.py turns them into PNGs.
 //   ticket_frame.hex         MKT BUY, focus qty, after a fill
 //   ticket_frame_lmt.hex     LMT SELL, focus trig, reject showing
@@ -160,92 +160,93 @@ module tb_ticket_screen;
         end
     endtask
 
+    localparam [15:0] HDR = 16'h0012, YEL = 16'hFFE0, GRN = 16'h07E0, RED = 16'hF8A2,
+                      WHT = 16'hFFFF, BTN = 16'h3186, GRY = 16'h8C51;
+
     initial begin
         step(3);
         sys_reset = 0;
 
-        // ---------------------------------------------------- frame 1
+        // ---------------------------------------------------- frame 1: MKT BUY, focus QTY, after a fill
         pulse_fill(`SIDE_BUY, 10, 12335);
-        step(800);                                 // BCD refresh: 22 values x ~18 clocks
+        step(400);                                 // BCD refresh: 14 values x ~18 clocks
         check(dut.bcd_bid == 20'h12325 && dut.bcd_ask == 20'h12335, "F1 bid/ask BCD");
         check(dut.bcd_qty == 20'h00010 && dut.bcd_mpx == 20'h12335, "F1 qty/fill BCD");
-        count_col(0, 95, 0, 5, 16'hFFFF); check(cnt == 0, "F1 tab bar rows left black");
-        px_at(3, 16); check(px == 16'h07E0, "F1 BUY selected -> green fill");
-        px_at(`TK_SELL_X0, 20); check(px == 16'h4208, "F1 SELL unselected -> grey edge");
-        px_at(40, 20); check(px == 16'h0000, "F1 SELL interior black");
-        px_at(24, 44); check(px == 16'h001F, "F1 SUBMIT blue");
-        count_col(0, 63, 55, 59, 16'h07E0); check(cnt > 20, "F1 fill message green");
-        count_col(20, 31, 27, 31, 16'hFFE0); check(cnt > 5, "F1 focused qty yellow");
-        count_col(0, 60, 35, 39, 16'hFFFF); check(cnt == 0, "F1 TRG line dimmed (MKT)");
-        count_col(52, 91, 35, 39, 16'h4208); check(cnt > 20, "F1 SL/TP OFF shown grey");
+        px_at(95, 0);  check(px == HDR, "F1 header bar");
+        count_col(42, 95, 2, 8, GRN);  check(cnt > 20, "F1 header shows FILLED in green");
+        px_at(2, 28);  check(px == GRN, "F1 BUY cell green");
+        px_at(90, 28); check(px == YEL, "F1 focused QTY row yellow");
+        count_col(30, 95, 38, 44, WHT); check(cnt == 0, "F1 trigger grey for MKT");
+        count_col(30, 95, 38, 44, GRY); check(cnt > 20, "F1 trigger shown in grey");
+        px_at(1, 55);  check(px == BTN, "F1 SUBMIT button not focused");
+        count_col(36, 53, 46, 54, GRY); check(cnt > 5, "F1 SL/TP OFF shown in grey");
         dump("ticket_frame.hex");
         flip_check("F1 FLIP_180: whole page rotated 180 degrees");
 
-        // ---------------------------------------------------- frame 2
+        // ---------------------------------------------------- frame 2: LMT SELL, focus TRG, reject
         side = `SIDE_SELL; otype = `OT_LMT; focus = 1; trig = 12000; qty = 25;
         stock = 3; bid = 1225; ask = 1235;
         reject_code = `RJ_NO_CASH; reject = 1; step(1); reject = 0;
-        step(800);
-        px_at(40, 16); check(px == 16'hF800, "F2 SELL selected -> red fill");
-        px_at(3, 16); check(px == 16'h0000, "F2 BUY interior black");
-        count_col(0, 63, 55, 59, 16'hF800); check(cnt > 20, "F2 reject message red");
-        count_col(20, 43, 35, 39, 16'hFFE0); check(cnt > 5, "F2 focused trig yellow");
+        step(400);
+        px_at(2, 28);  check(px == RED, "F2 SELL cell red");
+        count_col(42, 95, 2, 8, RED);  check(cnt > 20, "F2 header shows the reject in red");
+        px_at(40, 37); check(px == YEL, "F2 focused TRG row yellow");
+        px_at(90, 28); check(px == 16'h0000, "F2 QTY no longer highlighted");
         dump("ticket_frame_lmt.hex");
         flip_check("F2 FLIP_180: whole page rotated 180 degrees");
 
         // reject times out back to the last fill
         step(100000);
-        count_col(0, 63, 55, 59, 16'hF800); check(cnt == 0,  "F2 reject clears after timeout");
-        count_col(0, 63, 55, 59, 16'h07E0); check(cnt > 20,  "F2 status falls back to last fill");
+        count_col(42, 95, 2, 8, RED); check(cnt == 0,  "F2 reject clears after timeout");
+        count_col(42, 95, 2, 8, GRN); check(cnt > 20,  "F2 header falls back to the last fill");
 
-        // ---------------------------------------------------- frame 3
+        // ---------------------------------------------------- frame 3: STP BUY, focus SUBMIT, order placed
         side = `SIDE_BUY; otype = `OT_STP; focus = 2; stock = 0; bid = 9995; ask = 10005;
         trig = 10500; qty = 255; pending_count = 4;
         placed_side = `SIDE_BUY; placed_type = `OT_STP; placed_qty = 255; placed_trig = 10500;
         placed = 1; step(1); placed = 0;
-        step(800);
-        px_at(`TK_SUB_X0, `TK_SUB_Y0); check(px == 16'hFFE0, "F3 SUBMIT focused -> yellow edge");
-        count_col(0, 63, 55, 59, 16'hFFFF); check(cnt > 20, "F3 placed message white");
+        step(400);
+        px_at(1, 55);  check(px == YEL, "F3 SUBMIT focused -> yellow");
+        count_col(42, 95, 2, 8, WHT); check(cnt > 20, "F3 header shows PLACED in white");
+        count_col(30, 95, 38, 44, WHT); check(cnt > 20, "F3 trigger white for a stop order");
         dump("ticket_frame_stp.hex");
         flip_check("F3 FLIP_180: whole page rotated 180 degrees");
 
         // ---------------------------------------------------- frame 4: SL/TP field, stock field
         focus = 3; brk = `BRK_10;
         step(10);
-        count_col(52, 55, 35, 39, 16'hFFE0); check(cnt > 3,  "F4 SL/TP focus marker yellow");
-        count_col(80, 91, 35, 39, 16'hFFE0); check(cnt > 10, "F4 SL/TP value 10% yellow");
-        count_col(56, 75, 35, 39, 16'hFFFF); check(cnt > 10, "F4 SL/TP label white when on");
+        px_at(1, 46);  check(px == YEL, "F4 SL/TP field focused -> yellow");
         dump("ticket_frame_sltp.hex");
         flip_check("F4 FLIP_180: whole page rotated 180 degrees");
         focus = 5;
-        count_col(0, 15, 7, 11, 16'hFFE0); check(cnt > 15, "F4 stock field focused: marker + ticker yellow");
-        count_col(80, 91, 35, 39, 16'hFFE0); check(cnt == 0, "F4 SL/TP value back to white");
+        px_at(1, 10);  check(px == YEL, "F4 stock field focused -> yellow");
+        px_at(1, 46);  check(px == 16'h0000, "F4 SL/TP no longer highlighted");
 
         // ---------------------------------------------------- frame 5: ORDERS view
         // slot 0: LMT BUY AMD 10 @ 120.00
         // slots 1, 2: SL/TP pair on MCD, 5 shares, SL 116.90 / TP 129.20
         bk_valid = 8'b0000_0111; bk_leg = 8'b0000_0110;
-        bk_side  = 8'b0000_0110;                               // slots 1, 2 SELL
+        bk_side  = 8'b0000_0110;
         bk_stock = {10'd0, 2'd1, 2'd1, 2'd0};
         bk_type  = {10'd0, `OT_LMT, `OT_STP, `OT_LMT};
         bk_qty   = {40'd0, 8'd5, 8'd5, 8'd10};
         bk_trig  = {80'd0, 16'd12920, 16'd11690, 16'd12000};
         pending_count = 3; ord_sel = 1; focus = 4;
-        step(800);
-        check(dut.bcd_sq[0] == 12'h010 && dut.bcd_st[0] == 20'h12000, "F5 slot 0 qty/price BCD");
-        check(dut.bcd_sq[1] == 12'h005 && dut.bcd_st[1] == 20'h11690 && dut.bcd_st[2] == 20'h12920, "F5 SL/TP slot BCD");
-        px_at(3, 16); check(px == 16'h0000, "F5 ticket buttons hidden");
-        count_col(0, 23, 7, 11, 16'hFFFF);  check(cnt > 30, "F5 ORDERS header");
-        count_col(48, 79, 7, 11, 16'h4208); check(cnt > 15, "F5 C=CANCEL hint grey");
-        count_col(0, 3, 14, 18, 16'hFFE0);  check(cnt == 0,  "F5 no cursor on slot 1 row");
-        count_col(0, 7, 20, 24, 16'hFFE0);  check(cnt > 5,   "F5 cursor on slot 2 row (ord_sel 1)");
-        count_col(12, 95, 14, 18, 16'hFFFF); check(cnt > 40, "F5 plain order white");
-        count_col(12, 95, 20, 24, 16'hF800); check(cnt > 40, "F5 stop-loss leg red");
-        count_col(12, 95, 26, 30, 16'h07E0); check(cnt > 40, "F5 take-profit leg green");
-        count_col(12, 15, 32, 36, 16'h4208); check(cnt == 3,  "F5 empty slot shows a grey dash");
-        count_col(16, 95, 32, 59, 16'hFFFF); check(cnt == 0,  "F5 empty slots have no text");
+        step(400);
+        check(dut.bcd_st[0] == 20'h12000 && dut.bcd_st[1] == 20'h11690 && dut.bcd_st[2] == 20'h12920, "F5 slot price BCD");
+        count_col(0, 35, 2, 8, WHT);    check(cnt > 30, "F5 header ORDERS");
+        px_at(95, 19);                  check(px == YEL, "F5 cursor row (slot 2) yellow");
+        px_at(95, 10);                  check(px == 16'h0000, "F5 other rows not highlighted");
+        count_col(42, 53, 29, 35, GRN); check(cnt > 5,  "F5 take-profit code green (slot 3)");
+        count_col(42, 53, 11, 17, GRN); check(cnt > 5,  "F5 buy limit code green (slot 1)");
+        count_col(12, 17, 38, 44, GRY); check(cnt > 0,  "F5 empty slot shows a grey dash");
+        count_col(18, 95, 38, 54, WHT); check(cnt == 0, "F5 empty slots have no text");
+        count_col(0, 95, 55, 63, GRY);  check(cnt > 20, "F5 cancel hint on row 6");
         dump("ticket_frame_orders.hex");
         flip_check("F5 FLIP_180: whole page rotated 180 degrees");
+        ord_sel = 6;                                  // scrolls: rows show slots 3-7
+        #1;
+        check(dut.first == 3'd2, "F5 list scrolls to keep the cursor visible");
 
         if (n_fail == 0) $display("PASS: tb_ticket_screen (%0d checks)", n_pass);
         else             $display("FAIL: tb_ticket_screen (%0d failed, %0d passed)", n_fail, n_pass);

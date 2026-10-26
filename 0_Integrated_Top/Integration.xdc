@@ -72,3 +72,13 @@ set_property CONFIG_VOLTAGE 3.3 [current_design]
 set_property CFGBVS VCCO [current_design]
 set_property BITSTREAM.GENERAL.COMPRESS TRUE [current_design]
 set_property BITSTREAM.CONFIG.CONFIGRATE 33 [current_design]
+
+## OLED pixel clock: 6.25 MHz, divided from clk by slower_clk #(7) in D_display_top
+## (toggles every 8 clocks, so one period is 16 clocks = 160 ns). Declaring it
+## makes Vivado time and place the pixel path: pixel_index -> page logic ->
+## pixel_data must settle within one OLED clock. Signals from the 100 MHz side
+## (screen, prices, ticket) change rarely and only ever on a whole value, so
+## the two clocks are treated as unrelated: a change can at worst affect one
+## pixel of one frame.
+create_generated_clock -name clk_oled -source [get_ports clk] -divide_by 16 [get_pins matthew_display/clk_6_25MHz_inst/out_clk_reg/Q]
+set_clock_groups -asynchronous -group [get_clocks sys_clk_pin] -group [get_clocks clk_oled]

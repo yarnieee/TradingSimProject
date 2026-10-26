@@ -1,16 +1,16 @@
 `timescale 1ns / 1ps
 
 // tb_yian_market: checks Yi An's market engine (A_top) on its own.
-//   - both stocks become ready, starting from the LAST row of their seed file
+//   - all four stocks become ready, starting from the LAST row of their seed file
 //     (the most recent trading day, 2025-12-19)
 //   - one tick per trading day: the date moves forward every day
 //   - prices stay sane for 60 simulated days: never 0, never pinned at
 //     $655.35, never below $1.00, and no single day moves more than 25%
 // A trading day is shortened to 2000 clocks; nothing else is changed.
 //
-// EXPECTED TO FAIL until stock.v's calculate_next_close is fixed (unsigned
-// arithmetic pins prices at 65535; a 10% daily downward drift). It passes
-// once those are fixed.
+// The price-model checks below must pass after stock.v's signed arithmetic
+// fix: prices move in both directions, remain bounded, and do not drift only
+// downward.
 module tb_yian_market;
     reg clk = 0;
     always #5 clk = ~clk;
@@ -18,21 +18,42 @@ module tb_yian_market;
 
     wire [1:0]  market_state;
     wire        amd_ready, mcd_ready;
-    wire [15:0] amd_close, mcd_close;
-    wire [31:0] amd_date, mcd_date;
+    wire        stock2_ready, stock3_ready;
+    wire [15:0] amd_close, mcd_close, stock2_close, stock3_close;
+    wire [31:0] amd_date, mcd_date, stock2_date, stock3_date;
+    wire [(7*16)-1:0] amd_samples_7, mcd_samples_7;
+    wire [15:0] amd_mean_7, mcd_mean_7;
 
     localparam DAY = 2000;
-    A_top #(.DAY_MAX_COUNT(DAY)) dut (
+    A_top #(
+        .DAY_MAX_COUNT(DAY),
+        .AMD_VOLATILITY(10), .MCD_VOLATILITY(8),
+        .NVDA_VOLATILITY(14), .GME_VOLATILITY(20)
+    ) dut (
         .clk(clk), .rst(rst), .market_state(market_state),
         .amd_ready(amd_ready), .mcd_ready(mcd_ready),
         .amd_current_close(amd_close), .amd_current_volume(), .amd_current_date(amd_date),
         .mcd_current_close(mcd_close), .mcd_current_volume(), .mcd_current_date(mcd_date),
+        .amd_samples_7(amd_samples_7), .amd_mean_7(amd_mean_7),
         .amd_samples_30(), .amd_samples_180(), .amd_mean_30(), .amd_mean_180(),
-        .mcd_samples_30(), .mcd_samples_180(), .mcd_mean_30(), .mcd_mean_180()
+        .mcd_samples_7(mcd_samples_7), .mcd_mean_7(mcd_mean_7),
+        .mcd_samples_30(), .mcd_samples_180(), .mcd_mean_30(), .mcd_mean_180(),
+        .stock0_ready(), .stock0_current_close(), .stock0_current_volume(), .stock0_current_date(),
+        .stock0_samples_30(), .stock0_samples_180(), .stock0_mean_30(), .stock0_mean_180(),
+        .stock1_ready(), .stock1_current_close(), .stock1_current_volume(), .stock1_current_date(),
+        .stock1_samples_30(), .stock1_samples_180(), .stock1_mean_30(), .stock1_mean_180(),
+        .stock2_ready(stock2_ready), .stock2_current_close(stock2_close),
+        .stock2_current_volume(), .stock2_current_date(stock2_date),
+        .stock2_samples_30(), .stock2_samples_180(), .stock2_mean_30(), .stock2_mean_180(),
+        .stock3_ready(stock3_ready), .stock3_current_close(stock3_close),
+        .stock3_current_volume(), .stock3_current_date(stock3_date),
+        .stock3_samples_30(), .stock3_samples_180(), .stock3_mean_30(), .stock3_mean_180()
     );
     // Simulation only: Vivado's simulator copies .mem files flat into its run folder.
     defparam dut.amd_stock_inst.SEED_FILE = "AMD_seed.mem";
     defparam dut.mcd_stock_inst.SEED_FILE = "MCD_seed.mem";
+    defparam dut.stock2_inst.SEED_FILE = "NVDA_seed.mem";
+    defparam dut.stock3_inst.SEED_FILE = "GME_seed.mem";
 
     integer n_pass = 0, n_fail = 0;
     task check;
@@ -44,41 +65,72 @@ module tb_yian_market;
         end
     endtask
 
-    // last rows of the trimmed seed files (2025-12-19)
+    // Last rows of the four trimmed seed files (2025-12-19).
     localparam [15:0] AMD_LAST_CLOSE = 16'h535F;   // 21343 c
     localparam [15:0] MCD_LAST_CLOSE = 16'h7B60;   // 31584 c
+    localparam [15:0] NVDA_LAST_CLOSE = 16'hCB92;  // 52114 c
+    localparam [15:0] GME_LAST_CLOSE = 16'h2B2E;   // 11054 c
     localparam [31:0] LAST_DATE      = 32'd20251219;
 
     integer day, bad_range, bad_jump, bad_date;
-    reg [15:0] a_prev, m_prev;
+    reg [15:0] a_prev, m_prev, n_prev, g_prev;
     reg [31:0] d_prev;
-    integer a_move, m_move;
+    integer a_move, m_move, n_move, g_move;
 
     initial begin
         repeat (5) @(posedge clk);
         rst = 0;
-        wait (amd_ready && mcd_ready);
+        wait (amd_ready && mcd_ready && stock2_ready && stock3_ready);
         @(posedge clk); #1;
         check(amd_close == AMD_LAST_CLOSE && mcd_close == MCD_LAST_CLOSE,
               "starts from the most recent seed row (AMD 21343 c, MCD 31584 c)");
+        check(stock2_close == NVDA_LAST_CLOSE && stock3_close == GME_LAST_CLOSE,
+              "NVDA and GME start from their distinct seed rows");
         check(amd_date == LAST_DATE, "starting date is 2025-12-19 (the last seed row)");
-        $display("     day 0: %0d  AMD %0d c  MCD %0d c", amd_date, amd_close, mcd_close);
+        check(stock2_date == LAST_DATE && stock3_date == LAST_DATE,
+              "all four stock channels share the same starting trading date");
+        check(amd_samples_7[111:96] == amd_close
+            && mcd_samples_7[111:96] == mcd_close,
+              "A_top exposes the newest close at the end of the 7-day timeframe");
+        check(amd_samples_7[15:0] != 16'd0
+            && mcd_samples_7[15:0] != 16'd0
+            && amd_mean_7 != 16'd0 && mcd_mean_7 != 16'd0,
+              "A_top exposes valid seven-day history samples and means");
+        $display("     day 0: %0d  AMD %0d c  MCD %0d c  NVDA %0d c  GME %0d c",
+            amd_date, amd_close, mcd_close, stock2_close, stock3_close);
 
         bad_range = 0; bad_jump = 0; bad_date = 0;
-        a_prev = amd_close; m_prev = mcd_close; d_prev = amd_date;
+        a_prev = amd_close; m_prev = mcd_close;
+        n_prev = stock2_close; g_prev = stock3_close; d_prev = amd_date;
         for (day = 1; day <= 60; day = day + 1) begin
             repeat (DAY + 1) @(posedge clk); #1;
-            if (amd_date <= d_prev || mcd_date != amd_date) bad_date = bad_date + 1;
-            if (amd_close < 100 || mcd_close < 100 || amd_close == 16'hFFFF || mcd_close == 16'hFFFF)
+            if (amd_date <= d_prev || mcd_date != amd_date
+                || stock2_date != amd_date || stock3_date != amd_date)
+                bad_date = bad_date + 1;
+            if (amd_close < 100 || mcd_close < 100
+                || stock2_close < 100 || stock3_close < 100
+                || amd_close == 16'hFFFF || mcd_close == 16'hFFFF
+                || stock2_close == 16'hFFFF || stock3_close == 16'hFFFF)
                 bad_range = bad_range + 1;
-            a_move = amd_close - a_prev; if (a_move < 0) a_move = -a_move;
-            m_move = mcd_close - m_prev; if (m_move < 0) m_move = -m_move;
-            if (a_move * 4 > a_prev || m_move * 4 > m_prev) bad_jump = bad_jump + 1;
+            // Widen before subtracting so a downward move is not interpreted
+            // as a wrapped 16-bit unsigned value.
+            a_move = $signed({1'b0, amd_close}) - $signed({1'b0, a_prev});
+            if (a_move < 0) a_move = -a_move;
+            m_move = $signed({1'b0, mcd_close}) - $signed({1'b0, m_prev});
+            if (m_move < 0) m_move = -m_move;
+            n_move = $signed({1'b0, stock2_close}) - $signed({1'b0, n_prev});
+            if (n_move < 0) n_move = -n_move;
+            g_move = $signed({1'b0, stock3_close}) - $signed({1'b0, g_prev});
+            if (g_move < 0) g_move = -g_move;
+            if (a_move * 4 > a_prev || m_move * 4 > m_prev
+                || n_move * 4 > n_prev || g_move * 4 > g_prev)
+                bad_jump = bad_jump + 1;
             if (day % 10 == 0)
                 $display("     day %0d: %0d  AMD %0d c  MCD %0d c", day, amd_date, amd_close, mcd_close);
-            a_prev = amd_close; m_prev = mcd_close; d_prev = amd_date;
+            a_prev = amd_close; m_prev = mcd_close;
+            n_prev = stock2_close; g_prev = stock3_close; d_prev = amd_date;
         end
-        check(bad_date == 0,  "date moves forward every trading day, same for both stocks");
+        check(bad_date == 0,  "date moves forward every trading day for all four stocks");
         check(bad_range == 0, "prices stay between $1.00 and $655.35 (exclusive) for 60 days");
         check(bad_jump == 0,  "no day moves a price by more than 25%");
 

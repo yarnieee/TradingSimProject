@@ -48,6 +48,23 @@
 `define PG_L_OVERVIEW  1'b1
 `define PG_R_TICKET    1'b0   // page_R
 `define PG_R_PORTFOLIO 1'b1
+
+// ---------------------------------------------------------------- game screen states (Matthew)
+// These encodings are shared by the FSM, display top, OLED renderers, and
+// tests. Keep them in one place so a state insertion cannot silently split
+// the UI decoders across different numeric values.
+`define UI_TITLE        4'd0
+`define UI_PORTFOLIO    4'd1
+`define UI_STOCKS       4'd2
+`define UI_SPECIFIC     4'd3
+`define UI_BUY_STOCK    4'd4
+`define UI_SELL_STOCK   4'd5
+`define UI_QUANTITY     4'd6
+`define UI_ORDER_REVIEW 4'd7
+`define UI_ORDER_RESULT 4'd8
+`define UI_TRADE_RESULT 4'd9
+`define UI_GAME_END     4'd10
+
 // btn_pulse bit positions, in Basys3 master XDC order (btnC, btnU, btnL, btnR, btnD)
 `define BTN_C 0
 `define BTN_U 1

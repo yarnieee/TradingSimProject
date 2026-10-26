@@ -24,8 +24,11 @@ module tb_integration;
     );
 
     // game_fsm screens
-    localparam S_TITLE = 0, S_PORTFOLIO = 1, S_STOCKS = 2, S_SPECIFIC = 3, S_BUY = 4,
-               S_SELL = 5, S_QUANTITY = 6, S_CONFIRM = 7;
+    localparam S_TITLE = `UI_TITLE, S_PORTFOLIO = `UI_PORTFOLIO,
+               S_STOCKS = `UI_STOCKS, S_SPECIFIC = `UI_SPECIFIC,
+               S_BUY = `UI_BUY_STOCK, S_SELL = `UI_SELL_STOCK,
+               S_QUANTITY = `UI_QUANTITY, S_ORDER_REVIEW = `UI_ORDER_REVIEW,
+               S_ORDER_RESULT = `UI_ORDER_RESULT, S_TRADE_RESULT = `UI_TRADE_RESULT;
 
     integer n_pass = 0, n_fail = 0;
     task check;
@@ -37,7 +40,7 @@ module tb_integration;
         end
     endtask
 
-    integer n_fill = 0, n_rej = 0, n_err = 0, n_tick = 0;
+    integer n_fill = 0, n_rej = 0, n_err = 0, n_tick = 0, n_ord_req = 0;
     reg [2:0]  last_rej = 0;
     reg [15:0] last_px = 0;
     always @(posedge clk) if (!dut.sys_reset) begin
@@ -45,6 +48,7 @@ module tb_integration;
         if (dut.reject)     begin n_rej = n_rej + 1; last_rej = dut.reject_code; end
         if (dut.ledger_err) n_err = n_err + 1;
         if (dut.tick)       n_tick = n_tick + 1;
+        if (dut.ord_req)    n_ord_req = n_ord_req + 1;
     end
 
     // one press, held long enough for the debouncer (50 clocks)
@@ -61,37 +65,50 @@ module tb_integration;
 
     // place an order through Matthew's screens, starting from PORTFOLIO
     task trade;
-        input integer stock;   // 0..3 in Matthew's stock list
+        input integer stock;   // 0=AMD, 1=MCD
         input         sell;
         input integer qty;     // 0..9 (ones digit only, enough here)
         integer k;
         begin
-            press(R); press(C);                         // portfolio -> stocks (cursor 0)
-            for (k = 0; k < stock; k = k + 1) press(D); // pick the stock
+            press(R); press(C);                         // portfolio -> stocks (Stocks selected)
+            for (k = 0; k <= stock; k = k + 1) press(D); // Stocks -> selected stock
             press(C);                                   // -> specific
             if (sell) press(R);                         // sell instead of buy
             press(C);                                   // -> buy / sell screen
             press(R); press(C);                         // "quantity" -> quantity screen (qty 0)
             for (k = 0; k < qty; k = k + 1) press(U);   // ones digit
             press(C);                                   // back to buy / sell screen (cursor 0)
-            press(R); press(R); press(C);               // "confirmation" -> CONFIRM: order goes to B
+            press(R); press(R); press(C);               // -> ORDER_REVIEW
+            press(C);                                   // review -> ORDER_RESULT: submit to B
             repeat (300) @(posedge clk);                // Douglas -> Tricia: fill and ledger update
         end
     endtask
 
-    integer cash0, f0, r0;
+    integer cash0, f0, r0, o0;
     reg [15:0] p0;
 
     initial begin
         repeat (10) @(posedge clk);
         rst = 0;
-        wait (dut.amd_ready && dut.mcd_ready);
+        wait (dut.amd_ready && dut.mcd_ready && dut.stock2_ready && dut.stock3_ready);
         repeat (DAY + 100) @(posedge clk);              // one day ticks over
-        check(dut.price0 != 0 && dut.price1 != 0, "Yi An: AMD and MCD have prices (if not: AMD_seed.mem / MCD_seed.mem not found)");
+        check(dut.price0 != 0 && dut.price1 != 0 && dut.price2 != 0 && dut.price3 != 0,
+              "Yi An: all four stocks have prices (if not: a seed file was not found)");
+        check(dut.price0 == dut.amd_close && dut.price1 == dut.mcd_close
+              && dut.price2 == dut.stock2_close && dut.price3 == dut.stock3_close,
+              "Integration: all four prices are routed into the shared order bus");
         check(n_tick >= 1, "Yi An -> Douglas: a tick reached the order engine after a trading day");
-        $display("     AMD %0d c, MCD %0d c", dut.price0, dut.price1);
+        check(dut.portfolio_value == 32'd1_000_000,
+              "Display data path: portfolio starts at the ledger's cash value");
+        check(dut.portfolio_samples_30[31:0] == dut.portfolio_value,
+              "Display data path: portfolio history is initialized");
+        $display("     AMD %0d c, MCD %0d c, NVDA %0d c, GME %0d c",
+                 dut.price0, dut.price1, dut.price2, dut.price3);
         // Yi An's own price maths (stock.v, calculate_next_close), reported but not counted
-        if (dut.price0 == 16'hFFFF || dut.price1 == 16'hFFFF || dut.price0 < 100 || dut.price1 < 100)
+        if (dut.price0 == 16'hFFFF || dut.price1 == 16'hFFFF
+            || dut.price2 == 16'hFFFF || dut.price3 == 16'hFFFF
+            || dut.price0 < 100 || dut.price1 < 100
+            || dut.price2 < 100 || dut.price3 < 100)
             $display("WARN: Yi An's prices look wrong (pinned at $655.35 or near 0): see stock.v, calculate_next_close");
 
         // ---------------- title -> portfolio
@@ -99,39 +116,38 @@ module tb_integration;
         check(dut.screen_state == S_PORTFOLIO, "Matthew: title -> portfolio");
 
         // ---------------- buy 3 AMD
-        cash0 = dut.cash; f0 = n_fill; p0 = dut.price0;
+        cash0 = dut.cash; f0 = n_fill; o0 = n_ord_req; p0 = dut.price0;
         trade(0, 0, 3);
         check(dut.sel_stock == 0, "Matthew -> Douglas: AMD selected");
+        check(n_ord_req == o0 + 1, "valid buy generates one order request");
         check(n_fill == f0 + 1 && dut.pos0 == 3, "Douglas -> Tricia: buy 3 AMD filled, position 3");
         check(dut.cash == cash0 - 3 * last_px - 100, "Tricia: cash down by 3 x ask + fee");
         check(last_px == dut.douglas_orders.u_exec.u_spread.ask || last_px == ((p0 > 16'd65530) ? 16'hFFFF : p0 + 16'd5),
               "Douglas: filled at the ask (price + 5 c, saturating)");
-        check(dut.screen_state == S_CONFIRM, "Matthew: on the confirm screen");
-        press(C);                                       // confirm -> portfolio
+        check(dut.screen_state == S_TRADE_RESULT, "Matthew: on the trade-result screen");
+        press(C);                                       // trade result -> portfolio
 
         // ---------------- sell 2 MCD with none held: rejected by B, never reaches C
-        f0 = n_fill; r0 = n_rej;
+        f0 = n_fill; r0 = n_rej; o0 = n_ord_req;
         trade(1, 1, 2);
         check(dut.sel_stock == 1, "Matthew -> Douglas: MCD selected");
-        check(n_rej == r0 + 1 && last_rej == `RJ_NO_POS && n_fill == f0, "Douglas: sell MCD with none held -> NO POS");
-        press(C);
-
-        // ---------------- stock 3 has no data from Yi An: closed
-        r0 = n_rej;
-        trade(2, 0, 1);
-        check(n_rej == r0 + 1 && last_rej == `RJ_NOT_LIVE, "Douglas: stock 3 has no price -> NOT LIVE");
+        check(n_rej == r0 && n_fill == f0 && n_ord_req == o0
+              && dut.screen_state == S_TRADE_RESULT,
+              "validation: sell MCD with none held -> NO POS before submission");
         press(C);
 
         // ---------------- quantity 0 (confirm without setting it)
-        r0 = n_rej;
+        r0 = n_rej; o0 = n_ord_req;
         trade(0, 0, 0);
-        check(n_rej == r0 + 1 && last_rej == `RJ_BAD_QTY, "Douglas: quantity 0 -> BAD QTY");
+        check(n_rej == r0 && n_ord_req == o0 && dut.screen_state == S_TRADE_RESULT,
+              "validation: quantity 0 -> BAD QTY before submission");
         press(C);
 
         // ---------------- sell 1 AMD back: partial sell through Tricia's divider
-        f0 = n_fill;
+        f0 = n_fill; o0 = n_ord_req;
         trade(0, 1, 1);
-        check(n_fill == f0 + 1 && dut.pos0 == 2, "Douglas -> Tricia: sell 1 AMD, position 2");
+        check(n_fill == f0 + 1 && n_ord_req == o0 + 1 && dut.pos0 == 2,
+              "valid sell generates one order and updates AMD position to 2");
         check(dut.cash + dut.cb0 + dut.cb1 + dut.cb2 + dut.cb3 == 32'd1_000_000 + dut.realised,
               "Tricia: ledger invariant holds");
 

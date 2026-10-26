@@ -10,9 +10,14 @@
 // The market state is used as a small directional bias on the random value:
 // bear shifts the random value upward, bull shifts it downward, and crash
 // applies a larger bearish shift.  Normal leaves the random value unchanged.
+// VOLATILITY is the approximate maximum percentage change per trading day.
 module stock #(
     parameter integer BUFFER_DEPTH = 180,
     parameter integer VOLATILITY = 10,
+    parameter integer INITIAL_YEAR = 2025,
+    parameter integer INITIAL_MONTH = 12,
+    parameter integer INITIAL_DAY = 19,
+    parameter integer INITIAL_WEEKDAY = 6,
     parameter SEED_FILE = "storage/data/AMD_seed.mem"
     )(
     input wire                          clk,
@@ -32,7 +37,8 @@ module stock #(
     localparam integer RECORD_WIDTH = 80;
     localparam integer INDEX_WIDTH = (BUFFER_DEPTH <= 1) ? 1 : $clog2(BUFFER_DEPTH);
 
-    // The generated memory files are derived from AMD.csv and MCD.csv.
+    // The repository's packed seed files provide the four stock histories
+    // (AMD, MCD, NVDA, and GME) consumed by the four A_top channels.
     reg [RECORD_WIDTH-1:0] seed_memory [0:BUFFER_DEPTH-1];
     reg [INDEX_WIDTH-1:0] seed_index;
 
@@ -51,14 +57,18 @@ module stock #(
     function [7:0] adjust_random_for_market;
         input [7:0] random_value;
         input [1:0] state_value;
+        integer random_integer;
         integer adjusted_value;
         begin
-            adjusted_value = random_value;
+            // Convert the unsigned input before subtracting the bull bias.
+            // This prevents an 8-bit underflow when random_value is below 10.
+            random_integer = {1'b0, random_value};
+            adjusted_value = random_integer;
             case (state_value)
-                2'b00: adjusted_value = random_value + 10; // bear
-                2'b10: adjusted_value = random_value - 10; // bull
-                2'b11: adjusted_value = random_value + 30; // crash
-                default: adjusted_value = random_value;     // normal
+                2'b00: adjusted_value = random_integer + 10; // bear
+                2'b10: adjusted_value = random_integer - 10; // bull
+                2'b11: adjusted_value = random_integer + 30; // crash
+                default: adjusted_value = random_integer;     // normal
             endcase
 
             if (adjusted_value < 0) begin
@@ -77,119 +87,141 @@ module stock #(
         input [1:0] state_value;
         integer adjusted_random;
         integer random_offset;
-        integer stable_term;
-        integer random_term;
+        integer bounded_volatility;
+        integer daily_delta_percent;
+        integer price_multiplier;
         integer result;
+        reg signed [31:0] signed_previous_close;
+        reg signed [63:0] scaled_price;
         begin
             adjusted_random = adjust_random_for_market(random_value, state_value);
             random_offset = 50 - adjusted_random;
 
-            // The random term is divided by 100 a second time so that the
-            // normalized value produces a percentage-scale perturbation.
-            stable_term = previous_close * (100 - VOLATILITY) / 100;
-            random_term = (previous_close * VOLATILITY / 100)
-                * random_offset / 100;
-            result = stable_term + random_term;
+            // Keep the parameter in a safe range even if a future instance
+            // supplies an invalid value.  The old expression always applied
+            // a negative stable term, which caused a one-sided price drift.
+            bounded_volatility = VOLATILITY;
+            if (bounded_volatility < 0)
+                bounded_volatility = 0;
+            else if (bounded_volatility > 100)
+                bounded_volatility = 100;
+
+            // random_offset is -50..+50.  Scale it to approximately
+            // -VOLATILITY..+VOLATILITY percent around the previous close.
+            // All operands are explicitly signed before the multiplication.
+            daily_delta_percent = (random_offset * bounded_volatility) / 50;
+            price_multiplier = 100 + daily_delta_percent;
+            signed_previous_close = {16'd0, previous_close};
+            scaled_price = signed_previous_close * price_multiplier;
+            result = scaled_price / 100;
 
             if (result < 1) begin
                 result = 1;
-            end else if (result > 65535) begin
-                result = 65535;
+            end else if (result > 65534) begin
+                // 16'hFFFF is reserved as an invalid/saturated value by the
+                // market and order-engine testbenches.
+                result = 65534;
             end
 
             calculate_next_close = result;
         end
     endfunction
 
-    function [31:0] next_calendar_date;
-        input [31:0] date_value;
-        integer year_value;
-        integer month_value;
-        integer day_value;
-        integer month_end;
-        begin
-            year_value = date_value / 10000;
-            month_value = (date_value / 100) % 100;
-            day_value = date_value % 100;
+    // Calendar components are tracked directly rather than repeatedly
+    // extracting YYYY/MM/DD with / and %.  Weekday encoding is Zeller-style:
+    // 0 = Saturday, 1 = Sunday, 2 = Monday, ..., 6 = Friday.
+    reg [15:0] calendar_year;
+    reg [3:0]  calendar_month;
+    reg [5:0]  calendar_day;
+    reg [2:0]  calendar_weekday;
 
-            if ((month_value == 2)
-                && ((year_value % 400 == 0)
-                || ((year_value % 4 == 0) && (year_value % 100 != 0)))) begin
-                month_end = 29;
-            end else begin
-                case (month_value)
-                    4, 6, 9, 11: month_end = 30;
-                    default: month_end = 31;
-                endcase
-                if (month_value == 2) begin
-                    month_end = 28;
+    function integer month_length;
+        input [15:0] year_value;
+        input [3:0] month_value;
+        begin
+            case (month_value)
+                2: begin
+                    // The simulation runs in the current century.  The
+                    // low two year bits are sufficient for leap years here
+                    // and avoid a binary divide/modulo cone.
+                    month_length = (year_value[1:0] == 2'b00) ? 29 : 28;
+                end
+                4, 6, 9, 11: month_length = 30;
+                default: month_length = 31;
+            endcase
+        end
+    endfunction
+
+    function [25:0] increment_calendar_day;
+        input [15:0] year_value;
+        input [3:0]  month_value;
+        input [5:0]  day_value;
+        reg [15:0] next_year_value;
+        reg [3:0]  next_month_value;
+        reg [5:0]  next_day_value;
+        begin
+            next_year_value = year_value;
+            next_month_value = month_value;
+            next_day_value = day_value + 1'b1;
+
+            if (next_day_value > month_length(year_value, month_value)) begin
+                next_day_value = 1;
+                if (month_value == 12) begin
+                    next_month_value = 1;
+                    next_year_value = year_value + 1'b1;
+                end else begin
+                    next_month_value = month_value + 1'b1;
                 end
             end
 
-            day_value = day_value + 1;
-            if (day_value > month_end) begin
-                day_value = 1;
-                month_value = month_value + 1;
-                if (month_value > 12) begin
-                    month_value = 1;
-                    year_value = year_value + 1;
-                end
-            end
-
-            next_calendar_date = year_value * 10000
-                + month_value * 100 + day_value;
+            increment_calendar_day = {
+                next_year_value, next_month_value, next_day_value
+            };
         end
     endfunction
 
-    // Zeller's congruence: 0 = Saturday, 1 = Sunday.
-    function integer weekday_for_date;
-        input [31:0] date_value;
-        integer year_value;
-        integer month_value;
-        integer day_value;
-        integer adjusted_year;
-        integer adjusted_month;
-        begin
-            year_value = date_value / 10000;
-            month_value = (date_value / 100) % 100;
-            day_value = date_value % 100;
-            adjusted_year = year_value;
-            adjusted_month = month_value;
+    reg [25:0] next_calendar_parts;
+    reg [2:0]  next_calendar_weekday;
+    reg [31:0] next_date;
+    integer calendar_step;
+    integer calendar_steps;
 
-            if (adjusted_month < 3) begin
-                adjusted_year = adjusted_year - 1;
-                adjusted_month = adjusted_month + 12;
+    always @(*) begin
+        next_calendar_parts = {calendar_year, calendar_month, calendar_day};
+        next_calendar_weekday = calendar_weekday;
+
+        // Friday advances three calendar days to Monday; every other
+        // trading day advances one calendar day.
+        if (calendar_weekday == 3'd6)
+            calendar_steps = 3;
+        else
+            calendar_steps = 1;
+
+        for (calendar_step = 0; calendar_step < 3; calendar_step = calendar_step + 1) begin
+            if (calendar_step < calendar_steps) begin
+                next_calendar_parts = increment_calendar_day(
+                    next_calendar_parts[25:10],
+                    next_calendar_parts[9:6],
+                    next_calendar_parts[5:0]
+                );
+                if (next_calendar_weekday == 3'd6)
+                    next_calendar_weekday = 3'd0;
+                else
+                    next_calendar_weekday = next_calendar_weekday + 1'b1;
             end
-
-            weekday_for_date = (day_value
-                + (13 * (adjusted_month + 1)) / 5
-                + adjusted_year + adjusted_year / 4
-                - adjusted_year / 100 + adjusted_year / 400) % 7;
         end
-    endfunction
 
-    function [31:0] next_trading_date;
-        input [31:0] date_value;
-        reg [31:0] candidate_date;
-        begin
-            candidate_date = next_calendar_date(date_value);
-            if ((weekday_for_date(candidate_date) == 0)
-                || (weekday_for_date(candidate_date) == 1)) begin
-                candidate_date = next_calendar_date(candidate_date);
-            end
-            if ((weekday_for_date(candidate_date) == 0)
-                || (weekday_for_date(candidate_date) == 1)) begin
-                candidate_date = next_calendar_date(candidate_date);
-            end
-            next_trading_date = candidate_date;
-        end
-    endfunction
+        // Convert the tracked components back to the existing YYYYMMDD
+        // output format.  These constant multiplications synthesize to
+        // shifts/adds; no variable divider is required.
+        next_date = (next_calendar_parts[25:10] * 32'd10000)
+            + (next_calendar_parts[9:6] * 32'd100)
+            + next_calendar_parts[5:0];
+    end
 
     wire [15:0] next_close;
-    wire [31:0] next_date;
     assign next_close = calculate_next_close(current_close,
         normalized_random, market_state);
-    assign next_date = next_trading_date(current_date);
 
     wire buffer_write;
     wire [15:0] buffer_close;
@@ -241,18 +273,30 @@ module stock #(
             current_close <= 16'b0;
             current_volume <= 32'b0;
             current_date <= 32'b0;
+            calendar_year <= INITIAL_YEAR;
+            calendar_month <= INITIAL_MONTH;
+            calendar_day <= INITIAL_DAY;
+            calendar_weekday <= INITIAL_WEEKDAY;
         end else if (!ready) begin
             if (seed_index == BUFFER_DEPTH-1) begin
                 ready <= 1'b1;
                 current_close <= seed_close;
                 current_volume <= seed_volume;
                 current_date <= seed_date;
+                calendar_year <= INITIAL_YEAR;
+                calendar_month <= INITIAL_MONTH;
+                calendar_day <= INITIAL_DAY;
+                calendar_weekday <= INITIAL_WEEKDAY;
             end else begin
                 seed_index <= seed_index + 1'b1;
             end
         end else if (day_tick) begin
             current_close <= next_close;
             current_date <= next_date;
+            calendar_year <= next_calendar_parts[25:10];
+            calendar_month <= next_calendar_parts[9:6];
+            calendar_day <= next_calendar_parts[5:0];
+            calendar_weekday <= next_calendar_weekday;
         end
     end
 

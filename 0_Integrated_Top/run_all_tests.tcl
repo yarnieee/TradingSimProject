@@ -8,7 +8,10 @@
 
 set all_tbs {
     tb_integration
+    tb_chart_renderer
     tb_yian_market
+    tb_stock_price
+    tb_normalise_lfsr
     tb_matthew_game_fsm
     tb_ledger
     tb_seq_divider
@@ -58,4 +61,4 @@ foreach tb $tbs {
 
 puts "\n=============== SUMMARY ==============="
 foreach line $summary { puts $line }
-puts "(tb_yian_market is expected to FAIL until Yi An's stock.v price fix (calculate_next_close))"
+puts "(Module A price-model tests are expected to PASS after the signed arithmetic fix.)"

@@ -2,17 +2,18 @@
 `default_nettype none
 `include "trading_defs.vh"
 
-// D_display_top: Matthew's part (Component D) in one block. Buttons, game FSM, quantity on the
-// 7-seg, and both OLEDs:
-//   JB (right)  Matthew's game screens (OLED_Renderer)
-//   JA (left)   whatever page comes in on left_pixel (now: Douglas's order ticket)
+// D_display_top: Matthew's complete display component.
 //
-// game_fsm, quantity_7seg and OLED_Renderer are used as they are. The ORDER
-// OUTPUTS section works out, from screen_state and the buttons, the signals the
-// plan has game_fsm output (sel_stock, the order, game_state); it goes away
-// once game_fsm outputs them itself.
+// SHOW_GAME_ON_JA = 1 reproduces the earlier two-game-screen behaviour:
+//   JB: normal game screen
+//   JA: the same game screen rotated 180 degrees, with live button indicators
+//
+// SHOW_GAME_ON_JA = 0 keeps the team-integration arrangement:
+//   JB: game screen
+//   JA: the external page supplied through left_pixel
 module D_display_top #(
-    parameter DEBOUNCE_CTR = 32'd1_999_999      // 20 ms
+    parameter DEBOUNCE_CTR    = 32'd1_999_999,
+    parameter SHOW_GAME_ON_JA = 1'b1
 ) (
     input  wire        clk,
     input  wire        rst,
@@ -21,18 +22,48 @@ module D_display_top #(
     input  wire        btnL,
     input  wire        btnR,
     input  wire        btnC,
-    // left OLED: the page to draw, and the pixel being asked for
+    input  wire        final_day_reached,
+    input  wire [31:0] time_remaining,
+    input  wire        order_fill,
+    input  wire        order_reject,
+    input  wire [2:0]  order_reject_code,
+    // External page for JA when SHOW_GAME_ON_JA == 0.
     input  wire [15:0] left_pixel,
     output wire [6:0]  left_x,
     output wire [5:0]  left_y,
-    // game
+    // Game and order interface.
     output wire [3:0]  screen_state,
     output wire [13:0] quantity,
-    output reg  [1:0]  sel_stock,
-    output wire        ord_req,         // one-cycle pulse: place the order
+    output wire [1:0]  sel_stock,
+    input  wire [15:0] price0,
+    input  wire [15:0] price1,
+    input  wire [15:0] price2,
+    input  wire [15:0] price3,
+    input  wire [479:0] stock0_samples_30,
+    input  wire [479:0] stock1_samples_30,
+    input  wire [479:0] stock2_samples_30,
+    input  wire [479:0] stock3_samples_30,
+    input  wire [31:0] portfolio_cash,
+    input  wire [9:0]  portfolio_pos0,
+    input  wire [9:0]  portfolio_pos1,
+    input  wire [9:0]  portfolio_pos2,
+    input  wire [9:0]  portfolio_pos3,
+    input  wire        stock_ready0,
+    input  wire        stock_ready1,
+    input  wire        stock_ready2,
+    input  wire        stock_ready3,
+    input  wire [31:0] portfolio_value,
+    input  wire [31:0] portfolio_cb0,
+    input  wire [31:0] portfolio_cb1,
+    input  wire [31:0] portfolio_cb2,
+    input  wire [31:0] portfolio_cb3,
+    input  wire [959:0] portfolio_samples_30,
+    output wire        ord_req,
     output wire        ord_side,
+    output wire [2:0]  trade_result_code,
+    output wire        trade_result_success,
     output wire [1:0]  game_state,
-    // board
+    // Board outputs.
     output wire [7:0]  JA,
     output wire [7:0]  JB,
     output wire [3:0]  an,
@@ -40,104 +71,306 @@ module D_display_top #(
 );
     // ================================================================ buttons
     wire btnU_db, btnD_db, btnL_db, btnR_db, btnC_db;
-    debouncer #(.DEBOUNCE_CTR(DEBOUNCE_CTR)) debounce_U (.clk(clk), .btn(btnU), .debounced(btnU_db));
-    debouncer #(.DEBOUNCE_CTR(DEBOUNCE_CTR)) debounce_D (.clk(clk), .btn(btnD), .debounced(btnD_db));
-    debouncer #(.DEBOUNCE_CTR(DEBOUNCE_CTR)) debounce_L (.clk(clk), .btn(btnL), .debounced(btnL_db));
-    debouncer #(.DEBOUNCE_CTR(DEBOUNCE_CTR)) debounce_R (.clk(clk), .btn(btnR), .debounced(btnR_db));
-    debouncer #(.DEBOUNCE_CTR(DEBOUNCE_CTR)) debounce_C (.clk(clk), .btn(btnC), .debounced(btnC_db));
+
+    debouncer #(.DEBOUNCE_CTR(DEBOUNCE_CTR)) debounce_U (
+        .clk(clk), .btn(btnU), .debounced(btnU_db)
+    );
+    debouncer #(.DEBOUNCE_CTR(DEBOUNCE_CTR)) debounce_D (
+        .clk(clk), .btn(btnD), .debounced(btnD_db)
+    );
+    debouncer #(.DEBOUNCE_CTR(DEBOUNCE_CTR)) debounce_L (
+        .clk(clk), .btn(btnL), .debounced(btnL_db)
+    );
+    debouncer #(.DEBOUNCE_CTR(DEBOUNCE_CTR)) debounce_R (
+        .clk(clk), .btn(btnR), .debounced(btnR_db)
+    );
+    debouncer #(.DEBOUNCE_CTR(DEBOUNCE_CTR)) debounce_C (
+        .clk(clk), .btn(btnC), .debounced(btnC_db)
+    );
 
     reg [4:0] btn_prev;
     always @(posedge clk) begin
-        if (rst) btn_prev <= 5'd0;
-        else     btn_prev <= {btnC_db, btnR_db, btnL_db, btnD_db, btnU_db};
+        if (rst)
+            btn_prev <= 5'd0;
+        else
+            btn_prev <= {btnC_db, btnR_db, btnL_db, btnD_db, btnU_db};
     end
+
     wire btnU_p = btnU_db & ~btn_prev[0];
     wire btnD_p = btnD_db & ~btn_prev[1];
     wire btnL_p = btnL_db & ~btn_prev[2];
     wire btnR_p = btnR_db & ~btn_prev[3];
     wire btnC_p = btnC_db & ~btn_prev[4];
 
-    // ================================================================ game FSM, 7-seg
+    // ================================================================ game FSM
+    wire [2:0] selected_stock;
+    wire [1:0] quantity_cursor;
+    wire [3:0] menu_selection;
+    wire       trade_side;
+    reg        order_valid;
+    reg  [2:0] validation_code;
+
     game_fsm game_fsm_inst (
-        .clk(clk), .rst(rst),
-        .btnU(btnU_p), .btnD(btnD_p), .btnL(btnL_p), .btnR(btnR_p), .btnC(btnC_p),
-        .screen_state(screen_state), .quantity(quantity)
+        .clk(clk),
+        .rst(rst),
+        .btnU(btnU_p),
+        .btnD(btnD_p),
+        .btnL(btnL_p),
+        .btnR(btnR_p),
+        .btnC(btnC_p),
+        .final_day_reached(final_day_reached),
+        .order_fill(order_fill),
+        .order_reject(order_reject),
+        .order_reject_code(order_reject_code),
+        .order_valid(order_valid),
+        .validation_code(validation_code),
+        .screen_state(screen_state),
+        .quantity(quantity),
+        .selected_stock(selected_stock),
+        .quantity_cursor(quantity_cursor),
+        .menu_selection(menu_selection),
+        .trade_result_code(trade_result_code),
+        .trade_result_success(trade_result_success),
+        .trade_side(trade_side)
     );
 
-    quantity_7seg quantity_7seg_inst (
-        .clk(clk), .rst(rst), .quantity(quantity), .an(an), .seg(seg)
-    );
+    assign sel_stock = selected_stock[1:0];
 
-    // ================================================================ ORDER OUTPUTS
-    // Screen codes are game_fsm's localparams.
-    localparam [3:0] S_TITLE = 4'd0, S_PORTFOLIO = 4'd1, S_STOCKS = 4'd2, S_SPECIFIC = 4'd3,
-                     S_BUY = 4'd4, S_SELL = 4'd5, S_CONFIRM = 4'd7, S_GAME_END = 4'd8;
-    reg [3:0] state_d;
-    always @(posedge clk) begin
-        if (rst) state_d <= S_TITLE;
-        else     state_d <= screen_state;
-    end
-    // choosing "confirmation" on the buy or sell screen places the order
-    assign ord_req  = (screen_state == S_CONFIRM) && (state_d == S_BUY || state_d == S_SELL);
-    assign ord_side = (state_d == S_SELL) ? `SIDE_SELL : `SIDE_BUY;
+    // The chart and selected-stock price follow the same four-stock index
+    // that is sent to the order engine. This keeps the specific-stock screen
+    // and its live graph on the same stock after the model expansion.
+    wire [15:0] selected_price = (selected_stock == 3'd0) ? price0 :
+                                 (selected_stock == 3'd1) ? price1 :
+                                 (selected_stock == 3'd2) ? price2 : price3;
+    wire [479:0] selected_samples_30 = (selected_stock == 3'd0) ?
+                                       stock0_samples_30 :
+                                       (selected_stock == 3'd1) ?
+                                       stock1_samples_30 :
+                                       (selected_stock == 3'd2) ?
+                                       stock2_samples_30 : stock3_samples_30;
 
-    // Selected stock: a copy of game_fsm's stocks_cursor, which is internal.
-    reg [2:0] stocks_cursor;             // 0..3 stocks, 4 = back (as in game_fsm)
-    always @(posedge clk) begin
-        if (rst) begin
-            stocks_cursor <= 3'd0;
-            sel_stock     <= 2'd0;
-        end else begin
-            if (state_d == S_PORTFOLIO && screen_state == S_STOCKS)
-                stocks_cursor <= 3'd0;   // game_fsm resets it on this transition
-            else if (screen_state == S_STOCKS) begin
-                // same order of ifs as game_fsm: L and R win over U and D
-                if (btnR_p)      stocks_cursor <= 3'd0;
-                else if (btnL_p) stocks_cursor <= 3'd4;
-                else if (btnD_p) stocks_cursor <= (stocks_cursor == 3'd3) ? 3'd4 : stocks_cursor + 3'd1;
-                else if (btnU_p) stocks_cursor <= (stocks_cursor == 3'd0 || stocks_cursor == 3'd4)
-                                                  ? 3'd3 : stocks_cursor - 3'd1;
-            end
-            if (state_d == S_STOCKS && screen_state == S_SPECIFIC)
-                sel_stock <= stocks_cursor[1:0];
+    wire selected_ready = (selected_stock == 3'd0) ? stock_ready0 :
+                          (selected_stock == 3'd1) ? stock_ready1 :
+                          (selected_stock == 3'd2) ? stock_ready2 : stock_ready3;
+    wire [9:0] selected_position = (selected_stock == 3'd0) ? portfolio_pos0 :
+                                   (selected_stock == 3'd1) ? portfolio_pos1 :
+                                   (selected_stock == 3'd2) ? portfolio_pos2 : portfolio_pos3;
+    wire [31:0] selected_cost_basis = (selected_stock == 3'd0) ? portfolio_cb0 :
+                                      (selected_stock == 3'd1) ? portfolio_cb1 :
+                                      (selected_stock == 3'd2) ? portfolio_cb2 : portfolio_cb3;
+    wire [31:0] selected_value = selected_position * selected_price;
+    wire signed [32:0] selected_pnl = $signed({1'b0, selected_value}) -
+                                       $signed({1'b0, selected_cost_basis});
+    wire [15:0] selected_reference_price = selected_samples_30[15:0];
+    wire selected_change_negative = selected_price < selected_reference_price;
+    wire [15:0] selected_change = selected_change_negative ?
+                                  (selected_reference_price - selected_price) :
+                                  (selected_price - selected_reference_price);
+    wire [16:0] selected_ask_full = {1'b0, selected_price} + 17'd5;
+    wire [15:0] selected_ask = selected_ask_full[16] ? 16'hFFFF : selected_ask_full[15:0];
+    wire [31:0] buy_notional = {16'd0, selected_ask} * {18'd0, quantity};
+    wire [32:0] buy_total = {1'b0, buy_notional} + 33'd100;
+
+    // Validate before the order-review screen can submit to B_order_top.
+    // The ask and fee match B_order_top's market-order parameters.
+    always @(*) begin
+        order_valid = 1'b1;
+        validation_code = `RJ_NONE;
+        if (!selected_ready) begin
+            order_valid = 1'b0;
+            validation_code = `RJ_NOT_LIVE;
+        end else if ((quantity == 14'd0) || (quantity > 14'd255)) begin
+            order_valid = 1'b0;
+            validation_code = `RJ_BAD_QTY;
+        end else if (!trade_side && (buy_total > {1'b0, portfolio_cash})) begin
+            order_valid = 1'b0;
+            validation_code = `RJ_NO_CASH;
+        end else if (trade_side && (quantity > selected_position)) begin
+            order_valid = 1'b0;
+            validation_code = `RJ_NO_POS;
         end
     end
 
-    assign game_state = (screen_state == S_TITLE || screen_state == S_GAME_END)
-                        ? `GS_MENU : `GS_PLAYING;
+    quantity_7seg quantity_7seg_inst (
+        .clk(clk),
+        .rst(rst),
+        .quantity(quantity),
+        .screen_state(screen_state),
+        .quantity_cursor(quantity_cursor),
+        .an(an),
+        .seg(seg)
+    );
 
-    // ================================================================ OLEDs
+    // ================================================================ order outputs
+    reg [3:0] state_d;
+    always @(posedge clk) begin
+        if (rst)
+            state_d <= `UI_TITLE;
+        else
+            state_d <= screen_state;
+    end
+
+    // Generate a one-clock order request when the review screen is submitted.
+    assign ord_req  = (screen_state == `UI_ORDER_RESULT) &&
+                      (state_d == `UI_ORDER_REVIEW);
+    assign ord_side = trade_side;
+
+    assign game_state = ((screen_state == `UI_TITLE) ||
+                         (screen_state == `UI_GAME_END)) ?
+                        2'd0 : 2'd1;
+
+    // ================================================================ OLED clocks
     wire clk_6_25MHz;
     slower_clk #(32'd7) clk_6_25MHz_inst (clk, clk_6_25MHz);
 
-    // right (JB): game screens
+    // ================================================================ right OLED (JB)
     wire [12:0] pixel_index_R;
+    wire [15:0] pixel_data_game_R;
+    wire [15:0] title_pixel_R;
     wire [15:0] pixel_data_R;
-    wire        frame_begin_R, sending_pixels_R, sample_pixel_R;
-    OLED_Renderer Oled_Renderer (
-        .pixel_index(pixel_index_R), .screen_state(screen_state), .pixel_data(pixel_data_R)
+    wire        frame_begin_R;
+    wire        sending_pixels_R;
+    wire        sample_pixel_R;
+
+    OLED_Renderer oled_renderer_R (
+        .pixel_index(pixel_index_R),
+        .screen_state(screen_state),
+        .selected_stock(selected_stock),
+        .quantity(quantity),
+        .menu_selection(menu_selection),
+        .stock_samples(selected_samples_30),
+         .stock0_samples(stock0_samples_30),
+         .stock1_samples(stock1_samples_30),
+         .stock2_samples(stock2_samples_30),
+         .stock3_samples(stock3_samples_30),
+        .portfolio_samples(portfolio_samples_30),
+        .portfolio_cash(portfolio_cash),
+        .portfolio_pos0(portfolio_pos0),
+        .portfolio_pos1(portfolio_pos1),
+        .portfolio_pos2(portfolio_pos2),
+        .portfolio_pos3(portfolio_pos3),
+        .price0(price0), .price1(price1), .price2(price2), .price3(price3),
+        .portfolio_cb0(portfolio_cb0),
+        .portfolio_cb1(portfolio_cb1),
+        .portfolio_cb2(portfolio_cb2),
+        .portfolio_cb3(portfolio_cb3),
+         .time_remaining(time_remaining),
+        .portfolio_value(portfolio_value),
+        .selected_price(selected_price),
+        .selected_change(selected_change),
+        .selected_change_negative(selected_change_negative),
+        .selected_position(selected_position),
+        .selected_value(selected_value),
+        .selected_pnl(selected_pnl),
+        .pixel_data(pixel_data_game_R)
     );
+
     oled_display oled_R (
-        .clk(clk_6_25MHz), .reset(rst), .pixel_data(pixel_data_R),
-        .frame_begin(frame_begin_R), .sending_pixels(sending_pixels_R),
-        .sample_pixel(sample_pixel_R), .pixel_index(pixel_index_R),
-        .cs(JB[0]), .sdin(JB[1]), .sclk(JB[3]), .d_cn(JB[4]),
-        .resn(JB[5]), .vccen(JB[6]), .pmoden(JB[7])
+        .clk(clk_6_25MHz),
+        .reset(rst),
+        .pixel_data(pixel_data_R),
+        .frame_begin(frame_begin_R),
+        .sending_pixels(sending_pixels_R),
+        .sample_pixel(sample_pixel_R),
+        .pixel_index(pixel_index_R),
+        .cs(JB[0]),
+        .sdin(JB[1]),
+        .sclk(JB[3]),
+        .d_cn(JB[4]),
+        .resn(JB[5]),
+        .vccen(JB[6]),
+        .pmoden(JB[7])
     );
+
     assign JB[2] = 1'b0;
 
-    // left (JA): left_pixel, drawn at (left_x, left_y)
+    // ================================================================ left OLED (JA)
     wire [12:0] pixel_index_L;
-    wire        frame_begin_L, sending_pixels_L, sample_pixel_L;
+    wire [15:0] pixel_data_game_L;
+    wire [15:0] title_pixel_L;
+    wire [15:0] pixel_data_L;
+    wire [6:0] title_display_x_L;
+    wire [5:0] title_display_y_L;
+    wire [12:0] title_pixel_index_L;
+    wire        frame_begin_L;
+    wire        sending_pixels_L;
+    wire        sample_pixel_L;
+
     assign left_x = pixel_index_L % 96;
     assign left_y = pixel_index_L / 96;
-    oled_display oled_L (
-        .clk(clk_6_25MHz), .reset(rst), .pixel_data(left_pixel),
-        .frame_begin(frame_begin_L), .sending_pixels(sending_pixels_L),
-        .sample_pixel(sample_pixel_L), .pixel_index(pixel_index_L),
-        .cs(JA[0]), .sdin(JA[1]), .sclk(JA[3]), .d_cn(JA[4]),
-        .resn(JA[5]), .vccen(JA[6]), .pmoden(JA[7])
+    assign title_display_x_L = 7'd95 - (pixel_index_L % 96);
+    assign title_display_y_L = 6'd63 - (pixel_index_L / 96);
+    assign title_pixel_index_L = (title_display_y_L * 13'd96) + title_display_x_L;
+
+    title_art_renderer title_art_renderer_inst (
+        .pixel_index_R(pixel_index_R),
+        .pixel_index_L(title_pixel_index_L),
+        .pixel_data_R(title_pixel_R),
+        .pixel_data_L(title_pixel_L)
     );
+
+    assign pixel_data_R = (screen_state == `UI_TITLE) ?
+                          title_pixel_R : pixel_data_game_R;
+
+    OLED_Button_Renderer oled_renderer_L (
+        .pixel_index(pixel_index_L),
+        .screen_state(screen_state),
+        .selected_stock(selected_stock),
+        .quantity(quantity),
+        .menu_selection(menu_selection),
+        .stock_samples(selected_samples_30),
+        .stock0_samples(stock0_samples_30),
+        .stock1_samples(stock1_samples_30),
+        .stock2_samples(stock2_samples_30),
+        .stock3_samples(stock3_samples_30),
+        .portfolio_samples(portfolio_samples_30),
+        .portfolio_cash(portfolio_cash),
+        .portfolio_pos0(portfolio_pos0),
+        .portfolio_pos1(portfolio_pos1),
+        .portfolio_pos2(portfolio_pos2),
+        .portfolio_pos3(portfolio_pos3),
+        .price0(price0), .price1(price1), .price2(price2), .price3(price3),
+        .portfolio_cb0(portfolio_cb0),
+        .portfolio_cb1(portfolio_cb1),
+        .portfolio_cb2(portfolio_cb2),
+        .portfolio_cb3(portfolio_cb3),
+         .time_remaining(time_remaining),
+        .portfolio_value(portfolio_value),
+        .selected_price(selected_price),
+        .selected_change(selected_change),
+        .selected_change_negative(selected_change_negative),
+        .selected_position(selected_position),
+        .selected_value(selected_value),
+        .selected_pnl(selected_pnl),
+        .btnU(btnU_db),
+        .btnD(btnD_db),
+        .btnL(btnL_db),
+        .btnR(btnR_db),
+        .btnC(btnC_db),
+        .pixel_data(pixel_data_game_L)
+    );
+
+    assign pixel_data_L = SHOW_GAME_ON_JA ?
+                          ((screen_state == `UI_TITLE) ? title_pixel_L :
+                           pixel_data_game_L) : left_pixel;
+
+    oled_display oled_L (
+        .clk(clk_6_25MHz),
+        .reset(rst),
+        .pixel_data(pixel_data_L),
+        .frame_begin(frame_begin_L),
+        .sending_pixels(sending_pixels_L),
+        .sample_pixel(sample_pixel_L),
+        .pixel_index(pixel_index_L),
+        .cs(JA[0]),
+        .sdin(JA[1]),
+        .sclk(JA[3]),
+        .d_cn(JA[4]),
+        .resn(JA[5]),
+        .vccen(JA[6]),
+        .pmoden(JA[7])
+    );
+
     assign JA[2] = 1'b0;
 endmodule
 

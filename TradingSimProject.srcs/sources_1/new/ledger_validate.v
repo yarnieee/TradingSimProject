@@ -1,3 +1,4 @@
+`timescale 1ns / 1ps
 //decides whether an incoming fill is allowed,
 // and whether a sell closes the whole position (so no divide is needed).
 module ledger_validate (

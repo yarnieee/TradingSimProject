@@ -23,11 +23,12 @@
 // C_portfolio_top.v: top of Component C 
 // Player: fills from B -> ledger -> risk_metrics (every tick) -> numbers for B and D.
 // D draws the Portfolio page from these numbers.
-// The bot's copy (bot_trader + second ledger + risk_metrics) is added in week 11;
-// until then the bot outputs hold their starting values.
+// Bot: bot_trader -> its own ledger -> its own risk_metrics. The bot's risk_metrics
+// runs on the bot's tick_done (not the raw tick), so its equity includes that day's trades.
 module C_portfolio_top (
     input  wire        clk,                 // 100 MHz
     input  wire        sys_reset,           // from D: new game
+    input  wire        bot_run,             // from D: 1 while the game is PLAYING
     // price bus from A
     input  wire        tick,
     input  wire [15:0] price0, price1, price2, price3,
@@ -50,13 +51,21 @@ module C_portfolio_top (
     output wire signed [31:0] pnl,          // equity - start (cents)
     output wire signed [31:0] ret_bp,       // return, basis points (+312 = +3.12%)
     output wire [31:0] max_dd_bp,           // max drawdown, basis points
-    // ---- to D: bot numbers (week 11) ----
+    // ---- to D: bot numbers ----
     output wire [31:0] bot_cash,
     output wire [9:0]  bot_pos0, bot_pos1, bot_pos2, bot_pos3,
     output wire signed [31:0] bot_upnl0, bot_upnl1, bot_upnl2, bot_upnl3,
+    output wire signed [31:0] bot_realised,
     output wire [31:0] bot_equity,
+    output wire signed [31:0] bot_pnl,
     output wire signed [31:0] bot_ret_bp,
-    output wire [31:0] bot_max_dd_bp
+    output wire [31:0] bot_max_dd_bp,
+    // bot's most recent trade
+    output wire        bot_last_valid,
+    output wire [1:0]  bot_last_stock,
+    output wire        bot_last_side,       // 0 = buy, 1 = sell
+    output wire [7:0]  bot_last_qty,
+    output wire [15:0] bot_last_price       // cents
 );
     // ---------------- player ----------------
     wire [31:0] cb0, cb1, cb2, cb3;
@@ -83,11 +92,43 @@ module C_portfolio_top (
         .peak(peak), .dd_bp(dd_bp), .max_dd_bp(max_dd_bp), .mtm_done(mtm_done)
     );
 
-    // ---------------- bot (week 11: replace with bot_trader + ledger + risk_metrics) ----------------
-    assign bot_cash      = 32'd1_000_000;
-    assign bot_pos0 = 10'd0; assign bot_pos1 = 10'd0; assign bot_pos2 = 10'd0; assign bot_pos3 = 10'd0;
-    assign bot_upnl0 = 32'sd0; assign bot_upnl1 = 32'sd0; assign bot_upnl2 = 32'sd0; assign bot_upnl3 = 32'sd0;
-    assign bot_equity    = 32'd1_000_000;
-    assign bot_ret_bp    = 32'sd0;
-    assign bot_max_dd_bp = 32'd0;
+    // ---------------- bot ----------------
+    wire        bfill, bfill_side, bot_busy, bot_err, bot_tick_done;
+    wire [1:0]  bfill_stock;
+    wire [7:0]  bfill_qty;
+    wire [15:0] bfill_price, bfill_fee;
+    wire [31:0] bcb0, bcb1, bcb2, bcb3;
+
+    bot_trader u_bot (
+        .clk(clk), .rst(sys_reset), .run(bot_run), .tick(tick),
+        .price0(price0), .price1(price1), .price2(price2), .price3(price3),
+        .cash(bot_cash), .pos0(bot_pos0), .pos1(bot_pos1), .pos2(bot_pos2), .pos3(bot_pos3),
+        .ledger_busy(bot_busy),
+        .fill(bfill), .fill_stock(bfill_stock), .fill_side(bfill_side),
+        .fill_qty(bfill_qty), .fill_price(bfill_price), .fill_fee(bfill_fee),
+        .last_valid(bot_last_valid), .last_stock(bot_last_stock), .last_side(bot_last_side),
+        .last_qty(bot_last_qty), .last_price(bot_last_price), .tick_done(bot_tick_done)
+    );
+
+    ledger u_bot_ledger (                   // fed only by the bot
+        .clk(clk), .rst(sys_reset),
+        .fill(bfill), .fill_stock(bfill_stock), .fill_side(bfill_side),
+        .fill_qty(bfill_qty), .fill_price(bfill_price), .fill_fee(bfill_fee),
+        .cash(bot_cash), .pos0(bot_pos0), .pos1(bot_pos1), .pos2(bot_pos2), .pos3(bot_pos3),
+        .cb0(bcb0), .cb1(bcb1), .cb2(bcb2), .cb3(bcb3),
+        .realised(bot_realised), .ledger_busy(bot_busy), .err(bot_err)
+    );
+
+    wire [31:0] bot_peak, bot_dd_bp;
+    wire        bot_mtm_done;
+
+    risk_metrics u_bot_risk (               // ticks after the bot's trades are done
+        .clk(clk), .rst(sys_reset), .tick(bot_tick_done),
+        .price0(price0), .price1(price1), .price2(price2), .price3(price3),
+        .cash(bot_cash), .pos0(bot_pos0), .pos1(bot_pos1), .pos2(bot_pos2), .pos3(bot_pos3),
+        .cb0(bcb0), .cb1(bcb1), .cb2(bcb2), .cb3(bcb3),
+        .equity(bot_equity), .pnl(bot_pnl), .ret_bp(bot_ret_bp),
+        .upnl0(bot_upnl0), .upnl1(bot_upnl1), .upnl2(bot_upnl2), .upnl3(bot_upnl3),
+        .peak(bot_peak), .dd_bp(bot_dd_bp), .max_dd_bp(bot_max_dd_bp), .mtm_done(bot_mtm_done)
+    );
 endmodule

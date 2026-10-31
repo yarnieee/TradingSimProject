@@ -9,7 +9,8 @@
 //                    title artwork on the title screen
 //   bot_view (sw15): JB shows the bot against the player, JA the bot's last trades;
 //                    the buttons are ignored while it is up
-//   VGA monitor:     everything at once (vga_screen): market, portfolio, chart,
+//   VGA monitor:     1280 x 720, everything at once (vga_screen, pixel clock from
+//                    vga_clock): market, portfolio, chart,
 //                    holdings, pending orders, bot vs you, the order being made,
 //                    what to press now, and the switch settings
 //
@@ -306,6 +307,9 @@ module D_display_top #(
         .upnl0(portfolio_upnl0), .upnl1(portfolio_upnl1),
         .upnl2(portfolio_upnl2), .upnl3(portfolio_upnl3),
         .sel_stock(selected_stock[1:0]), .sel_ref_price(selected_reference_price),
+        .sel_samples(selected_samples_30),
+        .ref_price0(stock0_samples_30[15:0]), .ref_price1(stock1_samples_30[15:0]),
+        .ref_price2(stock2_samples_30[15:0]), .ref_price3(stock3_samples_30[15:0]),
         .quantity(quantity), .days_left(time_remaining), .sell(trade_side),
         .order_type(ord_type), .order_trig(ord_trig),
         .sel_sl(sel_sl), .sel_tp(sel_tp),
@@ -322,14 +326,14 @@ module D_display_top #(
     // game progress bar: days gone / all days, as 0..96 pixels (registered)
     wire [31:0] days_gone = (time_remaining < FINAL_TRADING_DAY) ? FINAL_TRADING_DAY - time_remaining : 32'd0;
     reg  [6:0]  progress_w;
-    reg  [9:0]  vga_progress_w;               // the monitor's bar is 616 px wide
+    reg  [10:0] vga_progress_w;               // the monitor's bar is 1242 px wide
     always @(posedge clk) begin
         if (rst) begin
             progress_w     <= 7'd0;
-            vga_progress_w <= 10'd0;
+            vga_progress_w <= 11'd0;
         end else begin
-            progress_w     <= (FINAL_TRADING_DAY == 0) ? 7'd0  : (days_gone * 32'd96)  / FINAL_TRADING_DAY;
-            vga_progress_w <= (FINAL_TRADING_DAY == 0) ? 10'd0 : (days_gone * 32'd616) / FINAL_TRADING_DAY;
+            progress_w     <= (FINAL_TRADING_DAY == 0) ? 7'd0  : (days_gone * 32'd96)   / FINAL_TRADING_DAY;
+            vga_progress_w <= (FINAL_TRADING_DAY == 0) ? 11'd0 : (days_gone * 32'd1242) / FINAL_TRADING_DAY;
         end
     end
 
@@ -337,9 +341,12 @@ module D_display_top #(
     wire [3:0] stock_up = {price3 >= stock3_samples_30[15:0], price2 >= stock2_samples_30[15:0],
                            price1 >= stock1_samples_30[15:0], price0 >= stock0_samples_30[15:0]};
 
-    // ================================================================ VGA monitor
+    // ================================================================ VGA monitor (1280 x 720)
+    wire vga_pclk, vga_pix_rst;
+    vga_clock vga_clock_inst (.clk(clk), .rst(rst), .pclk(vga_pclk), .pix_rst(vga_pix_rst));
+
     vga_screen vga_screen_inst (
-        .clk(clk), .rst(rst),
+        .clk(clk), .rst(rst), .pclk(vga_pclk), .pix_rst(vga_pix_rst),
         .screen_state(screen_state), .menu_selection(menu_selection), .selected_stock(selected_stock),
         .trade_side(trade_side), .trade_result_success(trade_result_success),
         .trade_result_placed(trade_result_placed), .trade_result_code(trade_result_code),

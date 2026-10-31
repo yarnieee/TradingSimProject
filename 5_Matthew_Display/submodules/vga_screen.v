@@ -2,27 +2,29 @@
 `default_nettype none
 `include "trading_defs.vh"
 
-// vga_screen: the whole game on a VGA monitor, 640 x 480 at 60 Hz (25 MHz
-// pixels from the 100 MHz clock: one pixel every 4 clocks). Basys3 VGA is
-// 4 bits each of red, green and blue.
+// vga_screen: the whole game on a VGA monitor, 1280 x 720 at 60 Hz (widescreen,
+// fills a 24" 16:9 monitor). Pixels come at 74.25 MHz (pclk, from vga_clock);
+// Basys3 VGA is 4 bits each of red, green and blue.
 //
-// Text: 53 x 30 cells of 12 x 16 pixels, Matthew's 5x7 font drawn 2x (10 x 14).
-//   A writer walks every cell in the background, asks vga_cells what it shows
-//   and stores {fg, bg, char} in a character RAM (one block RAM): one cell
-//   every 4 clocks, the whole screen every 8,192 clocks (82 us). The vga_cells
-//   logic is given those 4 clocks (multicycle constraint in Integration.xdc).
-// Graphics, on top of the text:
-//   row 1        progress bar: how much of the game has gone (progress_w of 616 px)
-//   rows 10-17   chart of the selected stock, left panel (x 12..311, 10 px a day):
-//                30 days, scaled to its
-//                own low..high with a sequential divider (worked out once per
-//                frame), plus its stop-loss / take-profit levels as dashed lines
-// Pixel path (100 MHz, pipelined): counters -> RAM address -> RAM data -> font +
-// graphics -> colour, 4 clocks (one pixel) behind the counters; the syncs are
-// delayed to match, so each output changes exactly once per pixel.
+// Text: 71 x 30 cells of 18 x 24 pixels, Matthew's 5x7 font drawn 3x (15 x 21).
+//   A writer on the 100 MHz clock walks every cell, asks vga_cells what it shows
+//   and stores {fg, bg, char} in a character RAM (block RAM, written at 100 MHz,
+//   read at 74.25 MHz): one cell every 4 clocks, the whole screen every 85 us.
+//   The vga_cells logic is given those 4 clocks (multicycle constraint in
+//   Integration.xdc).
+// Graphics, on top of the text (pixel clock):
+//   row 1        progress bar: how much of the game has gone (progress_w of 1242 px)
+//   rows 10-19   chart of the selected stock, x 18..497 (30 days, 16 px each):
+//                scaled to its own low..high with a sequential divider (worked out
+//                once per frame, after the picture), stop-loss / take-profit levels
+//                as dashed lines, dotted lines at the high and low
+// Pixel path (pixel clock, pipelined): counters -> RAM address -> RAM data ->
+// font + graphics -> colour; the syncs are delayed to match.
 module vga_screen (
-    input  wire        clk,
+    input  wire        clk,             // 100 MHz: character writer
     input  wire        rst,
+    input  wire        pclk,            // 74.25 MHz: picture
+    input  wire        pix_rst,
     // screen content (see vga_cells)
     input  wire [3:0]  screen_state,
     input  wire [3:0]  menu_selection,
@@ -52,7 +54,7 @@ module vga_screen (
     input  wire [479:0] stock_samples,   // selected stock, 30 days, oldest first
     input  wire [15:0]  sel_sl,          // its stop-loss / take-profit levels (0 = none)
     input  wire [15:0]  sel_tp,
-    input  wire [9:0]   progress_w,      // 0..616: game progress bar width
+    input  wire [10:0]  progress_w,      // 0..1242: game progress bar width
     // VGA port
     output reg  [3:0]  vga_r,
     output reg  [3:0]  vga_g,
@@ -72,8 +74,8 @@ module vga_screen (
                 4'd4:    rgb = 12'h0F0;   // green
                 4'd5:    rgb = 12'hF44;   // red (a little light)
                 4'd6:    rgb = 12'h999;   // grey
-                4'd7:    rgb = 12'h126;   // navy (title bar)
-                4'd8:    rgb = 12'h555;   // dark grey (small print)
+                4'd7:    rgb = 12'h126;   // navy (title bar, NOW bar)
+                4'd8:    rgb = 12'h777;   // dark grey (small print)
                 4'd9:    rgb = 12'h515;   // plum
                 4'd10:   rgb = 12'hF90;   // orange
                 4'd11:   rgb = 12'h235;   // slate (panel header bars)
@@ -83,21 +85,30 @@ module vga_screen (
         end
     endfunction
 
+    // 0..20 / 3 (which font pixel a screen pixel belongs to, font drawn 3x)
+    function [2:0] div3;
+        input [4:0] n;
+        begin
+            div3 = (n >= 5'd18) ? 3'd6 : (n >= 5'd15) ? 3'd5 : (n >= 5'd12) ? 3'd4 :
+                   (n >= 5'd9)  ? 3'd3 : (n >= 5'd6)  ? 3'd2 : (n >= 5'd3)  ? 3'd1 : 3'd0;
+        end
+    endfunction
+
     // ------------------------------------------------------------ character RAM
-    reg  [15:0] cram [0:2047];             // {fg, bg, char}, address {row, col}
-    reg  [10:0] wr_addr;
+    reg  [15:0] cram [0:4095];             // {fg, bg, char}, address {row, col}
+    reg  [11:0] wr_addr;
     reg  [15:0] wr_cell;
     reg         wr_we;
-    reg  [10:0] rd_addr;
+    reg  [11:0] rd_addr;
     reg  [15:0] rd_data;
-    always @(posedge clk) begin
-        if (wr_we) cram[wr_addr] <= wr_cell;
-        rd_data <= cram[rd_addr];
-    end
+    integer ci0;
+    initial for (ci0 = 0; ci0 < 4096; ci0 = ci0 + 1) cram[ci0] = 16'd0;
+    always @(posedge clk)  if (wr_we) cram[wr_addr] <= wr_cell;
+    always @(posedge pclk) rd_data <= cram[rd_addr];
 
     // ------------------------------------------------------------ writer: one cell every 4 clocks
     reg  [4:0] wr_row;
-    reg  [5:0] wr_col;
+    reg  [6:0] wr_col;
     reg  [1:0] wr_phase;
     wire [7:0] c_ch;
     wire [3:0] c_fg, c_bg;
@@ -119,10 +130,10 @@ module vga_screen (
     always @(posedge clk) begin
         if (rst) begin
             wr_row   <= 5'd0;
-            wr_col   <= 6'd0;
+            wr_col   <= 7'd0;
             wr_phase <= 2'd0;
             wr_we    <= 1'b0;
-            wr_addr  <= 11'd0;
+            wr_addr  <= 12'd0;
             wr_cell  <= 16'd0;
         end else begin
             wr_phase <= wr_phase + 2'd1;
@@ -131,55 +142,53 @@ module vga_screen (
                 wr_cell <= {c_fg, c_bg, c_ch};
                 wr_addr <= {wr_row, wr_col};
                 wr_we   <= 1'b1;
-                if (wr_col == 6'd52) begin
-                    wr_col <= 6'd0;
+                if (wr_col == 7'd70) begin
+                    wr_col <= 7'd0;
                     wr_row <= (wr_row == 5'd29) ? 5'd0 : wr_row + 5'd1;
                 end else
-                    wr_col <= wr_col + 6'd1;
+                    wr_col <= wr_col + 7'd1;
             end
         end
     end
 
-    // ------------------------------------------------------------ 640 x 480 @ 60 Hz timing
-    // h: 640 visible, 16 front porch, 96 sync, 48 back porch (800); v: 480, 10, 2, 33 (525).
-    reg  [1:0] div4;
-    wire       pe = (div4 == 2'd3);            // one pixel every 4 clocks (25 MHz)
-    reg  [9:0] h, v;
-    reg  [5:0] cx;                             // cell column of h
-    reg  [3:0] px;                             // pixel inside the cell, 0..11
-    reg  [4:0] bn;                             // chart day of h (10 px each from x 12), 0..29
-    reg  [3:0] bp;                             // pixel inside that day, 0..9
-    always @(posedge clk) begin
-        if (rst) begin
-            div4 <= 2'd0; h <= 10'd0; v <= 10'd0; cx <= 6'd0; px <= 4'd0; bn <= 5'd0; bp <= 4'd0;
-        end else begin
-            div4 <= div4 + 2'd1;
-            if (pe) begin
-                if (h == 10'd799) begin
-                    h <= 10'd0; cx <= 6'd0; px <= 4'd0;
-                    v <= (v == 10'd524) ? 10'd0 : v + 10'd1;
-                end else begin
-                    h <= h + 10'd1;
-                    if (px == 4'd11) begin px <= 4'd0; cx <= cx + 6'd1; end
-                    else px <= px + 4'd1;
-                end
-                if (h == 10'd11) begin bn <= 5'd0; bp <= 4'd0; end   // h becomes 12: day 0 starts
-                else if (bp == 4'd9) begin bp <= 4'd0; if (bn != 5'd29) bn <= bn + 5'd1; end
-                else bp <= bp + 4'd1;
+    // ------------------------------------------------------------ 1280 x 720 @ 60 Hz timing (pixel clock)
+    // h: 1280 visible, 110 front porch, 40 sync, 220 back porch (1650)
+    // v: 720 visible, 5 front porch, 5 sync, 20 back porch (750); syncs are high pulses
+    reg  [10:0] h;
+    reg  [9:0]  v;
+    reg  [6:0]  cx;                            // cell column of h
+    reg  [4:0]  px;                            // pixel inside the cell, 0..17
+    reg  [4:0]  cy;                            // cell row of v
+    reg  [4:0]  ly;                            // line inside the cell, 0..23
+    always @(posedge pclk) begin
+        if (pix_rst) begin
+            h <= 11'd0; v <= 10'd0; cx <= 7'd0; px <= 5'd0; cy <= 5'd0; ly <= 5'd0;
+        end else if (h == 11'd1649) begin
+            h <= 11'd0; cx <= 7'd0; px <= 5'd0;
+            if (v == 10'd749) begin
+                v <= 10'd0; cy <= 5'd0; ly <= 5'd0;
+            end else begin
+                v <= v + 10'd1;
+                if (ly == 5'd23) begin ly <= 5'd0; cy <= cy + 5'd1; end
+                else ly <= ly + 5'd1;
             end
+        end else begin
+            h <= h + 11'd1;
+            if (px == 5'd17) begin px <= 5'd0; cx <= cx + 7'd1; end
+            else px <= px + 5'd1;
         end
     end
 
     // ------------------------------------------------------------ chart: heights, once per frame
-    // h_tab[i] = (sample_i - low) * 120 / (high - low), i = 0..29; 30 = stop-loss, 31 = take-profit
-    reg  [6:0]  h_tab [0:31];
+    // h_tab[i] = (sample_i - low) * 216 / (high - low), i = 0..29; 30 = stop-loss, 31 = take-profit
+    reg  [7:0]  h_tab [0:31];
     reg  [15:0] lo, hi;
     reg  [4:0]  ci;                            // sample being worked on
     reg  [2:0]  cstate;
-    reg  [22:0] num;                           // (value - low) * 120
+    reg  [23:0] num;                           // (value - low) * 216
     reg  [15:0] den;
-    reg  [22:0] rem;
-    reg  [6:0]  quo;
+    reg  [23:0] rem;
+    reg  [7:0]  quo;
     reg  [4:0]  dstep;
     localparam C_IDLE = 3'd0, C_SCAN = 3'd1, C_LOAD = 3'd2, C_DIV = 3'd3, C_STORE = 3'd4;
 
@@ -187,13 +196,13 @@ module vga_screen (
     wire [15:0] cval = (ci == 5'd30) ? sel_sl : (ci == 5'd31) ? sel_tp : stock_samples[16*si +: 16];
     wire [15:0] cclp = (cval < lo) ? lo : (cval > hi) ? hi : cval;   // levels outside the range sit on the edge
     wire [15:0] coff = cclp - lo;
-    wire [22:0] trial = {rem[21:0], num[22 - dstep]};
+    wire [23:0] trial = {rem[22:0], num[23 - dstep]};
 
-    always @(posedge clk) begin
-        if (rst) begin
+    always @(posedge pclk) begin
+        if (pix_rst) begin
             cstate <= C_IDLE; ci <= 5'd0; lo <= 16'd0; hi <= 16'd0;
         end else case (cstate)
-            C_IDLE: if (v == 10'd481 && h == 10'd0 && pe) begin   // just after the visible frame
+            C_IDLE: if (v == 10'd721 && h == 11'd0) begin   // just after the visible frame
                 ci <= 5'd0; lo <= 16'hFFFF; hi <= 16'd0; cstate <= C_SCAN;
             end
             C_SCAN: begin                                     // low and high of the 30 days
@@ -202,26 +211,26 @@ module vga_screen (
                 if (ci == 5'd29) begin ci <= 5'd0; cstate <= C_LOAD; end
                 else ci <= ci + 5'd1;
             end
-            C_LOAD: begin
-                num   <= {coff, 7'd0} - {4'd0, coff, 3'd0};     // x 128 - x 8 = x 120
+            C_LOAD: begin                                     // x 256 - x 32 - x 8 = x 216
+                num   <= {coff, 8'd0} - {3'd0, coff, 5'd0} - {5'd0, coff, 3'd0};
                 den   <= hi - lo;
-                rem   <= 23'd0;
-                quo   <= 7'd0;
+                rem   <= 24'd0;
+                quo   <= 8'd0;
                 dstep <= 5'd0;
                 cstate <= C_DIV;
             end
             C_DIV: begin                                      // restoring division, one bit a clock
                 if (den == 16'd0) begin
-                    quo <= 7'd60; cstate <= C_STORE;          // flat history: middle of the chart
+                    quo <= 8'd108; cstate <= C_STORE;         // flat history: middle of the chart
                 end else begin
-                    if (trial >= {7'd0, den}) begin rem <= trial - {7'd0, den}; quo <= {quo[5:0], 1'b1}; end
-                    else begin                     rem <= trial;                 quo <= {quo[5:0], 1'b0}; end
-                    if (dstep == 5'd22) cstate <= C_STORE;
+                    if (trial >= {8'd0, den}) begin rem <= trial - {8'd0, den}; quo <= {quo[6:0], 1'b1}; end
+                    else begin                     rem <= trial;                 quo <= {quo[6:0], 1'b0}; end
+                    if (dstep == 5'd23) cstate <= C_STORE;
                     dstep <= dstep + 5'd1;
                 end
             end
             default: begin                                    // C_STORE
-                h_tab[ci] <= (quo > 7'd120) ? 7'd120 : quo;
+                h_tab[ci] <= (quo > 8'd216) ? 8'd216 : quo;
                 if (ci == 5'd31) cstate <= C_IDLE;
                 else begin ci <= ci + 5'd1; cstate <= C_LOAD; end
             end
@@ -229,74 +238,78 @@ module vga_screen (
     end
 
     // ------------------------------------------------------------ pixel pipeline
-    // stage 1: RAM address and the pixel's position
-    reg  [9:0] s1_h, s1_v;
-    reg  [3:0] s1_px, s1_bp;
-    reg  [4:0] s1_bn;
-    reg        s1_vis, s1_hs, s1_vs;
-    always @(posedge clk) begin
-        rd_addr <= {v[8:4], cx};
+    // stage 1: RAM address, the pixel's position, its chart day
+    reg  [10:0] s1_h;
+    reg  [9:0]  s1_v;
+    reg  [4:0]  s1_px, s1_ly, s1_bn;
+    reg  [3:0]  s1_bp;
+    reg         s1_vis, s1_hs, s1_vs;
+    wire [10:0] bx = h - 11'd18;               // chart x: day = bx / 16
+    always @(posedge pclk) begin
+        rd_addr <= {cy, cx};
         s1_h    <= h;
         s1_v    <= v;
         s1_px   <= px;
-        s1_bn   <= bn;
-        s1_bp   <= bp;
-        s1_vis  <= (h < 10'd640) && (v < 10'd480);
-        s1_hs   <= !((h >= 10'd656) && (h < 10'd752));     // sync pulses are low
-        s1_vs   <= !((v >= 10'd490) && (v < 10'd492));
+        s1_ly   <= ly;
+        s1_bn   <= (h < 11'd18) ? 5'd0 : (bx[10:4] > 7'd29) ? 5'd29 : bx[8:4];
+        s1_bp   <= bx[3:0];
+        s1_vis  <= (h < 11'd1280) && (v < 10'd720);
+        s1_hs   <= (h >= 11'd1390) && (h < 11'd1430);
+        s1_vs   <= (v >= 10'd725) && (v < 10'd730);
     end
 
-    // stage 1b: wait for the RAM (its data appears one clock after the address)
-    reg  [9:0] p_h, p_v;
-    reg  [3:0] p_px, p_bp;
-    reg  [4:0] p_bn;
-    reg        p_vis, p_hs, p_vs;
-    always @(posedge clk) begin
-        p_h <= s1_h; p_v <= s1_v; p_px <= s1_px; p_bn <= s1_bn; p_bp <= s1_bp;
+    // stage 1b: the RAM data and this day's / the day before's heights
+    reg  [10:0] p_h;
+    reg  [9:0]  p_v;
+    reg  [4:0]  p_px, p_ly, p_bn;
+    reg  [3:0]  p_bp;
+    reg  [7:0]  p_hc, p_hp;
+    reg         p_vis, p_hs, p_vs;
+    always @(posedge pclk) begin
+        p_h <= s1_h; p_v <= s1_v; p_px <= s1_px; p_ly <= s1_ly; p_bn <= s1_bn; p_bp <= s1_bp;
+        p_hc <= h_tab[s1_bn];
+        p_hp <= h_tab[(s1_bn == 5'd0) ? 5'd0 : s1_bn - 5'd1];
         p_vis <= s1_vis; p_hs <= s1_hs; p_vs <= s1_vs;
     end
 
     // stage 2: the letter's pixel, and the graphics (rd_data and p_* are the same pixel)
-    wire [3:0] gyy = p_v[3:0] - 4'd1;                      // text starts 1 px into the cell
-    wire [3:0] gxx = p_px - 4'd1;
-    wire       in_glyph = (p_px >= 4'd1) && (p_px <= 4'd10) && (p_v[3:0] >= 4'd1) && (p_v[3:0] <= 4'd14);
+    wire [4:0] gxx = p_px - 5'd1;                           // text starts 1 px into the cell
+    wire [4:0] gyy = p_ly - 5'd1;
+    wire       in_glyph = (p_px >= 5'd1) && (p_px <= 5'd15) && (p_ly >= 5'd1) && (p_ly <= 5'd21);
     wire       glyph;
     font_renderer font (.char_code(rd_data[7:0]),
-                        .glyph_x(in_glyph ? gxx[3:1] : 3'd7), .glyph_y(in_glyph ? gyy[3:1] : 3'd7),
+                        .glyph_x(in_glyph ? div3(gxx) : 3'd7), .glyph_y(in_glyph ? div3(gyy) : 3'd7),
                         .pixel_on(glyph));
 
-    // chart area: x 12..311 (30 days of 10 px), y 160..287; lines at y = 285 - height
-    wire       in_chart = (p_h >= 10'd12) && (p_h <= 10'd311) && (p_v >= 10'd160) && (p_v <= 10'd287);
-    wire       chart_edge = (p_v == 10'd287);                  // base line only
-    wire       chart_grid = ((p_v == 10'd165) || (p_v == 10'd225)) && p_h[1];   // dotted top and middle
-    wire [4:0] bin   = p_bn;
-    wire [9:0] y_cur = 10'd285 - h_tab[bin];
-    wire [9:0] y_prv = 10'd285 - h_tab[(bin == 5'd0) ? 5'd0 : bin - 5'd1];
-    wire [9:0] y_sl  = 10'd285 - h_tab[30];
-    wire [9:0] y_tp  = 10'd285 - h_tab[31];
-    wire       on_line = ((p_v == y_cur) || (p_v + 10'd1 == y_cur)) ||                 // 2 px thick
-                         ((p_bp == 4'd0) && (bin != 5'd0) &&                             // step from the previous day
+    // chart area: x 18..497, y 240..479 (rows 10-19); lines at y = 468 - height (252 = high, 468 = low)
+    wire       in_chart = (p_h >= 11'd18) && (p_h <= 11'd497) && (p_v >= 10'd240) && (p_v <= 10'd479);
+    wire [9:0] y_cur = 10'd468 - {2'd0, p_hc};
+    wire [9:0] y_prv = 10'd468 - {2'd0, p_hp};
+    wire [9:0] y_sl  = 10'd468 - {2'd0, h_tab[30]};
+    wire [9:0] y_tp  = 10'd468 - {2'd0, h_tab[31]};
+    wire       on_line = ((p_v + 10'd1 >= y_cur) && (p_v <= y_cur + 10'd1)) ||               // 3 px thick
+                         ((p_bp <= 4'd1) && (p_bn != 5'd0) &&                                // step from the day before
                           (((p_v >= y_prv) && (p_v <= y_cur)) || ((p_v <= y_prv) && (p_v >= y_cur))));
     wire       rising  = (stock_samples[16*29 +: 16] >= stock_samples[15:0]);
-    wire       on_sl   = (sel_sl != 16'd0) && (p_v == y_sl) && !p_h[2];                 // dashed
-    wire       on_tp   = (sel_tp != 16'd0) && (p_v == y_tp) && !p_h[2];
+    wire       on_sl   = (sel_sl != 16'd0) && ((p_v == y_sl) || (p_v == y_sl + 10'd1)) && !p_h[3];   // dashed
+    wire       on_tp   = (sel_tp != 16'd0) && ((p_v == y_tp) || (p_v == y_tp + 10'd1)) && !p_h[3];
+    wire       on_grid = ((p_v == 10'd252) || (p_v == 10'd468)) && p_h[2];                      // dotted high / low
 
-    // progress bar: x 12..627, y 20..27
-    wire       in_bar  = (p_h >= 10'd12) && (p_h <= 10'd627) && (p_v >= 10'd20) && (p_v <= 10'd27);
-    wire       bar_on  = (p_h < 10'd12 + progress_w);
+    // progress bar: x 18..1259, y 32..39
+    wire       in_bar  = (p_h >= 11'd18) && (p_h <= 11'd1259) && (p_v >= 10'd32) && (p_v <= 10'd39);
+    wire       bar_on  = (p_h < 11'd18 + progress_w);
 
     reg [11:0] s2_text;
     reg [11:0] s2_gfx;
     reg        s2_gfx_on, s2_vis, s2_hs, s2_vs;
-    always @(posedge clk) begin
+    always @(posedge pclk) begin
         s2_text <= glyph ? rgb(rd_data[15:12]) : rgb(rd_data[11:8]);
         s2_gfx_on <= 1'b1;
         if (in_bar)                                 s2_gfx <= bar_on ? 12'hFC0 : 12'h222;
         else if (in_chart && on_line)               s2_gfx <= rising ? 12'h0F0 : 12'hF44;
         else if (in_chart && on_sl)                 s2_gfx <= 12'hF00;
         else if (in_chart && on_tp)                 s2_gfx <= 12'h0F0;
-        else if (in_chart && chart_edge)            s2_gfx <= 12'h444;
-        else if (in_chart && chart_grid)            s2_gfx <= 12'h333;
+        else if (in_chart && on_grid)               s2_gfx <= 12'h444;
         else begin s2_gfx <= 12'h000; s2_gfx_on <= 1'b0; end
         s2_vis <= p_vis;
         s2_hs  <= p_hs;
@@ -304,7 +317,7 @@ module vga_screen (
     end
 
     // stage 3: the colour out, blank outside the visible area
-    always @(posedge clk) begin
+    always @(posedge pclk) begin
         {vga_r, vga_g, vga_b} <= !s2_vis ? 12'h000 : s2_gfx_on ? s2_gfx : s2_text;
         hsync <= s2_hs;
         vsync <= s2_vs;

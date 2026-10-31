@@ -333,3 +333,20 @@ white, gains green, losses red, yellow for the selection), pending orders list o
 unheld stocks show a dash, "NOW" help on its own bar, switches on one line. `vga_screen.v`: two new
 palette colours and a wider chart (10 px a day, filling the left panel). All testbenches pass;
 frames re-recorded from the VGA pins to check the layout. Not yet tried on a monitor.
+
+## 2026-10-31: VGA at 1280 x 720 for a 24" monitor (branch-douglas-vga-display)
+
+**Asked for:** the monitor picture looked small; make it bigger and more detailed for a 24" monitor
+without making it confusing.
+
+**Done by the AI:** VGA moved from 640 x 480 to widescreen 1280 x 720 at 60 Hz. New
+`5_Matthew_Display/submodules/vga_clock.v` (74.25 MHz pixel clock from one MMCM primitive, no IP).
+`vga_screen.v`: 71 x 30 text cells with the font drawn 3x, character RAM written at 100 MHz and read
+at the pixel clock, larger chart (30 days x 16 px). `vga_cells.v` re-laid out for the wider screen,
+adding each stock's 30-day change, the chart's high / low prices, SL / TP levels under the chart,
+you vs the bot with returns, full order names in pending orders, and button names (BTNC, BTNL...)
+in the NOW bar. `display_numbers.v`: fields for the 30-day changes and the chart high / low (field
+index widened to 7 bits in `text_layer.v` and the tb). `Integration.xdc`: the pixel clock is
+unrelated to the 100 MHz clock. `tb_vga_screen` rewritten for the new timing; all testbenches pass
+and frames recorded from the VGA pins were rebuilt into images. Not yet built in Vivado or tried on
+a monitor.

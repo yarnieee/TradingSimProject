@@ -3,7 +3,7 @@
 
 // tb_display_numbers: every field of display_numbers against hand-worked
 // values: money, prices, P/L signs, order totals (buy and sell), net P/L,
-// and the 99999999 limit.
+// 30-day changes, the chart's high / low, and the 99999999 limit.
 module tb_display_numbers;
     reg clk = 0;
     always #5 clk = ~clk;
@@ -35,6 +35,8 @@ module tb_display_numbers;
         .pos0(p0), .pos1(p1), .pos2(p2), .pos3(p3),
         .upnl0(u0), .upnl1(u1), .upnl2(u2), .upnl3(u3),
         .sel_stock(sel), .sel_ref_price(ref), .quantity(qty), .days_left(days),
+        .sel_samples({16'd30510, {27{16'd30000}}, 16'd32150, 16'd31500}),   // newest first in the bus top
+        .ref_price0(16'd20000), .ref_price1(16'd31500), .ref_price2(16'd18275), .ref_price3(16'd2500),
         .sell(sell), .order_type(otype), .order_trig(otrig), .sel_sl(16'd28990), .sel_tp(16'd0),
         .bot_cash(bcash), .bot_value(bval), .bot_pos0(bp0), .bot_pos1(bp1), .bot_pos2(bp2), .bot_pos3(bp3),
         .bot_upnl0(bu0), .bot_upnl1(bu1), .bot_upnl2(bu2), .bot_upnl3(bu3),
@@ -46,7 +48,7 @@ module tb_display_numbers;
 
     integer n_pass = 0, n_fail = 0;
     task check;
-        input [5:0]    f;
+        input [6:0]    f;
         input [31:0]   want_bcd;
         input          want_neg;
         input [8*40:1] name;
@@ -97,6 +99,12 @@ module tb_display_numbers;
         check(`DN_RET,     32'h00000081, 1, "return -0.81% (basis points)");
         check(`DN_MAXDD,   32'h00000091, 0, "max drawdown 0.91%");
         check(`DN_BRET,    32'h00001579, 0, "bot return +15.79%");
+        check(`DN_CHG0,     32'h00001345, 0, "AMD up $13.45 in 30 days");
+        check(`DN_CHG0 + 1, 32'h00000990, 1, "MCD down $9.90 in 30 days");
+        check(`DN_CHG0 + 2, 32'h00000000, 0, "NVDA unchanged");
+        check(`DN_CHG0 + 3, 32'h00000010, 1, "GME down $0.10");
+        check(`DN_CHI,      32'h00032150, 0, "chart high $321.50");
+        check(`DN_CLO,      32'h00030000, 0, "chart low $300.00");
 
         otype = `OT_LMT; qty = 2;
         refresh;

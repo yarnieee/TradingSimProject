@@ -109,6 +109,13 @@ set_property -dict { PACKAGE_PIN D17   IOSTANDARD LVCMOS33 } [get_ports {vgaGree
 set_property -dict { PACKAGE_PIN P19   IOSTANDARD LVCMOS33 } [get_ports Hsync]
 set_property -dict { PACKAGE_PIN R19   IOSTANDARD LVCMOS33 } [get_ports Vsync]
 
+## VGA pixel clock: 74.25 MHz (1280 x 720 at 60 Hz) from the MMCM in vga_clock;
+## Vivado works out this clock from sys_clk_pin itself. The picture side only
+## reads the 100 MHz side's values (prices, chart samples, progress), which change
+## rarely, so the two clocks are treated as unrelated: a change can at worst
+## affect one frame. The character RAM is a block RAM with one port per clock.
+set_clock_groups -asynchronous -group [get_clocks sys_clk_pin] -group [get_clocks -of_objects [get_pins matthew_display/vga_clock_inst/mmcm/CLKOUT0]]
+
 ## The VGA screen writer gives each character cell 4 clocks: the cell's content
 ## (vga_cells) is only captured into wr_cell every fourth clock.
 set_multicycle_path -setup 4 -to [get_cells -hierarchical -filter {NAME =~ *vga_screen_inst/wr_cell_reg*}]

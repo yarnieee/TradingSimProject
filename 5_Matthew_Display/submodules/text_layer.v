@@ -123,7 +123,7 @@ module text_layer (
 
     function [31:0] field;
         input [`DN_N*32-1:0] all;
-        input [5:0] f;
+        input [6:0] f;
         begin
             field = all[32*f +: 32];
         end

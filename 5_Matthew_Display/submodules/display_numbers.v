@@ -37,6 +37,11 @@ module display_numbers #(
     // the order on screen
     input  wire [1:0]  sel_stock,
     input  wire [15:0] sel_ref_price,     // selected stock's price 30 days ago
+    input  wire [479:0] sel_samples,      // selected stock, 30 days, oldest first (chart high / low)
+    input  wire [15:0] ref_price0,        // each stock's price 30 days ago
+    input  wire [15:0] ref_price1,
+    input  wire [15:0] ref_price2,
+    input  wire [15:0] ref_price3,
     input  wire [13:0] quantity,
     input  wire [31:0] days_left,
     input  wire        sell,              // 0 buy, 1 sell
@@ -68,12 +73,14 @@ module display_numbers #(
 );
     localparam [31:0] MAX_SHOWN = 32'd99_999_999;
 
-    reg  [5:0] idx;
+    reg  [6:0] idx;
 
     // ------------------------------------------------------------ which stock / log entry
     reg [2:0] k;               // stock 0-3 or log entry 0-4 of this field
     always @* begin
-        if      (idx >= `DN_RET)     k = 3'd0;
+        if      (idx >= `DN_CHI)     k = 3'd0;
+        else if (idx >= `DN_CHG0)    k = idx - `DN_CHG0;
+        else if (idx >= `DN_RET)     k = 3'd0;
         else if (idx >= `DN_SLT0)    k = idx - `DN_SLT0;
         else if (idx >= `DN_SLQ0)    k = idx - `DN_SLQ0;
         else if (idx >= `DN_LOGDAY0) k = idx - `DN_LOGDAY0;
@@ -86,16 +93,36 @@ module display_numbers #(
     end
     wire bot = (idx >= `DN_BPOS0) && (idx < `DN_LOGPX0);
 
-    reg [15:0] px_k;
+    reg [15:0] px_k, ref_k;
     reg [9:0]  pos_k;
     reg signed [31:0] upnl_k;
     always @* begin
         case (k[1:0])
-            2'd0:    begin px_k = price0; pos_k = bot ? bot_pos0 : pos0; upnl_k = bot ? bot_upnl0 : upnl0; end
-            2'd1:    begin px_k = price1; pos_k = bot ? bot_pos1 : pos1; upnl_k = bot ? bot_upnl1 : upnl1; end
-            2'd2:    begin px_k = price2; pos_k = bot ? bot_pos2 : pos2; upnl_k = bot ? bot_upnl2 : upnl2; end
-            default: begin px_k = price3; pos_k = bot ? bot_pos3 : pos3; upnl_k = bot ? bot_upnl3 : upnl3; end
+            2'd0:    begin px_k = price0; ref_k = ref_price0; pos_k = bot ? bot_pos0 : pos0; upnl_k = bot ? bot_upnl0 : upnl0; end
+            2'd1:    begin px_k = price1; ref_k = ref_price1; pos_k = bot ? bot_pos1 : pos1; upnl_k = bot ? bot_upnl1 : upnl1; end
+            2'd2:    begin px_k = price2; ref_k = ref_price2; pos_k = bot ? bot_pos2 : pos2; upnl_k = bot ? bot_upnl2 : upnl2; end
+            default: begin px_k = price3; ref_k = ref_price3; pos_k = bot ? bot_pos3 : pos3; upnl_k = bot ? bot_upnl3 : upnl3; end
         endcase
+    end
+
+    // highest and lowest of the selected stock's 30 days: one sample a clock, kept between scans
+    reg  [4:0]  sc;
+    reg  [15:0] run_hi, run_lo, chart_hi, chart_lo;
+    wire [15:0] smp = sel_samples[16*sc +: 16];
+    always @(posedge clk) begin
+        if (rst) begin
+            sc <= 5'd0; run_hi <= 16'd0; run_lo <= 16'hFFFF; chart_hi <= 16'd0; chart_lo <= 16'd0;
+        end else if (sc == 5'd29) begin
+            chart_hi <= (smp > run_hi) ? smp : run_hi;
+            chart_lo <= (smp < run_lo) ? smp : run_lo;
+            run_hi   <= 16'd0;
+            run_lo   <= 16'hFFFF;
+            sc       <= 5'd0;
+        end else begin
+            if (smp > run_hi) run_hi <= smp;
+            if (smp < run_lo) run_lo <= smp;
+            sc <= sc + 5'd1;
+        end
     end
 
     reg [15:0] sel_px;
@@ -159,8 +186,14 @@ module display_numbers #(
                 val_neg = bot_ret_bp < 0;
                 val     = val_neg ? -bot_ret_bp : bot_ret_bp;
             end
+            `DN_CHI:    val = {16'd0, chart_hi};
+            `DN_CLO:    val = {16'd0, chart_lo};
             default: begin
-                if (idx >= `DN_SLT0)         val = {16'd0, book_trig[16*k +: 16]};
+                if (idx >= `DN_CHG0) begin                                               // 30-day change of stock k
+                    val_neg = px_k < ref_k;
+                    val     = val_neg ? ref_k - px_k : px_k - ref_k;
+                end
+                else if (idx >= `DN_SLT0)         val = {16'd0, book_trig[16*k +: 16]};
                 else if (idx >= `DN_SLQ0)    val = {24'd0, book_qty[8*k +: 8]};
                 else if (idx >= `DN_LOGDAY0) val = {24'd0, log_day[8*k +: 8]};
                 else if (idx >= `DN_LOGPX0)  val = {16'd0, log_price[16*k +: 16]};
@@ -197,7 +230,7 @@ module display_numbers #(
 
     always @(posedge clk) begin
         if (rst) begin
-            idx     <= 6'd0;
+            idx     <= 7'd0;
             bin     <= 32'd0;
             acc     <= 32'd0;
             step    <= 6'd0;
@@ -217,7 +250,7 @@ module display_numbers #(
         end else begin
             bcd[32*idx +: 32] <= acc;
             neg[idx]          <= cur_neg && (acc != 32'd0);
-            idx               <= (idx == `DN_N - 1) ? 6'd0 : idx + 6'd1;
+            idx               <= (idx == `DN_N - 1) ? 7'd0 : idx + 7'd1;
             busy              <= 1'b0;
         end
     end

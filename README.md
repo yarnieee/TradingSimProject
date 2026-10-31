@@ -52,8 +52,8 @@ Each test prints `PASS` or `FAIL`.
 | sw[7:6] | trigger distance from the price: `00` 1%, `01` 2%, `10` 5%, `11` 10% |
 | sw[15] | view: down = you (the game), up = the bot (buttons do nothing while up) |
 
-**VGA monitor** (plug a monitor into the Basys3 VGA port): shows everything at once, 640 x 480,
-updated live: the four stocks and their trend, your net worth, cash, profit/loss, return and largest
+**VGA monitor** (plug a monitor into the Basys3 VGA port): shows everything at once in widescreen
+1280 x 720 (fills a 24" monitor), updated live: the four stocks with their 30-day change and trend, your net worth, cash, profit/loss, return and largest
 drawdown, the selected stock's 30-day chart with your stop-loss / take-profit levels, your holdings,
 every pending order, you against the bot and its last trades, the order you are making, what the
 buttons do on the current screen, and what the switches are set to.

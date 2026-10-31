@@ -94,7 +94,10 @@
 `define DN_RET     60   // player's return, basis points (312 = 3.12%)
 `define DN_MAXDD   61   // player's largest drawdown, basis points
 `define DN_BRET    62   // bot's return, basis points
-`define DN_N       63
+`define DN_CHG0    63   // stock 0..3: price now - price 30 days ago, DN_CHG0 + k
+`define DN_CHI     67   // selected stock: highest price of the last 30 days (VGA chart)
+`define DN_CLO     68   // selected stock: lowest price of the last 30 days
+`define DN_N       69
 
 // btn_pulse bit positions, in Basys3 master XDC order (btnC, btnU, btnL, btnR, btnD)
 `define BTN_C 0

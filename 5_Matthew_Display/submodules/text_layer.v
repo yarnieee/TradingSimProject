@@ -277,7 +277,7 @@ module text_layer (
                     if (!bot_active) ;
                     else if (col <= 4'd3) begin ch = ticker_ch(bk, col); fg = CYAN; end
                     else if (col == 4'd5) begin
-                        ch = (b_sig == 2'd1) ? 8'h80 : (b_sig == 2'd2) ? 8'h81 : "-";
+                        ch = (b_sig == 2'd1) ? 8'h80 : (b_sig == 2'd2) ? 8'h81 : " ";
                         fg = (b_sig == 2'd1) ? GREEN : (b_sig == 2'd2) ? RED : GREY;
                     end
                     else if (col >= 4'd6 && col <= 4'd9) begin

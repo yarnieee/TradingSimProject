@@ -1,86 +1,177 @@
 `timescale 1ns / 1ps
-`default_nettype none
-`include "trading_defs.vh"
-
-// bot_trader: the computer player the user competes against.
+// bot_trader.v: 8-day moving-average momentum bot (Member C)
+// Trades against the player through its OWN copy of ledger.v, using the same
+// fill bus and ledger_busy handshake as Member B's exec_engine.
 //
-// *** STUB - TRICIA FILLS IN THE STRATEGY ***
-// This is Tricia's part (team plan, Component C: "a bot trader with its own
-// ledger trades an 8-day moving-average momentum rule"). Only the ports are
-// defined here, so the rest of the build is wired and the sw[1] bot view
-// works. Every output is tied to a safe default (no trades, starting cash),
-// and `active` is 0, so both bot screens show "NO BOT YET".
+// On every tick (one trading day) the 4 stocks are processed one after another
+// by a single FSM:
+//   1. Moving average: ring buffer of the last 8 prices + running sum
+//        sum = sum + new - oldest,  MA = sum >> 3          (no divider)
+//      On the first tick after reset all 8 slots are filled with today's price
+//      (sum = 8 x price), so the bot can trade from day 1.
+//   2. band = MA >> 8 (~0.4%), a dead zone so noise around the MA is ignored.
+//   3. BUY  QTY at ask = price + SPREAD if run, holds none, price > MA + band
+//           and ask*QTY + FEE <= cash.
+//      SELL the whole position at bid = price - SPREAD (min 1) if run,
+//           holds some, and price + band < MA.
+//   4. At most one fill per stock per tick. After a fill, wait for ledger_busy
+//      to go high and then low again before moving to the next stock.
+// tick_done pulses when all 4 stocks are finished (bot's cash/positions final).
 //
-// What the display expects from the outputs:
-//   active        1 once the bot is running (the screens then show its numbers)
-//   cash          bot's cash in cents (starts at START_CASH, $10,000 like the player)
-//   pos0..3       bot's shares of each stock
-//   cb0..3        bot's cost basis per stock in cents (for its profit/loss)
-//   value         cash + shares x price, in cents
-//   signal        per stock [2k+1:2k]: 1 = buy signal, 2 = sell signal, 0 = none
-//                 (shown as an up / down arrow)
-//   trades        number of trades so far
-//   log_*         the last 5 trades, newest first: entry n is bits [n] (valid,
-//                 side: 0 buy / 1 sell), [2n+1:2n] (stock), [16n+15:16n] (price,
-//                 cents), [8n+7:8n] (trading day)
-// Inputs available: tick (one pulse per trading day), game_live (game running),
-// day (trading day number), price0..3 (cents), and each stock's last 30 daily
-// prices (samplesK, 30 x 16 bits, newest at [479:464]).
-// The bot keeps its own ledger: it never sends fills to the order engine.
+//   IDLE --tick--> UPD -> DECIDE --trade--> SEND -> WAIT_HI -> WAIT_LO -> NEXT
+//                   ^        \--no trade--------------------------------> NEXT
+//                   \------------------- k < 3 ------------------------- NEXT --k = 3--> IDLE
 module bot_trader #(
-    parameter [31:0] START_CASH = 32'd1_000_000   // cents ($10,000), as the player
+    parameter QTY    = 20,       // shares per buy
+    parameter SPREAD = 5,        // cents per side (same as spread_calc)
+    parameter FEE    = 100       // cents per trade (same as exec_engine)
 ) (
-    input  wire         clk,
-    input  wire         rst,
-    input  wire         tick,
-    input  wire         game_live,
-    input  wire [7:0]   day,
-    input  wire [15:0]  price0,
-    input  wire [15:0]  price1,
-    input  wire [15:0]  price2,
-    input  wire [15:0]  price3,
-    input  wire [479:0] samples0,
-    input  wire [479:0] samples1,
-    input  wire [479:0] samples2,
-    input  wire [479:0] samples3,
-    output wire         active,
-    output wire [31:0]  cash,
-    output wire [9:0]   pos0,
-    output wire [9:0]   pos1,
-    output wire [9:0]   pos2,
-    output wire [9:0]   pos3,
-    output wire [31:0]  cb0,
-    output wire [31:0]  cb1,
-    output wire [31:0]  cb2,
-    output wire [31:0]  cb3,
-    output wire [31:0]  value,
-    output wire [7:0]   signal,
-    output wire [7:0]   trades,
-    output wire [4:0]   log_valid,
-    output wire [4:0]   log_side,
-    output wire [9:0]   log_stock,
-    output wire [79:0]  log_price,
-    output wire [39:0]  log_day
+    input  wire        clk,
+    input  wire        rst,
+    input  wire        run,                          // 1 = allowed to trade
+    input  wire        tick,                         // 1-clock pulse, one trading day
+    input  wire [15:0] price0, price1, price2, price3,   // mid prices (cents)
+    // from the bot's own ledger
+    input  wire [31:0] cash,
+    input  wire [9:0]  pos0, pos1, pos2, pos3,
+    input  wire        ledger_busy,
+    // fill bus to the bot's ledger (fields hold their value after the pulse)
+    output reg         fill,
+    output reg  [1:0]  fill_stock,
+    output reg         fill_side,                    // 0 = buy, 1 = sell
+    output reg  [7:0]  fill_qty,
+    output reg  [15:0] fill_price,
+    output reg  [15:0] fill_fee,
+    // bot's most recent trade (for Member D to display)
+    output reg         last_valid,
+    output reg  [1:0]  last_stock,
+    output reg         last_side,
+    output reg  [7:0]  last_qty,
+    output reg  [15:0] last_price,
+    output reg         tick_done                     // 1-clock pulse, this tick's trades finished
 );
-    // Safe defaults until the strategy is written.
-    assign active    = 1'b0;
-    assign cash      = START_CASH;
-    assign value     = START_CASH;
-    assign pos0      = 10'd0;
-    assign pos1      = 10'd0;
-    assign pos2      = 10'd0;
-    assign pos3      = 10'd0;
-    assign cb0       = 32'd0;
-    assign cb1       = 32'd0;
-    assign cb2       = 32'd0;
-    assign cb3       = 32'd0;
-    assign signal    = 8'd0;
-    assign trades    = 8'd0;
-    assign log_valid = 5'd0;
-    assign log_side  = 5'd0;
-    assign log_stock = 10'd0;
-    assign log_price = 80'd0;
-    assign log_day   = 40'd0;
-endmodule
+    localparam [2:0] IDLE = 3'd0, UPD = 3'd1, DECIDE = 3'd2, SEND = 3'd3,
+                     WAIT_HI = 3'd4, WAIT_LO = 3'd5, NEXT = 3'd6;
+    localparam [15:0] FEE16 = FEE;
+    localparam [7:0]  QTY8  = QTY;
 
-`default_nettype wire
+    reg [2:0]  state;
+    reg [1:0]  k;                     // stock being processed (0..3)
+    reg        first;                 // 1 until the first tick after reset is done
+
+    // price history: 8 slots per stock, slot address = {stock, wptr}
+    reg [15:0] hist [0:31];
+    reg [18:0] sum  [0:3];            // 8 x 65535 fits in 19 bits
+    reg [2:0]  wptr;                  // oldest slot (shared: all stocks advance together)
+    reg [15:0] p_l  [0:3];            // prices latched on tick
+
+    // ---------------- datapath for stock k ----------------
+    wire [15:0] p      = p_l[k];
+    wire [15:0] oldest = hist[{k, wptr}];
+    wire [18:0] sum_up = sum[k] + p - oldest;        // sum after today's price goes in
+
+    wire [15:0] ma   = sum[k][18:3];                 // sum >> 3 (read in DECIDE, after UPD)
+    wire [15:0] band = {8'd0, ma[15:8]};             // MA >> 8
+
+    reg  [9:0]  pos_k;
+    always @* begin
+        case (k)
+            2'd0:    pos_k = pos0;
+            2'd1:    pos_k = pos1;
+            2'd2:    pos_k = pos2;
+            default: pos_k = pos3;
+        endcase
+    end
+
+    // bid/ask, same rule as spread_calc
+    wire [16:0] ask_full = {1'b0, p} + SPREAD;
+    wire [15:0] ask      = ask_full[16] ? 16'hFFFF : ask_full[15:0];
+    wire [15:0] bid      = (p > SPREAD) ? p - SPREAD : 16'd1;
+
+    // 17-bit compares so MA + band can't overflow
+    wire [31:0] buy_cost = ask * QTY + FEE;
+    wire want_buy  = run && (pos_k == 10'd0) && ({1'b0, p} > {1'b0, ma} + band)
+                         && (buy_cost <= cash);
+    wire want_sell = run && (pos_k != 10'd0) && ({1'b0, p} + band < {1'b0, ma});
+
+    // ---------------- control FSM ----------------
+    integer j;
+    always @(posedge clk) begin
+        fill      <= 1'b0;                           // pulses default low
+        tick_done <= 1'b0;
+        if (rst) begin
+            state      <= IDLE;
+            k          <= 2'd0;
+            first      <= 1'b1;
+            wptr       <= 3'd0;
+            fill_stock <= 2'd0;
+            fill_side  <= 1'b0;
+            fill_qty   <= 8'd0;
+            fill_price <= 16'd0;
+            fill_fee   <= 16'd0;
+            last_valid <= 1'b0;
+            last_stock <= 2'd0;
+            last_side  <= 1'b0;
+            last_qty   <= 8'd0;
+            last_price <= 16'd0;
+        end else begin
+            case (state)
+            IDLE: if (tick) begin                    // snapshot the day's prices
+                p_l[0] <= price0; p_l[1] <= price1; p_l[2] <= price2; p_l[3] <= price3;
+                k      <= 2'd0;
+                state  <= UPD;
+            end
+
+            UPD: begin                               // put today's price into the history
+                if (first) begin
+                    for (j = 0; j < 8; j = j + 1) hist[k*8 + j] <= p;
+                    sum[k] <= {p, 3'b000};           // 8 x price
+                end else begin
+                    hist[{k, wptr}] <= p;            // overwrite the oldest
+                    sum[k]          <= sum_up;
+                end
+                state <= DECIDE;
+            end
+
+            DECIDE: begin                            // MA/band now include today
+                if (want_buy) begin
+                    fill_stock <= k; fill_side <= 1'b0; fill_qty <= QTY8;
+                    fill_price <= ask; fill_fee <= FEE16;
+                    state      <= SEND;
+                end else if (want_sell) begin
+                    // the bot only ever holds QTY shares, so the position fits in 8 bits
+                    fill_stock <= k; fill_side <= 1'b1; fill_qty <= pos_k[7:0];
+                    fill_price <= bid; fill_fee <= FEE16;
+                    state      <= SEND;
+                end else
+                    state <= NEXT;
+            end
+
+            SEND: begin                              // one-clock fill pulse
+                fill       <= 1'b1;
+                last_valid <= 1'b1;
+                last_stock <= fill_stock; last_side <= fill_side;
+                last_qty   <= fill_qty;   last_price <= fill_price;
+                state      <= WAIT_HI;
+            end
+
+            WAIT_HI: if (ledger_busy)  state <= WAIT_LO;   // ledger has taken the fill
+            WAIT_LO: if (!ledger_busy) state <= NEXT;      // cash/positions updated
+
+            NEXT: begin
+                if (k == 2'd3) begin                 // all 4 stocks done for today
+                    if (!first) wptr <= wptr + 1'b1; // next oldest slot
+                    first     <= 1'b0;
+                    tick_done <= 1'b1;
+                    state     <= IDLE;
+                end else begin
+                    k     <= k + 1'b1;
+                    state <= UPD;
+                end
+            end
+
+            default: state <= IDLE;
+            endcase
+        end
+    end
+endmodule

@@ -72,7 +72,7 @@
 `define DN_NET     1    // portfolio value (cash + holdings)
 `define DN_PX0     2    // price of stock 0..3: DN_PX0 + k
 `define DN_POS0    6    // shares held of stock 0..3: DN_POS0 + k
-`define DN_PNL0    10   // profit/loss of stock 0..3 (value - cost basis): DN_PNL0 + k
+`define DN_PNL0    10   // profit/loss of stock 0..3 (Tricia's upnl, updated each day): DN_PNL0 + k
 `define DN_CHG     14   // selected stock: price now - price 30 days ago
 `define DN_QTY     15   // quantity being entered
 `define DN_DAYS    16   // trading days left

@@ -295,3 +295,15 @@ switch settings. The earlier sw[1] pin (W16) was actually sw[2]; replaced. READM
 
 **Asked for:** play for about 2 minutes. **Done by the AI:** `FINAL_TRADING_DAY` 30 -> 60 in
 `Integration_Top` (60 trading days x 2 s); README updated. Market speed unchanged.
+
+## 2026-10-31: Tricia's bot and risk merged; one team branch
+
+**Asked for:** merge `branch-tricia-bot`, then make the v2 branch the only team branch.
+
+**Done by the AI:** merged Tricia's commits; her files moved from the old `TradingSimProject.srcs/`
+layout into `4_Tricia_Ledger/` (`C_portfolio_top.v` top, `bot_trader.v` and `risk_metrics.v` in
+`submodules/`, `tb_bot_trader`/`tb_risk_metrics` in `tb/`); her `bot_trader` replaces the stub. Her
+modules are unchanged. `Integration_Top` now instantiates `C_portfolio_top` (ledger + risk + bot)
+instead of `ledger`; a small log there keeps the bot's last 5 trades from her last-trade outputs.
+`display_numbers` / `D_display_top` take her per-stock P/L (`upnl`) instead of cost basis. All
+testbenches pass, including hers.

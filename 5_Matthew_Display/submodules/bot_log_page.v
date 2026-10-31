@@ -8,7 +8,7 @@
 //   rows 1-5  09 B AMD   213.50   the bot's last 5 trades, newest first (NO BOT YET
 //                                 while bot_trader is still the stub):
 //                                 day, Buy / Sell (green / red), stock, price
-//   row 6     SW15 DOWN: GAME     how to leave the bot view
+//   row 6     RULE: BUY >MA8      the bot's rule (Tricia's bot_trader)
 //
 // FLIP_180 = 1 turns the page for the upside-down left OLED, as the ticket does.
 module bot_log_page #(
@@ -118,7 +118,7 @@ module bot_log_page #(
                 ch = price_ch(e_px, col - 4'd10);
             end
         end else begin
-            ch = str_ch("SW15 DOWN: GAME ", col);
+            ch = str_ch("RULE: BUY >MA8  ", col);
             fg = GREY;
         end
     end

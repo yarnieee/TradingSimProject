@@ -1,3 +1,4 @@
+`timescale 1ns / 1ps
 // control state machine for the ledger
 // Decides what happens on each clock, ledger.v holds the registers and does the maths.
 //

@@ -12,7 +12,8 @@ module tb_display_numbers;
     reg [31:0] cash = 32'd842_350, pv = 32'd1_307_950;
     reg [15:0] pr0 = 21345, pr1 = 30510, pr2 = 18275, pr3 = 2490;
     reg [9:0]  p0 = 10, p1 = 5, p2 = 0, p3 = 40;
-    reg [31:0] cb0 = 205000, cb1 = 160000, cb2 = 0, cb3 = 98000;
+    // profit/loss per stock as Tricia's risk_metrics gives it (shares x price - cost basis)
+    reg signed [31:0] u0 = 8450, u1 = -7450, u2 = 0, u3 = 1600;
     reg [1:0]  sel = 1;
     reg [15:0] ref = 31500;
     reg [13:0] qty = 12;
@@ -22,7 +23,7 @@ module tb_display_numbers;
     reg [15:0] otrig = 16'd30000;
     reg [31:0] bcash = 32'd950_000, bval = 32'd1_012_345;
     reg [9:0]  bp0 = 10, bp1 = 0, bp2 = 0, bp3 = 0;
-    reg [31:0] bcb0 = 220_000, bcb1 = 0, bcb2 = 0, bcb3 = 0;
+    reg signed [31:0] bu0 = -6550, bu1 = 0, bu2 = 0, bu3 = 0;
     reg [79:0] lpx = {16'd0, 16'd0, 16'd0, 16'd21000, 16'd21350};
     reg [39:0] lday = {8'd0, 8'd0, 8'd0, 8'd4, 8'd9};
     wire [`DN_N*32-1:0] bcd;
@@ -32,11 +33,11 @@ module tb_display_numbers;
         .clk(clk), .rst(rst), .cash(cash), .portfolio_value(pv),
         .price0(pr0), .price1(pr1), .price2(pr2), .price3(pr3),
         .pos0(p0), .pos1(p1), .pos2(p2), .pos3(p3),
-        .cb0(cb0), .cb1(cb1), .cb2(cb2), .cb3(cb3),
+        .upnl0(u0), .upnl1(u1), .upnl2(u2), .upnl3(u3),
         .sel_stock(sel), .sel_ref_price(ref), .quantity(qty), .days_left(days),
         .sell(sell), .order_type(otype), .order_trig(otrig), .sel_sl(16'd28990), .sel_tp(16'd0),
         .bot_cash(bcash), .bot_value(bval), .bot_pos0(bp0), .bot_pos1(bp1), .bot_pos2(bp2), .bot_pos3(bp3),
-        .bot_cb0(bcb0), .bot_cb1(bcb1), .bot_cb2(bcb2), .bot_cb3(bcb3),
+        .bot_upnl0(bu0), .bot_upnl1(bu1), .bot_upnl2(bu2), .bot_upnl3(bu3),
         .log_price(lpx), .log_day(lday),
         .bcd(bcd), .neg(neg)
     );
@@ -84,7 +85,7 @@ module tb_display_numbers;
         check(`DN_BCASH,   32'h00950000, 0, "bot cash 9500.00");
         check(`DN_BNETPNL, 32'h00012345, 0, "bot P/L +123.45");
         check(`DN_BPOS0,   32'h00000010, 0, "bot AMD shares 10");
-        check(`DN_BPNL0,   32'h00006550, 1, "bot AMD P/L 10 x 213.45 - 2200.00 = -65.50");
+        check(`DN_BPNL0,   32'h00006550, 1, "bot AMD P/L -65.50");
         check(`DN_LOGPX0,  32'h00021350, 0, "bot log newest price 213.50");
         check(`DN_LOGPX0+1,32'h00021000, 0, "bot log second price 210.00");
         check(`DN_LOGDAY0, 32'h00000009, 0, "bot log newest day 9");

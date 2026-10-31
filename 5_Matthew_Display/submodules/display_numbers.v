@@ -30,10 +30,10 @@ module display_numbers #(
     input  wire [9:0]  pos1,
     input  wire [9:0]  pos2,
     input  wire [9:0]  pos3,
-    input  wire [31:0] cb0,
-    input  wire [31:0] cb1,
-    input  wire [31:0] cb2,
-    input  wire [31:0] cb3,
+    input  wire signed [31:0] upnl0,      // profit/loss per stock (Tricia's risk_metrics), cents
+    input  wire signed [31:0] upnl1,
+    input  wire signed [31:0] upnl2,
+    input  wire signed [31:0] upnl3,
     // the order on screen
     input  wire [1:0]  sel_stock,
     input  wire [15:0] sel_ref_price,     // selected stock's price 30 days ago
@@ -51,10 +51,10 @@ module display_numbers #(
     input  wire [9:0]  bot_pos1,
     input  wire [9:0]  bot_pos2,
     input  wire [9:0]  bot_pos3,
-    input  wire [31:0] bot_cb0,
-    input  wire [31:0] bot_cb1,
-    input  wire [31:0] bot_cb2,
-    input  wire [31:0] bot_cb3,
+    input  wire signed [31:0] bot_upnl0,
+    input  wire signed [31:0] bot_upnl1,
+    input  wire signed [31:0] bot_upnl2,
+    input  wire signed [31:0] bot_upnl3,
     input  wire [79:0] log_price,         // bot log, newest first
     input  wire [39:0] log_day,
     output reg  [`DN_N*32-1:0] bcd,
@@ -79,13 +79,13 @@ module display_numbers #(
 
     reg [15:0] px_k;
     reg [9:0]  pos_k;
-    reg [31:0] cb_k;
+    reg signed [31:0] upnl_k;
     always @* begin
         case (k[1:0])
-            2'd0:    begin px_k = price0; pos_k = bot ? bot_pos0 : pos0; cb_k = bot ? bot_cb0 : cb0; end
-            2'd1:    begin px_k = price1; pos_k = bot ? bot_pos1 : pos1; cb_k = bot ? bot_cb1 : cb1; end
-            2'd2:    begin px_k = price2; pos_k = bot ? bot_pos2 : pos2; cb_k = bot ? bot_cb2 : cb2; end
-            default: begin px_k = price3; pos_k = bot ? bot_pos3 : pos3; cb_k = bot ? bot_cb3 : cb3; end
+            2'd0:    begin px_k = price0; pos_k = bot ? bot_pos0 : pos0; upnl_k = bot ? bot_upnl0 : upnl0; end
+            2'd1:    begin px_k = price1; pos_k = bot ? bot_pos1 : pos1; upnl_k = bot ? bot_upnl1 : upnl1; end
+            2'd2:    begin px_k = price2; pos_k = bot ? bot_pos2 : pos2; upnl_k = bot ? bot_upnl2 : upnl2; end
+            default: begin px_k = price3; pos_k = bot ? bot_pos3 : pos3; upnl_k = bot ? bot_upnl3 : upnl3; end
         endcase
     end
 
@@ -105,11 +105,8 @@ module display_numbers #(
     // market orders fill at the ask / bid; limit and stop orders at their trigger
     wire [15:0] ord_px   = (order_type != `OT_MKT) ? order_trig : sell ? bid : ask;
 
-    // one shared multiplier: shares x price for P/L, quantity x price for the order total
-    wire        mul_ord = (idx == `DN_ORDTOT);
-    wire [15:0] mul_a   = mul_ord ? ord_px : px_k;
-    wire [13:0] mul_b   = mul_ord ? quantity : {4'd0, pos_k};
-    wire [29:0] prod    = mul_a * mul_b;
+    // order total: quantity x price
+    wire [29:0] prod    = ord_px * quantity;
 
     reg [31:0] val;
     reg        val_neg;
@@ -148,8 +145,8 @@ module display_numbers #(
                 if (idx >= `DN_LOGDAY0)      val = {24'd0, log_day[8*k +: 8]};
                 else if (idx >= `DN_LOGPX0)  val = {16'd0, log_price[16*k +: 16]};
                 else if ((idx >= `DN_BPNL0) || (idx >= `DN_PNL0 && idx < `DN_CHG)) begin   // P/L of stock k
-                    val_neg = {2'd0, prod} < cb_k;
-                    val     = val_neg ? cb_k - {2'd0, prod} : {2'd0, prod} - cb_k;
+                    val_neg = upnl_k < 0;
+                    val     = val_neg ? -upnl_k : upnl_k;
                 end else if ((idx >= `DN_BPOS0) || (idx >= `DN_POS0 && idx < `DN_PNL0))  // shares of stock k
                     val = {22'd0, pos_k};
                 else                                                                     // price of stock k

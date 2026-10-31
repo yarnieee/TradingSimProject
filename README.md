@@ -10,15 +10,14 @@ The team build: everyone's parts joined in one Vivado project for the Basys3.
 | `1_Shared_Modules/` | team | debouncer, clock divider, OLED driver, shared codes |
 | `2_YiAn_Market_Engine/` | Yi An | `A_top.v` |
 | `3_Douglas_Orders/` | Douglas | `B_order_top.v` |
-| `4_Tricia_Ledger/` | Tricia | `ledger.v` |
+| `4_Tricia_Ledger/` | Tricia | `C_portfolio_top.v` |
 | `5_Matthew_Display/` | Matthew | `D_display_top.v` |
 | `9_Not_Used/` | | old files, not in the build |
 
 Each person's folder: top module, `submodules/`, `tb/` (tests).
 
 Naming (team doc): top modules are `A_`/`B_`/`C_`/`D_<description>_top` (A Yi An, B Douglas,
-C Tricia, D Matthew). Still to rename by their owners: `A_top` to `A_market_top`, `ledger` to
-`C_portfolio_top` (the names in the doc's Module I/O map).
+C Tricia, D Matthew). Still to rename by its owner: `A_top` to `A_market_top`.
 
 ## Open in Vivado
 
@@ -74,8 +73,8 @@ reject (led 14) and show pending orders (led 11-8).
   stock's chart.
 
 **Bot view (sw[15] up)**: the right OLED shows the bot's value against yours and its holdings, the
-left its last trades. It shows "NO BOT YET" until Tricia's bot strategy is written
-(`4_Tricia_Ledger/submodules/bot_trader.v` is a stub with its ports defined).
+left its last trades. Tricia's bot trades every day on its own ledger: it buys 20 shares when a price
+is above its 8-day average, and sells them when it falls below.
 
 **Days**: a game is 60 trading days of 2 seconds each, about 2 minutes (`FINAL_TRADING_DAY` in
 `Integration_Top`). The header shows the days left (`D57`, red in the last 5) and a yellow bar along

@@ -9,8 +9,8 @@
 //   instance         module          owner    does
 //   yian_market      A_top           Yi An    4 stock channels, one trading day every 2 s
 //   douglas_orders   B_order_top     Douglas  validates and fills orders, order book, ticket page
-//   tricia_ledger    ledger          Tricia   cash, positions, cost basis, ledger_busy handshake
-//   tricia_bot       bot_trader      Tricia   the computer player: STUB, Tricia writes the strategy
+//   tricia_portfolio C_portfolio_top Tricia   ledger (cash, positions, ledger_busy), risk metrics,
+//                                             and the bot trader with its own ledger
 //   matthew_display  D_display_top   Matthew  buttons, game screens, 7-seg, both OLEDs
 //
 // Board:
@@ -78,7 +78,7 @@ module Integration_Top #(
     wire         final_day_reached;
     wire [31:0]  portfolio_value;
     wire [959:0] portfolio_samples_30;
-    wire [31:0]  cb0, cb1, cb2, cb3;
+    wire signed [31:0] upnl0, upnl1, upnl2, upnl3;    // player's profit/loss per stock (Tricia)
     wire [31:0]  time_remaining;
 
     // The game timer is expressed in remaining simulated trading days.  The
@@ -98,14 +98,18 @@ module Integration_Top #(
     wire [63:0] sl_price, tp_price;
     wire        fill, reject;
     // bot
-    wire        bot_active;
-    wire [31:0] bot_cash, bot_value, bot_cb0, bot_cb1, bot_cb2, bot_cb3;
+    wire [31:0] bot_cash, bot_equity;
+    wire signed [31:0] bot_upnl0, bot_upnl1, bot_upnl2, bot_upnl3;
     wire [9:0]  bot_pos0, bot_pos1, bot_pos2, bot_pos3;
-    wire [7:0]  bot_signal, bot_trades;
-    wire [4:0]  bot_log_valid, bot_log_side;
-    wire [9:0]  bot_log_stock;
-    wire [79:0] bot_log_price;
-    wire [39:0] bot_log_day;
+    wire        bot_last_valid, bot_last_side;
+    wire [1:0]  bot_last_stock;
+    wire [7:0]  bot_last_qty;
+    wire [15:0] bot_last_price;
+    reg  [7:0]  bot_trades;                      // the bot's last 5 trades, newest first (built below)
+    reg  [4:0]  bot_log_valid, bot_log_side;
+    reg  [9:0]  bot_log_stock;
+    reg  [79:0] bot_log_price;
+    reg  [39:0] bot_log_day;
     // switches, synchronised to clk
     reg  [5:0]  osw_s0, osw;
     reg         view_s0, bot_view;
@@ -130,10 +134,11 @@ module Integration_Top #(
         .order_fill(fill), .order_reject(reject), .order_reject_code(reject_code),
         .order_placed(ord_placed), .order_from_submit(res_submit),
         .sl_price(sl_price), .tp_price(tp_price),
-        .bot_view(bot_view), .bot_active(bot_active), .bot_cash(bot_cash), .bot_value(bot_value),
+        .bot_view(bot_view), .bot_active(1'b1), .bot_cash(bot_cash), .bot_value(bot_equity),
         .bot_pos0(bot_pos0), .bot_pos1(bot_pos1), .bot_pos2(bot_pos2), .bot_pos3(bot_pos3),
-        .bot_cb0(bot_cb0), .bot_cb1(bot_cb1), .bot_cb2(bot_cb2), .bot_cb3(bot_cb3),
-        .bot_signal(bot_signal), .bot_log_valid(bot_log_valid), .bot_log_side(bot_log_side),
+        .bot_upnl0(bot_upnl0), .bot_upnl1(bot_upnl1), .bot_upnl2(bot_upnl2), .bot_upnl3(bot_upnl3),
+        .bot_signal(8'd0),                       // Tricia's bot does not output its signals
+        .bot_log_valid(bot_log_valid), .bot_log_side(bot_log_side),
         .bot_log_stock(bot_log_stock), .bot_log_price(bot_log_price), .bot_log_day(bot_log_day),
         .left_pixel(ticket_pixel), .left_x(xL), .left_y(yL),
         .screen_state(screen_state), .quantity(quantity), .sel_stock(sel_stock),
@@ -147,8 +152,8 @@ module Integration_Top #(
         .stock_ready0(amd_ready), .stock_ready1(mcd_ready),
         .stock_ready2(stock2_ready), .stock_ready3(stock3_ready),
         .portfolio_value(portfolio_value),
-        .portfolio_cb0(cb0), .portfolio_cb1(cb1),
-        .portfolio_cb2(cb2), .portfolio_cb3(cb3),
+        .portfolio_upnl0(upnl0), .portfolio_upnl1(upnl1),
+        .portfolio_upnl2(upnl2), .portfolio_upnl3(upnl3),
         .portfolio_samples_30(portfolio_samples_30),
         .ord_req(ord_req), .ord_side(ord_side),
         .ord_type(ord_type), .ord_trig(ord_trig), .ord_brk(ord_brk), .game_state(game_state),
@@ -264,21 +269,57 @@ module Integration_Top #(
                              && tick
                              && (trading_day_count == (FINAL_TRADING_DAY - 1'b1));
 
-    // ================================================================ TRICIA: ledger
-    wire signed [31:0] realised;
+    // ================================================================ TRICIA: portfolio (ledger, risk, bot)
+    wire signed [31:0] realised, pnl, ret_bp, bot_realised, bot_pnl, bot_ret_bp;
+    wire [31:0] equity, max_dd_bp, bot_max_dd_bp;
     wire        ledger_busy, ledger_err;
     wire        fill_side;
     wire [1:0]  fill_stock;
     wire [7:0]  fill_qty;
     wire [15:0] fill_price, fill_fee;
-    ledger tricia_ledger (
-        .clk(clk), .rst(sys_reset),
+    C_portfolio_top tricia_portfolio (
+        .clk(clk), .sys_reset(sys_reset), .bot_run(game_state == `GS_PLAYING),
+        .tick(tick), .price0(price0), .price1(price1), .price2(price2), .price3(price3),
         .fill(fill), .fill_stock(fill_stock), .fill_side(fill_side),
         .fill_qty(fill_qty), .fill_price(fill_price), .fill_fee(fill_fee),
         .cash(cash), .pos0(pos0), .pos1(pos1), .pos2(pos2), .pos3(pos3),
-        .cb0(cb0), .cb1(cb1), .cb2(cb2), .cb3(cb3),
-        .realised(realised), .ledger_busy(ledger_busy), .err(ledger_err)
+        .ledger_busy(ledger_busy), .err(ledger_err),
+        .upnl0(upnl0), .upnl1(upnl1), .upnl2(upnl2), .upnl3(upnl3),
+        .realised(realised), .equity(equity), .pnl(pnl), .ret_bp(ret_bp), .max_dd_bp(max_dd_bp),
+        .bot_cash(bot_cash), .bot_pos0(bot_pos0), .bot_pos1(bot_pos1), .bot_pos2(bot_pos2), .bot_pos3(bot_pos3),
+        .bot_upnl0(bot_upnl0), .bot_upnl1(bot_upnl1), .bot_upnl2(bot_upnl2), .bot_upnl3(bot_upnl3),
+        .bot_realised(bot_realised), .bot_equity(bot_equity), .bot_pnl(bot_pnl),
+        .bot_ret_bp(bot_ret_bp), .bot_max_dd_bp(bot_max_dd_bp),
+        .bot_last_valid(bot_last_valid), .bot_last_stock(bot_last_stock), .bot_last_side(bot_last_side),
+        .bot_last_qty(bot_last_qty), .bot_last_price(bot_last_price)
     );
+
+    // The bot reports its most recent trade; the bot screen lists the last 5.
+    // A new trade is seen as a change in the reported one (the bot alternates
+    // buy / sell per stock, so two trades in a row always differ).
+    reg [27:0] bot_last_d;
+    wire [27:0] bot_last = {bot_last_valid, bot_last_side, bot_last_stock, bot_last_qty, bot_last_price};
+    always @(posedge clk) begin
+        if (sys_reset) begin
+            bot_last_d    <= 28'd0;
+            bot_trades    <= 8'd0;
+            bot_log_valid <= 5'd0;
+            bot_log_side  <= 5'd0;
+            bot_log_stock <= 10'd0;
+            bot_log_price <= 80'd0;
+            bot_log_day   <= 40'd0;
+        end else begin
+            bot_last_d <= bot_last;
+            if (bot_last_valid && bot_last != bot_last_d) begin
+                bot_trades    <= bot_trades + 8'd1;
+                bot_log_valid <= {bot_log_valid[3:0], 1'b1};
+                bot_log_side  <= {bot_log_side[3:0], bot_last_side};
+                bot_log_stock <= {bot_log_stock[7:0], bot_last_stock};
+                bot_log_price <= {bot_log_price[63:0], bot_last_price};
+                bot_log_day   <= {bot_log_day[31:0], trading_day_count[7:0]};
+            end
+        end
+    end
 
     // Portfolio history is sampled on the same simulated trading-day tick
     // that drives the order book. It uses live cash, positions, and prices.
@@ -288,20 +329,6 @@ module Integration_Top #(
         .price0(price0), .price1(price1), .price2(price2), .price3(price3),
         .portfolio_value(portfolio_value),
         .portfolio_samples(portfolio_samples_30)
-    );
-
-    // The bot (Tricia): its own cash and shares. A stub for now: active = 0, no trades.
-    bot_trader tricia_bot (
-        .clk(clk), .rst(sys_reset), .tick(tick), .game_live(game_state == `GS_PLAYING),
-        .day(trading_day_count[7:0] + 8'd1),
-        .price0(price0), .price1(price1), .price2(price2), .price3(price3),
-        .samples0(amd_samples_30), .samples1(mcd_samples_30),
-        .samples2(stock2_samples_30), .samples3(stock3_samples_30),
-        .active(bot_active), .cash(bot_cash), .pos0(bot_pos0), .pos1(bot_pos1), .pos2(bot_pos2), .pos3(bot_pos3),
-        .cb0(bot_cb0), .cb1(bot_cb1), .cb2(bot_cb2), .cb3(bot_cb3), .value(bot_value),
-        .signal(bot_signal), .trades(bot_trades),
-        .log_valid(bot_log_valid), .log_side(bot_log_side), .log_stock(bot_log_stock),
-        .log_price(bot_log_price), .log_day(bot_log_day)
     );
 
     // ================================================================ DOUGLAS: orders, ticket page

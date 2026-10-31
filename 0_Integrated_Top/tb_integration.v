@@ -151,7 +151,8 @@ module tb_integration;
         trade(0, 1, 1);
         check(n_fill == f0 + 1 && n_ord_req == o0 + 1 && dut.pos0 == 2,
               "valid sell generates one order and updates AMD position to 2");
-        check(dut.cash + dut.cb0 + dut.cb1 + dut.cb2 + dut.cb3 == 32'd1_000_000 + dut.realised,
+        check(dut.cash + dut.tricia_portfolio.cb0 + dut.tricia_portfolio.cb1
+              + dut.tricia_portfolio.cb2 + dut.tricia_portfolio.cb3 == 32'd1_000_000 + dut.realised,
               "Tricia: ledger invariant holds");
 
         // ---------------- limit buy 2 AMD 5% below the market, SL/TP 5%, set on the switches
@@ -171,10 +172,15 @@ module tb_integration;
         order_sw = 6'd0;
         press(C);
 
-        // ---------------- sw[15]: bot view (Tricia's stub for now); buttons ignored there
+        // ---------------- Tricia's bot trades on its own; sw[15] shows it, buttons ignored there
         repeat (6 * DAY) @(posedge clk);               // a few more trading days
-        check(!dut.bot_active && dut.bot_trades == 0 && dut.bot_value == 32'd1_000_000,
-              "Bot stub: inactive, no trades, value stays at the starting cash");
+        check(dut.tricia_portfolio.bot_err == 1'b0, "Tricia: the bot's ledger never rejected a bot fill");
+        check(dut.bot_cash + dut.tricia_portfolio.bcb0 + dut.tricia_portfolio.bcb1
+              + dut.tricia_portfolio.bcb2 + dut.tricia_portfolio.bcb3 == 32'd1_000_000 + dut.bot_realised,
+              "Tricia: the bot's ledger balances (cash + cost basis = start + realised)");
+        check(dut.bot_trades == 0 || dut.bot_log_valid[0],
+              "the bot's trade log fills as it trades");
+        $display("     bot: %0d trades, cash %0d c, equity %0d c", dut.bot_trades, dut.bot_cash, dut.bot_equity);
         view_sw = 1;
         repeat (5) @(posedge clk);
         check(dut.matthew_display.pixel_data_L == dut.matthew_display.bot_log_pixel,

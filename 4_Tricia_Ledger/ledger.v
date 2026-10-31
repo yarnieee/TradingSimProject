@@ -1,3 +1,4 @@
+`timescale 1ns / 1ps
 // ledger.v: portfolio ledger, top of the ledger block (Member C)
 // Datapath: holds cash, positions, cost basis (incl. buy fees) and realised P&L,
 // and wires together the three sub-modules:

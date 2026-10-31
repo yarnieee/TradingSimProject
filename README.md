@@ -23,7 +23,7 @@ C Tricia, D Matthew). Still to rename by its owner: `A_top` to `A_market_top`.
 
 1. Clone to a short path with no spaces:
    ```
-   git clone -b branch-team-integration-v2 https://github.com/yarnieee/TradingSimProject.git C:/EE2026/TradingSimProject
+   git clone -b branch-team-integration https://github.com/yarnieee/TradingSimProject.git C:/EE2026/TradingSimProject
    ```
 2. Open Vivado 2025.2 and type in the Tcl Console:
    ```

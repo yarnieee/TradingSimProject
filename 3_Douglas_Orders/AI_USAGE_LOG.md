@@ -322,3 +322,14 @@ book, return and drawdown fields. `Integration_Top`/`Integration.xdc`: VGA pins 
 Basys3 master XDC) and a multicycle constraint for the writer. Day 5 s, game 120 days; OLED day
 counters now 3 digits. All testbenches pass; frames recorded from the VGA pins in simulation were
 rebuilt into images to check the layout. Not yet built in Vivado or tried on a monitor.
+
+## 2026-10-31: cleaner VGA layout (branch-douglas-vga-display)
+
+**Asked for:** the VGA screen looked messy; make it cleaner and clearer.
+
+**Done by the AI:** `vga_cells.v` re-laid out as two panels with header bars (MARKET / YOUR
+PORTFOLIO, chart / HOLDINGS, YOU VS BOT / PENDING ORDERS), one colour rule (labels grey, values
+white, gains green, losses red, yellow for the selection), pending orders list only real orders,
+unheld stocks show a dash, "NOW" help on its own bar, switches on one line. `vga_screen.v`: two new
+palette colours and a wider chart (10 px a day, filling the left panel). All testbenches pass;
+frames re-recorded from the VGA pins to check the layout. Not yet tried on a monitor.

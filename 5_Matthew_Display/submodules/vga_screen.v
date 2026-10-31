@@ -13,7 +13,8 @@
 //   logic is given those 4 clocks (multicycle constraint in Integration.xdc).
 // Graphics, on top of the text:
 //   row 1        progress bar: how much of the game has gone (progress_w of 616 px)
-//   rows 10-17   chart of the selected stock, left panel: 30 days, scaled to its
+//   rows 10-17   chart of the selected stock, left panel (x 12..311, 10 px a day):
+//                30 days, scaled to its
 //                own low..high with a sequential divider (worked out once per
 //                frame), plus its stop-loss / take-profit levels as dashed lines
 // Pixel path (100 MHz, pipelined): counters -> RAM address -> RAM data -> font +
@@ -72,9 +73,11 @@ module vga_screen (
                 4'd5:    rgb = 12'hF44;   // red (a little light)
                 4'd6:    rgb = 12'h999;   // grey
                 4'd7:    rgb = 12'h126;   // navy (title bar)
-                4'd8:    rgb = 12'h333;   // dark grey (highlight, order line)
+                4'd8:    rgb = 12'h555;   // dark grey (small print)
                 4'd9:    rgb = 12'h515;   // plum
                 4'd10:   rgb = 12'hF90;   // orange
+                4'd11:   rgb = 12'h235;   // slate (panel header bars)
+                4'd12:   rgb = 12'h223;   // dark slate (selected row, order line)
                 default: rgb = 12'h000;
             endcase
         end
@@ -144,9 +147,11 @@ module vga_screen (
     reg  [9:0] h, v;
     reg  [5:0] cx;                             // cell column of h
     reg  [3:0] px;                             // pixel inside the cell, 0..11
+    reg  [4:0] bn;                             // chart day of h (10 px each from x 12), 0..29
+    reg  [3:0] bp;                             // pixel inside that day, 0..9
     always @(posedge clk) begin
         if (rst) begin
-            div4 <= 2'd0; h <= 10'd0; v <= 10'd0; cx <= 6'd0; px <= 4'd0;
+            div4 <= 2'd0; h <= 10'd0; v <= 10'd0; cx <= 6'd0; px <= 4'd0; bn <= 5'd0; bp <= 4'd0;
         end else begin
             div4 <= div4 + 2'd1;
             if (pe) begin
@@ -158,6 +163,9 @@ module vga_screen (
                     if (px == 4'd11) begin px <= 4'd0; cx <= cx + 6'd1; end
                     else px <= px + 4'd1;
                 end
+                if (h == 10'd11) begin bn <= 5'd0; bp <= 4'd0; end   // h becomes 12: day 0 starts
+                else if (bp == 4'd9) begin bp <= 4'd0; if (bn != 5'd29) bn <= bn + 5'd1; end
+                else bp <= bp + 4'd1;
             end
         end
     end
@@ -223,13 +231,16 @@ module vga_screen (
     // ------------------------------------------------------------ pixel pipeline
     // stage 1: RAM address and the pixel's position
     reg  [9:0] s1_h, s1_v;
-    reg  [3:0] s1_px;
+    reg  [3:0] s1_px, s1_bp;
+    reg  [4:0] s1_bn;
     reg        s1_vis, s1_hs, s1_vs;
     always @(posedge clk) begin
         rd_addr <= {v[8:4], cx};
         s1_h    <= h;
         s1_v    <= v;
         s1_px   <= px;
+        s1_bn   <= bn;
+        s1_bp   <= bp;
         s1_vis  <= (h < 10'd640) && (v < 10'd480);
         s1_hs   <= !((h >= 10'd656) && (h < 10'd752));     // sync pulses are low
         s1_vs   <= !((v >= 10'd490) && (v < 10'd492));
@@ -237,10 +248,11 @@ module vga_screen (
 
     // stage 1b: wait for the RAM (its data appears one clock after the address)
     reg  [9:0] p_h, p_v;
-    reg  [3:0] p_px;
+    reg  [3:0] p_px, p_bp;
+    reg  [4:0] p_bn;
     reg        p_vis, p_hs, p_vs;
     always @(posedge clk) begin
-        p_h <= s1_h; p_v <= s1_v; p_px <= s1_px;
+        p_h <= s1_h; p_v <= s1_v; p_px <= s1_px; p_bn <= s1_bn; p_bp <= s1_bp;
         p_vis <= s1_vis; p_hs <= s1_hs; p_vs <= s1_vs;
     end
 
@@ -253,17 +265,17 @@ module vga_screen (
                         .glyph_x(in_glyph ? gxx[3:1] : 3'd7), .glyph_y(in_glyph ? gyy[3:1] : 3'd7),
                         .pixel_on(glyph));
 
-    // chart area: x 12..251 (30 columns of 8), y 160..287; lines at y = 285 - height
-    wire       in_chart = (p_h >= 10'd10) && (p_h <= 10'd253) && (p_v >= 10'd160) && (p_v <= 10'd287);
-    wire       chart_edge = (p_h == 10'd10) || (p_h == 10'd253) || (p_v == 10'd160) || (p_v == 10'd287);
-    wire [9:0] bx    = p_h - 10'd12;
-    wire [4:0] bin   = (p_h < 10'd12) ? 5'd0 : (bx[9:3] > 7'd29) ? 5'd29 : bx[7:3];
+    // chart area: x 12..311 (30 days of 10 px), y 160..287; lines at y = 285 - height
+    wire       in_chart = (p_h >= 10'd12) && (p_h <= 10'd311) && (p_v >= 10'd160) && (p_v <= 10'd287);
+    wire       chart_edge = (p_v == 10'd287);                  // base line only
+    wire       chart_grid = ((p_v == 10'd165) || (p_v == 10'd225)) && p_h[1];   // dotted top and middle
+    wire [4:0] bin   = p_bn;
     wire [9:0] y_cur = 10'd285 - h_tab[bin];
     wire [9:0] y_prv = 10'd285 - h_tab[(bin == 5'd0) ? 5'd0 : bin - 5'd1];
     wire [9:0] y_sl  = 10'd285 - h_tab[30];
     wire [9:0] y_tp  = 10'd285 - h_tab[31];
     wire       on_line = ((p_v == y_cur) || (p_v + 10'd1 == y_cur)) ||                 // 2 px thick
-                         ((bx[2:0] == 3'd0) && (bin != 5'd0) && (p_h >= 10'd12) &&      // step from the previous day
+                         ((p_bp == 4'd0) && (bin != 5'd0) &&                             // step from the previous day
                           (((p_v >= y_prv) && (p_v <= y_cur)) || ((p_v <= y_prv) && (p_v >= y_cur))));
     wire       rising  = (stock_samples[16*29 +: 16] >= stock_samples[15:0]);
     wire       on_sl   = (sel_sl != 16'd0) && (p_v == y_sl) && !p_h[2];                 // dashed
@@ -280,10 +292,11 @@ module vga_screen (
         s2_text <= glyph ? rgb(rd_data[15:12]) : rgb(rd_data[11:8]);
         s2_gfx_on <= 1'b1;
         if (in_bar)                                 s2_gfx <= bar_on ? 12'hFC0 : 12'h222;
-        else if (in_chart && chart_edge)            s2_gfx <= 12'h444;
         else if (in_chart && on_line)               s2_gfx <= rising ? 12'h0F0 : 12'hF44;
         else if (in_chart && on_sl)                 s2_gfx <= 12'hF00;
         else if (in_chart && on_tp)                 s2_gfx <= 12'h0F0;
+        else if (in_chart && chart_edge)            s2_gfx <= 12'h444;
+        else if (in_chart && chart_grid)            s2_gfx <= 12'h333;
         else begin s2_gfx <= 12'h000; s2_gfx_on <= 1'b0; end
         s2_vis <= p_vis;
         s2_hs  <= p_hs;

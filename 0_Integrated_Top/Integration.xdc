@@ -92,3 +92,24 @@ set_property BITSTREAM.CONFIG.CONFIGRATE 33 [current_design]
 ## pixel of one frame.
 create_generated_clock -name clk_oled -source [get_ports clk] -divide_by 16 [get_pins matthew_display/clk_6_25MHz_inst/out_clk_reg/Q]
 set_clock_groups -asynchronous -group [get_clocks sys_clk_pin] -group [get_clocks clk_oled]
+
+## VGA (Basys3): 4 bits each of red, green, blue, and the two syncs
+set_property -dict { PACKAGE_PIN G19   IOSTANDARD LVCMOS33 } [get_ports {vgaRed[0]}]
+set_property -dict { PACKAGE_PIN H19   IOSTANDARD LVCMOS33 } [get_ports {vgaRed[1]}]
+set_property -dict { PACKAGE_PIN J19   IOSTANDARD LVCMOS33 } [get_ports {vgaRed[2]}]
+set_property -dict { PACKAGE_PIN N19   IOSTANDARD LVCMOS33 } [get_ports {vgaRed[3]}]
+set_property -dict { PACKAGE_PIN N18   IOSTANDARD LVCMOS33 } [get_ports {vgaBlue[0]}]
+set_property -dict { PACKAGE_PIN L18   IOSTANDARD LVCMOS33 } [get_ports {vgaBlue[1]}]
+set_property -dict { PACKAGE_PIN K18   IOSTANDARD LVCMOS33 } [get_ports {vgaBlue[2]}]
+set_property -dict { PACKAGE_PIN J18   IOSTANDARD LVCMOS33 } [get_ports {vgaBlue[3]}]
+set_property -dict { PACKAGE_PIN J17   IOSTANDARD LVCMOS33 } [get_ports {vgaGreen[0]}]
+set_property -dict { PACKAGE_PIN H17   IOSTANDARD LVCMOS33 } [get_ports {vgaGreen[1]}]
+set_property -dict { PACKAGE_PIN G17   IOSTANDARD LVCMOS33 } [get_ports {vgaGreen[2]}]
+set_property -dict { PACKAGE_PIN D17   IOSTANDARD LVCMOS33 } [get_ports {vgaGreen[3]}]
+set_property -dict { PACKAGE_PIN P19   IOSTANDARD LVCMOS33 } [get_ports Hsync]
+set_property -dict { PACKAGE_PIN R19   IOSTANDARD LVCMOS33 } [get_ports Vsync]
+
+## The VGA screen writer gives each character cell 4 clocks: the cell's content
+## (vga_cells) is only captured into wr_cell every fourth clock.
+set_multicycle_path -setup 4 -to [get_cells -hierarchical -filter {NAME =~ *vga_screen_inst/wr_cell_reg*}]
+set_multicycle_path -hold 3  -to [get_cells -hierarchical -filter {NAME =~ *vga_screen_inst/wr_cell_reg*}]

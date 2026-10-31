@@ -222,8 +222,8 @@ module text_layer (
         if (row == 3'd0) begin
             // ---------------------------------------------------- header bar
             bg = bot_view ? BOTHDR : HDR;
-            if (col >= 4'd13 && screen_state != `UI_GAME_END) begin
-                ch = (col == 4'd13) ? "D" : num_ch(n_days, 1'b0, 1'b0, 1'b0, 8'd0, 4'd2, col - 4'd14);
+            if (col >= 4'd12 && screen_state != `UI_GAME_END) begin   // days left: D120 .. D  1
+                ch = (col == 4'd12) ? "D" : num_ch(n_days, 1'b0, 1'b0, 1'b0, 8'd0, 4'd3, col - 4'd13);
                 fg = days_low ? RED : YELLOW;
             end else if (bot_view) begin
                 ch = str_ch("BOT VS YOU      ", col);
@@ -245,8 +245,8 @@ module text_layer (
                         if (col <= 4'd3) begin ch = str_ch(sell ? "SELL            " : "BUY             ", col); fg = side_col; end
                         else if (col >= 4'd5 && col <= 4'd8) ch = ticker_ch(s, col - 4'd5);
                     end
-                    `UI_QUANTITY:     ch = str_ch("SET QUANTITY    ", col);
-                    `UI_ORDER_REVIEW: ch = str_ch("REVIEW ORDER    ", col);
+                    `UI_QUANTITY:     ch = str_ch("QUANTITY        ", col);
+                    `UI_ORDER_REVIEW: ch = str_ch("REVIEW          ", col);
                     `UI_ORDER_RESULT: ch = str_ch("SENDING         ", col);
                     `UI_TRADE_RESULT: ch = str_ch("RESULT          ", col);
                     `UI_GAME_END:     begin ch = str_ch("   GAME OVER    ", col); fg = YELLOW; end

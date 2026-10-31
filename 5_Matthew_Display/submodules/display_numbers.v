@@ -57,6 +57,12 @@ module display_numbers #(
     input  wire signed [31:0] bot_upnl3,
     input  wire [79:0] log_price,         // bot log, newest first
     input  wire [39:0] log_day,
+    // order book (VGA order list) and Tricia's risk figures
+    input  wire [63:0]  book_qty,
+    input  wire [127:0] book_trig,
+    input  wire signed [31:0] ret_bp,
+    input  wire [31:0]  max_dd_bp,
+    input  wire signed [31:0] bot_ret_bp,
     output reg  [`DN_N*32-1:0] bcd,
     output reg  [`DN_N-1:0]    neg
 );
@@ -67,7 +73,10 @@ module display_numbers #(
     // ------------------------------------------------------------ which stock / log entry
     reg [2:0] k;               // stock 0-3 or log entry 0-4 of this field
     always @* begin
-        if      (idx >= `DN_LOGDAY0) k = idx - `DN_LOGDAY0;
+        if      (idx >= `DN_RET)     k = 3'd0;
+        else if (idx >= `DN_SLT0)    k = idx - `DN_SLT0;
+        else if (idx >= `DN_SLQ0)    k = idx - `DN_SLQ0;
+        else if (idx >= `DN_LOGDAY0) k = idx - `DN_LOGDAY0;
         else if (idx >= `DN_LOGPX0)  k = idx - `DN_LOGPX0;
         else if (idx >= `DN_BPNL0)   k = idx - `DN_BPNL0;
         else if (idx >= `DN_BPOS0)   k = idx - `DN_BPOS0;
@@ -141,8 +150,19 @@ module display_numbers #(
                 val_neg = bot_value < START_CASH;
                 val     = val_neg ? START_CASH - bot_value : bot_value - START_CASH;
             end
+            `DN_RET: begin
+                val_neg = ret_bp < 0;
+                val     = val_neg ? -ret_bp : ret_bp;
+            end
+            `DN_MAXDD:  val = max_dd_bp;
+            `DN_BRET: begin
+                val_neg = bot_ret_bp < 0;
+                val     = val_neg ? -bot_ret_bp : bot_ret_bp;
+            end
             default: begin
-                if (idx >= `DN_LOGDAY0)      val = {24'd0, log_day[8*k +: 8]};
+                if (idx >= `DN_SLT0)         val = {16'd0, book_trig[16*k +: 16]};
+                else if (idx >= `DN_SLQ0)    val = {24'd0, book_qty[8*k +: 8]};
+                else if (idx >= `DN_LOGDAY0) val = {24'd0, log_day[8*k +: 8]};
                 else if (idx >= `DN_LOGPX0)  val = {16'd0, log_price[16*k +: 16]};
                 else if ((idx >= `DN_BPNL0) || (idx >= `DN_PNL0 && idx < `DN_CHG)) begin   // P/L of stock k
                     val_neg = upnl_k < 0;

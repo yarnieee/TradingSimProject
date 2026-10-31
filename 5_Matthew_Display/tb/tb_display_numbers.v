@@ -39,6 +39,8 @@ module tb_display_numbers;
         .bot_cash(bcash), .bot_value(bval), .bot_pos0(bp0), .bot_pos1(bp1), .bot_pos2(bp2), .bot_pos3(bp3),
         .bot_upnl0(bu0), .bot_upnl1(bu1), .bot_upnl2(bu2), .bot_upnl3(bu3),
         .log_price(lpx), .log_day(lday),
+        .book_qty({48'd0, 8'd5, 8'd12}), .book_trig({96'd0, 16'd21743, 16'd29704}),
+        .ret_bp(-32'sd81), .max_dd_bp(32'd91), .bot_ret_bp(32'sd1579),
         .bcd(bcd), .neg(neg)
     );
 
@@ -89,6 +91,12 @@ module tb_display_numbers;
         check(`DN_LOGPX0,  32'h00021350, 0, "bot log newest price 213.50");
         check(`DN_LOGPX0+1,32'h00021000, 0, "bot log second price 210.00");
         check(`DN_LOGDAY0, 32'h00000009, 0, "bot log newest day 9");
+        check(`DN_SLQ0,    32'h00000012, 0, "book slot 0 quantity 12");
+        check(`DN_SLT0,    32'h00029704, 0, "book slot 0 price 297.04");
+        check(`DN_SLT0+1,  32'h00021743, 0, "book slot 1 price 217.43");
+        check(`DN_RET,     32'h00000081, 1, "return -0.81% (basis points)");
+        check(`DN_MAXDD,   32'h00000091, 0, "max drawdown 0.91%");
+        check(`DN_BRET,    32'h00001579, 0, "bot return +15.79%");
 
         otype = `OT_LMT; qty = 2;
         refresh;

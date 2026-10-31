@@ -24,12 +24,14 @@
 //                 > quantity > review > result)
 //   JB (right)    Matthew's game screens
 //   JA (left)     Douglas's order ticket (title artwork on the title screen)
+//   VGA           the whole game on a monitor (640 x 480): prices, portfolio, chart, orders,
+//                 bot vs you, what to press, the switch settings
 //   7-seg         Matthew's quantity
 //   led[7:4]      Matthew's screen_state;  led[15] fill;  led[14] reject;  led[11:8] pending orders
 module Integration_Top #(
-    parameter DAY_MAX_COUNT = 199_999_999,      // Yi An: 2 s per trading day
+    parameter DAY_MAX_COUNT = 499_999_999,      // Yi An: 5 s per trading day
     parameter DEBOUNCE_CTR  = 32'd1_999_999,    // Matthew: 20 ms
-    parameter FINAL_TRADING_DAY = 32'd60       // Game ends after this many days (60 x 2 s = 2 minutes)
+    parameter FINAL_TRADING_DAY = 32'd120      // Game ends after this many days (120 x 5 s = 10 minutes)
 ) (
     input  wire        clk,
     input  wire        rst,
@@ -40,6 +42,11 @@ module Integration_Top #(
     input  wire        btnL,
     input  wire        btnR,
     input  wire        btnC,
+    output wire [3:0]  vgaRed,
+    output wire [3:0]  vgaGreen,
+    output wire [3:0]  vgaBlue,
+    output wire        Hsync,
+    output wire        Vsync,
     output wire [7:0]  JA,
     output wire [7:0]  JB,
     output wire [15:0] led,
@@ -96,6 +103,12 @@ module Integration_Top #(
     wire [15:0] ord_trig;
     wire        ord_placed, res_submit;
     wire [63:0] sl_price, tp_price;
+    wire [7:0]   book_valid, book_side, book_leg;
+    wire [15:0]  book_stock, book_type;
+    wire [63:0]  book_qty;
+    wire [127:0] book_trig;
+    wire signed [31:0] ret_bp, bot_ret_bp;
+    wire [31:0]  max_dd_bp;
     wire        fill, reject;
     // bot
     wire [31:0] bot_cash, bot_equity;
@@ -156,7 +169,12 @@ module Integration_Top #(
         .portfolio_upnl2(upnl2), .portfolio_upnl3(upnl3),
         .portfolio_samples_30(portfolio_samples_30),
         .ord_req(ord_req), .ord_side(ord_side),
-        .ord_type(ord_type), .ord_trig(ord_trig), .ord_brk(ord_brk), .game_state(game_state),
+        .ord_type(ord_type), .ord_trig(ord_trig), .ord_brk(ord_brk), .ord_dist(osw[5:4]),
+        .ret_bp(ret_bp), .max_dd_bp(max_dd_bp), .bot_ret_bp(bot_ret_bp),
+        .book_valid(book_valid), .book_side(book_side), .book_stock(book_stock),
+        .book_type(book_type), .book_qty(book_qty), .book_trig(book_trig), .book_leg(book_leg),
+        .game_state(game_state),
+        .vga_r(vgaRed), .vga_g(vgaGreen), .vga_b(vgaBlue), .vga_hs(Hsync), .vga_vs(Vsync),
         .JA(JA), .JB(JB), .an(an), .seg(seg)
     );
 
@@ -270,8 +288,8 @@ module Integration_Top #(
                              && (trading_day_count == (FINAL_TRADING_DAY - 1'b1));
 
     // ================================================================ TRICIA: portfolio (ledger, risk, bot)
-    wire signed [31:0] realised, pnl, ret_bp, bot_realised, bot_pnl, bot_ret_bp;
-    wire [31:0] equity, max_dd_bp, bot_max_dd_bp;
+    wire signed [31:0] realised, pnl, bot_realised, bot_pnl;
+    wire [31:0] equity, bot_max_dd_bp;
     wire        ledger_busy, ledger_err;
     wire        fill_side;
     wire [1:0]  fill_stock;
@@ -349,6 +367,8 @@ module Integration_Top #(
         .reject(reject), .reject_code(reject_code), .pending_count(pending_count),
         .ord_placed(ord_placed), .res_submit(res_submit),
         .sl_price(sl_price), .tp_price(tp_price),
+        .book_valid(book_valid), .book_side(book_side), .book_stock(book_stock),
+        .book_type(book_type), .book_qty(book_qty), .book_trig(book_trig), .book_leg(book_leg),
         .ticket_pixel(ticket_pixel)
     );
 

@@ -52,6 +52,12 @@ Each test prints `PASS` or `FAIL`.
 | sw[7:6] | trigger distance from the price: `00` 1%, `01` 2%, `10` 5%, `11` 10% |
 | sw[15] | view: down = you (the game), up = the bot (buttons do nothing while up) |
 
+**VGA monitor** (plug a monitor into the Basys3 VGA port): shows everything at once, 640 x 480,
+updated live: the four stocks and their trend, your net worth, cash, profit/loss, return and largest
+drawdown, the selected stock's 30-day chart with your stop-loss / take-profit levels, your holdings,
+every pending order, you against the bot and its last trades, the order you are making, what the
+buttons do on the current screen, and what the switches are set to.
+
 Screens: the right OLED shows the game, the left OLED your order ticket (and title artwork on the
 title screen). The 7-seg shows the quantity being set; LEDs flash on a fill (led 15) or a
 reject (led 14) and show pending orders (led 11-8).
@@ -76,6 +82,6 @@ reject (led 14) and show pending orders (led 11-8).
 left its last trades. Tricia's bot trades every day on its own ledger: it buys 20 shares when a price
 is above its 8-day average, and sells them when it falls below.
 
-**Days**: a game is 60 trading days of 2 seconds each, about 2 minutes (`FINAL_TRADING_DAY` in
-`Integration_Top`). The header shows the days left (`D57`, red in the last 5) and a yellow bar along
+**Days**: a game is 120 trading days of 5 seconds each, 10 minutes (`FINAL_TRADING_DAY` and
+`DAY_MAX_COUNT` in `Integration_Top`). The header shows the days left (`D117`, red in the last 5) and a yellow bar along
 its bottom edge fills as the game goes on. After the last day the GAME OVER screen shows your result.

@@ -5,7 +5,7 @@
 // bot_log_page: the left OLED in the bot view (sw15 up), on the text_grid layout.
 //
 //   row 0     BOT TRADES          header (plum, as the bot view on the right OLED)
-//   rows 1-5  09 B AMD   213.50   the bot's last 5 trades, newest first (NO BOT YET
+//   rows 1-5  009B AMD   213.50   the bot's last 5 trades, newest first (NO BOT YET
 //                                 while bot_trader is still the stub):
 //                                 day, Buy / Sell (green / red), stock, price
 //   row 6     RULE: BUY >MA8      the bot's rule (Tricia's bot_trader)
@@ -105,8 +105,8 @@ module bot_log_page #(
                 if (row == 3'd1) begin ch = str_ch("NO BOT YET      ", col); fg = GREY; end
             end else if (!e_v) begin
                 if (row == 3'd1) begin ch = str_ch("NO TRADES YET   ", col); fg = GREY; end
-            end else if (col <= 4'd1) begin                          // day
-                ch = "0" + e_day[4*(1 - col) +: 4];
+            end else if (col <= 4'd2) begin                          // day, 3 digits
+                ch = "0" + e_day[4*(2 - col) +: 4];
                 fg = GREY;
             end else if (col == 4'd3) begin                          // B / S
                 ch = e_s ? "S" : "B";

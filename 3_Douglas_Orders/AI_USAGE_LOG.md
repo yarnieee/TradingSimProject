@@ -307,3 +307,18 @@ modules are unchanged. `Integration_Top` now instantiates `C_portfolio_top` (led
 instead of `ledger`; a small log there keeps the bot's last 5 trades from her last-trade outputs.
 `display_numbers` / `D_display_top` take her per-stock P/L (`upnl`) instead of cost basis. All
 testbenches pass, including hers.
+
+## 2026-10-31: VGA monitor and a 10-minute game (branch-douglas-vga-display)
+
+**Asked for:** show the whole game and how to use the board on a VGA monitor (OLEDs unchanged);
+make the game 10 minutes with 5-second days.
+
+**Done by the AI:** `5_Matthew_Display/submodules/vga_screen.v` (640 x 480 @ 60 Hz from the 100 MHz
+clock, character RAM in one block RAM filled by a background writer, chart with a sequential divider,
+progress bar, 4-clock pixel pipeline) and `vga_cells.v` (the content of every cell: market, portfolio,
+chart, holdings, pending orders, bot vs you, the order line, "NOW" help, switch settings);
+`tb_vga_screen` (timing and pixels). `B_order_top` exposes its 8 book slots; `display_numbers` gains
+book, return and drawdown fields. `Integration_Top`/`Integration.xdc`: VGA pins (checked against the
+Basys3 master XDC) and a multicycle constraint for the writer. Day 5 s, game 120 days; OLED day
+counters now 3 digits. All testbenches pass; frames recorded from the VGA pins in simulation were
+rebuilt into images to check the layout. Not yet built in Vivado or tried on a monitor.

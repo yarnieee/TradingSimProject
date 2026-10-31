@@ -68,6 +68,7 @@
 //   res_submit     1      Matthew: game_fsm             with fill/reject: the order just sent, not the book's
 //   sl_price,      [63:0] Matthew: chart                SL / TP levels in the book per stock (0 = none),
 //   tp_price                                            drawn as dashed lines on the stock chart
+//   book_*                Matthew: VGA screen           every pending order in the book (8 slots)
 //   ticket_pixel   [15:0] Matthew: D_display_top          RGB565 colour of the ticket page at (xR, yR),
 //                         (left_pixel) -> left OLED JA  drawn rotated 180 degrees (TICKET_FLIP_180)
 module B_order_top #(
@@ -126,6 +127,15 @@ module B_order_top #(
     // stock k is bits [16k+15:16k]
     output reg  [63:0] sl_price,
     output reg  [63:0] tp_price,
+    // every book slot (for the VGA order list); slot k is bit [k], [2k+1:2k],
+    // [8k+7:8k], [16k+15:16k]; book_leg = an SL/TP leg (STP = stop-loss, LMT = take-profit)
+    output wire [7:0]   book_valid,
+    output wire [7:0]   book_side,
+    output wire [15:0]  book_stock,
+    output wire [15:0]  book_type,
+    output wire [63:0]  book_qty,
+    output wire [127:0] book_trig,
+    output wire [7:0]   book_leg,
     // Ticket page pixel (Matthew)
     output wire [15:0] ticket_pixel
 );
@@ -234,6 +244,13 @@ module B_order_top #(
         .reject(reject), .reject_code(reject_code), .res_submit(res_submit)
     );
     assign ord_placed = placed;
+    assign book_valid = bk_valid;
+    assign book_side  = bk_side;
+    assign book_stock = bk_stock;
+    assign book_type  = bk_type;
+    assign book_qty   = bk_qty;
+    assign book_trig  = bk_trig;
+    assign book_leg   = bk_leg;
 
     // rd_* is for testbenches; the ORDERS view reads every slot through all_*
     order_book #(.SPREAD(SPREAD)) u_book (

@@ -89,7 +89,12 @@
 `define DN_BPNL0   30   // bot: profit/loss of stock 0..3: DN_BPNL0 + k
 `define DN_LOGPX0  34   // bot log entry 0..4 (0 newest): price, DN_LOGPX0 + n
 `define DN_LOGDAY0 39   // bot log entry 0..4: day, DN_LOGDAY0 + n
-`define DN_N       44
+`define DN_SLQ0    44   // order book slot 0..7: quantity, DN_SLQ0 + n
+`define DN_SLT0    52   // order book slot 0..7: trigger price, DN_SLT0 + n
+`define DN_RET     60   // player's return, basis points (312 = 3.12%)
+`define DN_MAXDD   61   // player's largest drawdown, basis points
+`define DN_BRET    62   // bot's return, basis points
+`define DN_N       63
 
 // btn_pulse bit positions, in Basys3 master XDC order (btnC, btnU, btnL, btnR, btnD)
 `define BTN_C 0

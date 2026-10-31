@@ -9,6 +9,9 @@
 //                    title artwork on the title screen
 //   bot_view (sw15): JB shows the bot against the player, JA the bot's last trades;
 //                    the buttons are ignored while it is up
+//   VGA monitor:     everything at once (vga_screen): market, portfolio, chart,
+//                    holdings, pending orders, bot vs you, the order being made,
+//                    what to press now, and the switch settings
 //
 // The order's type, trigger price and SL/TP come from the switches (worked out
 // in Integration_Top) and are shown on the BUY / SELL and review screens.
@@ -19,7 +22,7 @@
 // Every number on the screens comes from display_numbers as decimal digits.
 module D_display_top #(
     parameter DEBOUNCE_CTR      = 32'd1_999_999,
-    parameter FINAL_TRADING_DAY = 32'd60        // for the game-progress bar (set by Integration_Top)
+    parameter FINAL_TRADING_DAY = 32'd120       // for the game-progress bar (set by Integration_Top)
 ) (
     input  wire        clk,
     input  wire        rst,
@@ -92,10 +95,27 @@ module D_display_top #(
     input  wire [1:0]  ord_type,          // the order's type, trigger and SL/TP (from the switches)
     input  wire [15:0] ord_trig,
     input  wire [1:0]  ord_brk,
+    input  wire [1:0]  ord_dist,          // sw[7:6]: trigger distance 1/2/5/10% (shown on the monitor)
+    // Tricia's risk figures and Douglas's order book, for the monitor
+    input  wire signed [31:0] ret_bp,
+    input  wire [31:0] max_dd_bp,
+    input  wire signed [31:0] bot_ret_bp,
+    input  wire [7:0]   book_valid,
+    input  wire [7:0]   book_side,
+    input  wire [15:0]  book_stock,
+    input  wire [15:0]  book_type,
+    input  wire [63:0]  book_qty,
+    input  wire [127:0] book_trig,
+    input  wire [7:0]   book_leg,
     output wire [2:0]  trade_result_code,
     output wire        trade_result_success,
     output wire [1:0]  game_state,
     // Board outputs.
+    output wire [3:0]  vga_r,
+    output wire [3:0]  vga_g,
+    output wire [3:0]  vga_b,
+    output wire        vga_hs,
+    output wire        vga_vs,
     output wire [7:0]  JA,
     output wire [7:0]  JB,
     output wire [3:0]  an,
@@ -293,6 +313,8 @@ module D_display_top #(
         .bot_pos0(bot_pos0), .bot_pos1(bot_pos1), .bot_pos2(bot_pos2), .bot_pos3(bot_pos3),
         .bot_upnl0(bot_upnl0), .bot_upnl1(bot_upnl1), .bot_upnl2(bot_upnl2), .bot_upnl3(bot_upnl3),
         .log_price(bot_log_price), .log_day(bot_log_day),
+        .book_qty(book_qty), .book_trig(book_trig),
+        .ret_bp(ret_bp), .max_dd_bp(max_dd_bp), .bot_ret_bp(bot_ret_bp),
         .bcd(numbers_bcd), .neg(numbers_neg)
     );
 
@@ -300,14 +322,39 @@ module D_display_top #(
     // game progress bar: days gone / all days, as 0..96 pixels (registered)
     wire [31:0] days_gone = (time_remaining < FINAL_TRADING_DAY) ? FINAL_TRADING_DAY - time_remaining : 32'd0;
     reg  [6:0]  progress_w;
+    reg  [9:0]  vga_progress_w;               // the monitor's bar is 616 px wide
     always @(posedge clk) begin
-        if (rst) progress_w <= 7'd0;
-        else     progress_w <= (FINAL_TRADING_DAY == 0) ? 7'd0 : (days_gone * 32'd96) / FINAL_TRADING_DAY;
+        if (rst) begin
+            progress_w     <= 7'd0;
+            vga_progress_w <= 10'd0;
+        end else begin
+            progress_w     <= (FINAL_TRADING_DAY == 0) ? 7'd0  : (days_gone * 32'd96)  / FINAL_TRADING_DAY;
+            vga_progress_w <= (FINAL_TRADING_DAY == 0) ? 10'd0 : (days_gone * 32'd616) / FINAL_TRADING_DAY;
+        end
     end
 
     // each stock against its price 30 days ago (oldest sample), for green/red
     wire [3:0] stock_up = {price3 >= stock3_samples_30[15:0], price2 >= stock2_samples_30[15:0],
                            price1 >= stock1_samples_30[15:0], price0 >= stock0_samples_30[15:0]};
+
+    // ================================================================ VGA monitor
+    vga_screen vga_screen_inst (
+        .clk(clk), .rst(rst),
+        .screen_state(screen_state), .menu_selection(menu_selection), .selected_stock(selected_stock),
+        .trade_side(trade_side), .trade_result_success(trade_result_success),
+        .trade_result_placed(trade_result_placed), .trade_result_code(trade_result_code),
+        .order_valid(order_valid), .validation_code(validation_code),
+        .order_type(ord_type), .order_brk(ord_brk), .order_dist(ord_dist),
+        .oled_bot_view(bot_view), .stock_up(stock_up),
+        .bcd(numbers_bcd), .neg(numbers_neg),
+        .book_valid(book_valid), .book_side(book_side), .book_stock(book_stock),
+        .book_type(book_type), .book_leg(book_leg),
+        .log_valid(bot_log_valid), .log_side(bot_log_side), .log_stock(bot_log_stock),
+        .stock_samples(selected_samples_30), .sel_sl(sel_sl), .sel_tp(sel_tp),
+        .progress_w(vga_progress_w),
+        .vga_r(vga_r), .vga_g(vga_g), .vga_b(vga_b), .hsync(vga_hs), .vsync(vga_vs)
+    );
+
 
     OLED_Renderer oled_renderer_R (
         .pixel_index(pixel_index_R),

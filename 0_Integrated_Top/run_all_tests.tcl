@@ -10,6 +10,7 @@ set all_tbs {
     tb_integration
     tb_chart_renderer
     tb_display_numbers
+    tb_vga_screen
     tb_yian_market
     tb_stock_price
     tb_normalise_lfsr

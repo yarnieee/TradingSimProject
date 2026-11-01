@@ -350,3 +350,18 @@ index widened to 7 bits in `text_layer.v` and the tb). `Integration.xdc`: the pi
 unrelated to the 100 MHz clock. `tb_vga_screen` rewritten for the new timing; all testbenches pass
 and frames recorded from the VGA pins were rebuilt into images. Not yet built in Vivado or tried on
 a monitor.
+
+## 2026-11-01: market price worked out over several clocks (branch-douglas-vga-display)
+
+**Asked for:** fix Yi An's part of the timing failure. Matthew's Vivado build missed timing at
+100 MHz (WNS -39.978 ns), worst path from a stock's LFSR to `current_close`.
+
+**Done by the AI:** `2_YiAn_Market_Engine/submodules/stock.v`: the next close and date are no longer
+computed in one clock. After `day_tick` the stock does one small step per clock (offset x volatility,
+/ 50 as an exact multiply-and-shift, x previous close, / 100 one bit per clock, clamp, date) and
+updates close, date, calendar and history together 30 clocks later. Same result as
+`calculate_next_close`, which is kept as the reference. All four stocks still change on the same
+clock, so `Integration_Top` is unchanged. New `tb_stock_pipeline` (3,000 days against the formula and
+a reference calendar; checked to fail on planted bugs), added to `run_all_tests.tcl`. All testbenches
+pass. Yosys estimate per stock: about 990 -> 290 LUTs, logic depth 47 -> 10 LUT levels. Timing not
+yet re-checked in Vivado.

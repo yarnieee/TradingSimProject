@@ -180,58 +180,151 @@ module stock #(
         end
     endfunction
 
-    reg [25:0] next_calendar_parts;
-    reg [2:0]  next_calendar_weekday;
-    reg [31:0] next_date;
-    integer calendar_step;
-    integer calendar_steps;
-
-    always @(*) begin
-        next_calendar_parts = {calendar_year, calendar_month, calendar_day};
-        next_calendar_weekday = calendar_weekday;
-
-        // Friday advances three calendar days to Monday; every other
-        // trading day advances one calendar day.
-        if (calendar_weekday == 3'd6)
-            calendar_steps = 3;
-        else
-            calendar_steps = 1;
-
-        for (calendar_step = 0; calendar_step < 3; calendar_step = calendar_step + 1) begin
-            if (calendar_step < calendar_steps) begin
-                next_calendar_parts = increment_calendar_day(
-                    next_calendar_parts[25:10],
-                    next_calendar_parts[9:6],
-                    next_calendar_parts[5:0]
-                );
-                if (next_calendar_weekday == 3'd6)
-                    next_calendar_weekday = 3'd0;
-                else
-                    next_calendar_weekday = next_calendar_weekday + 1'b1;
-            end
-        end
-
-        // Convert the tracked components back to the existing YYYYMMDD
-        // output format.  These constant multiplications synthesize to
-        // shifts/adds; no variable divider is required.
-        next_date = (next_calendar_parts[25:10] * 32'd10000)
-            + (next_calendar_parts[9:6] * 32'd100)
-            + next_calendar_parts[5:0];
-    end
-
+    // Reference model of the next close, used by the testbenches only.
+    // Nothing in the hardware reads it, so synthesis removes it.
     wire [15:0] next_close;
     assign next_close = calculate_next_close(current_close,
         normalized_random, market_state);
+
+    // ------------------------------------------------------------ next trading day
+    // The next close and date are worked out one small step per clock after
+    // day_tick (30 clocks, 0.3 us; a trading day lasts seconds), so no long
+    // chain of arithmetic has to finish inside one 10 ns clock.  The result is
+    // the same as calculate_next_close.  Close, date, calendar and history all
+    // change together on the P_COMMIT clock, and every stock takes the same
+    // number of clocks, so the four stocks still move on the same clock.
+    localparam integer VOL = (VOLATILITY < 0) ? 0 :
+                             (VOLATILITY > 100) ? 100 : VOLATILITY;
+
+    localparam [2:0] P_IDLE   = 3'd0,
+                     P_OFFSET = 3'd1,   // (50 - adjusted random) * VOL
+                     P_DELTA  = 3'd2,   // multiplier = 100 + offset / 50
+                     P_SCALE  = 3'd3,   // previous close * multiplier
+                     P_DIV    = 3'd4,   // / 100, one quotient bit a clock (24 clocks)
+                     P_CLAMP  = 3'd5,   // 1..65534; year part of the date
+                     P_DATE   = 3'd6,   // YYYYMMDD
+                     P_COMMIT = 3'd7;   // new close, date, calendar and history
+
+    reg [2:0]         p_state;
+    reg [7:0]         p_rand;           // random value and market state seen on day_tick
+    reg [1:0]         p_mstate;
+    reg [15:0]        p_prev;           // close before day_tick
+    reg signed [13:0] p_offset;         // -5000..5000
+    reg [7:0]         p_mult;           // 0..200
+    reg [23:0]        p_num;            // close * multiplier, shifted into the quotient
+    reg [6:0]         p_rem;            // divider remainder, below 100
+    reg [4:0]         p_bit;            // quotient bits still to do
+    reg [15:0]        p_close;
+    reg [31:0]        p_year_part;      // year * 10000
+    reg [31:0]        p_date;
+    reg [1:0]         p_days;           // calendar days still to add (3 on a Friday)
+    reg [15:0]        p_year;           // calendar for the new day, one day per clock
+    reg [3:0]         p_month;
+    reg [5:0]         p_day;
+    reg [2:0]         p_weekday;
+
+    wire        p_commit = (p_state == P_COMMIT);
+
+    // / 50 of |offset| <= 5000 as * 5243 >> 18 (exact for 0..5000);
+    // the sign goes back on after, so the result rounds toward zero
+    wire [12:0] p_offset_abs = p_offset[13] ? -p_offset : p_offset;
+    wire [25:0] p_pct_full   = p_offset_abs * 13'd5243;
+    wire [6:0]  p_pct        = p_pct_full[24:18];
+
+    // one restoring-division step by 100
+    wire [7:0]  p_rem_shift  = {p_rem, p_num[23]};
+    wire        p_fits       = (p_rem_shift >= 8'd100);
+
+    wire [25:0] p_next_cal   = increment_calendar_day(p_year, p_month, p_day);
+
+    always @(posedge clk) begin
+        if (rst) begin
+            p_state     <= P_IDLE;
+            p_rand      <= 8'd0;
+            p_mstate    <= 2'd0;
+            p_prev      <= 16'd0;
+            p_offset    <= 14'sd0;
+            p_mult      <= 8'd0;
+            p_num       <= 24'd0;
+            p_rem       <= 7'd0;
+            p_bit       <= 5'd0;
+            p_close     <= 16'd0;
+            p_year_part <= 32'd0;
+            p_date      <= 32'd0;
+            p_days      <= 2'd0;
+            p_year      <= INITIAL_YEAR;
+            p_month     <= INITIAL_MONTH;
+            p_day       <= INITIAL_DAY;
+            p_weekday   <= INITIAL_WEEKDAY;
+        end else begin
+            // calendar: one day per clock while the price is worked out
+            if (p_days != 2'd0) begin
+                {p_year, p_month, p_day} <= p_next_cal;
+                p_weekday <= (p_weekday == 3'd6) ? 3'd0 : p_weekday + 1'b1;
+                p_days    <= p_days - 1'b1;
+            end
+
+            case (p_state)
+                P_IDLE: if (ready && day_tick) begin
+                    p_rand    <= normalized_random;
+                    p_mstate  <= market_state;
+                    p_prev    <= current_close;
+                    p_year    <= calendar_year;
+                    p_month   <= calendar_month;
+                    p_day     <= calendar_day;
+                    p_weekday <= calendar_weekday;
+                    // Friday advances three calendar days to Monday
+                    p_days    <= (calendar_weekday == 3'd6) ? 2'd3 : 2'd1;
+                    p_state   <= P_OFFSET;
+                end
+                P_OFFSET: begin
+                    p_offset <= (8'sd50 - $signed({1'b0, adjust_random_for_market(p_rand, p_mstate)}))
+                                * VOL;
+                    p_state  <= P_DELTA;
+                end
+                P_DELTA: begin
+                    p_mult  <= p_offset[13] ? 8'd100 - p_pct : 8'd100 + p_pct;
+                    p_state <= P_SCALE;
+                end
+                P_SCALE: begin
+                    p_num   <= p_prev * p_mult;
+                    p_rem   <= 7'd0;
+                    p_bit   <= 5'd23;
+                    p_state <= P_DIV;
+                end
+                P_DIV: begin
+                    p_rem <= p_fits ? p_rem_shift - 8'd100 : p_rem_shift[6:0];
+                    p_num <= {p_num[22:0], p_fits};
+                    p_bit <= p_bit - 1'b1;
+                    if (p_bit == 5'd0)
+                        p_state <= P_CLAMP;
+                end
+                P_CLAMP: begin
+                    // 16'hFFFF is reserved as an invalid/saturated value by the
+                    // market and order-engine testbenches.
+                    p_close     <= (p_num < 24'd1)     ? 16'd1 :
+                                   (p_num > 24'd65534) ? 16'd65534 : p_num[15:0];
+                    p_year_part <= p_year * 32'd10000;
+                    p_state     <= P_DATE;
+                end
+                P_DATE: begin
+                    p_date  <= p_year_part + (p_month * 32'd100) + p_day;
+                    p_state <= P_COMMIT;
+                end
+                default: p_state <= P_IDLE;   // P_COMMIT: the block below takes the results
+            endcase
+        end
+    end
 
     wire buffer_write;
     wire [15:0] buffer_close;
     wire [31:0] buffer_volume;
     wire [31:0] buffer_date;
 
-    assign buffer_write = !ready || day_tick;
-    assign buffer_close = ready ? next_close : seed_close;
+    assign buffer_write = !ready || p_commit;
+    assign buffer_close = ready ? p_close : seed_close;
     assign buffer_volume = ready ? current_volume : seed_volume;
-    assign buffer_date = ready ? next_date : seed_date;
+    assign buffer_date = ready ? p_date : seed_date;
 
     last_x_storage #(
         .X(BUFFER_DEPTH),
@@ -290,13 +383,13 @@ module stock #(
             end else begin
                 seed_index <= seed_index + 1'b1;
             end
-        end else if (day_tick) begin
-            current_close <= next_close;
-            current_date <= next_date;
-            calendar_year <= next_calendar_parts[25:10];
-            calendar_month <= next_calendar_parts[9:6];
-            calendar_day <= next_calendar_parts[5:0];
-            calendar_weekday <= next_calendar_weekday;
+        end else if (p_commit) begin
+            current_close <= p_close;
+            current_date <= p_date;
+            calendar_year <= p_year;
+            calendar_month <= p_month;
+            calendar_day <= p_day;
+            calendar_weekday <= p_weekday;
         end
     end
 

@@ -13,6 +13,7 @@ set all_tbs {
     tb_vga_screen
     tb_yian_market
     tb_stock_price
+    tb_stock_pipeline
     tb_normalise_lfsr
     tb_matthew_game_fsm
     tb_ledger

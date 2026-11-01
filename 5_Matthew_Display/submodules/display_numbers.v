@@ -12,6 +12,15 @@
 //
 // bcd[32*f +: 32] is field f, digit 0 (ones) in bits [3:0].
 // neg[f] is 1 when field f is negative (P/L and price change only).
+//
+// The screens read the fields from RAM, one field at a time by its number,
+// each from its own copy (word {negative, 8 digits}):
+//   vga_f -> vga_rd     LUT RAM, read without a clock (the VGA writer)
+//   oled_f -> oled_rd   block RAM, read on clk (the right OLED; a pixel is
+//                       sent at least 160 ns after its index changes)
+// zero[f] says field f is 0; lead / tie compare the player's and the bot's
+// net worth as shown. Anything that reads only these leaves the bcd bus
+// unused, and synthesis removes the unused part of it.
 module display_numbers #(
     parameter [31:0] START_CASH = 32'd1_000_000,   // cents
     parameter [15:0] SPREAD     = 16'd5,           // cents, as in B_order_top
@@ -69,7 +78,15 @@ module display_numbers #(
     input  wire [31:0]  max_dd_bp,
     input  wire signed [31:0] bot_ret_bp,
     output reg  [`DN_N*32-1:0] bcd,
-    output reg  [`DN_N-1:0]    neg
+    output reg  [`DN_N-1:0]    neg,
+    // the same fields in RAM, for the screens
+    input  wire [6:0]  vga_f,
+    output wire [32:0] vga_rd,
+    input  wire [6:0]  oled_f,
+    output reg  [32:0] oled_rd,
+    output reg  [`DN_N-1:0]    zero,
+    output wire        lead,              // player's net worth above the bot's
+    output wire        tie
 );
     localparam [31:0] MAX_SHOWN = 32'd99_999_999;
 
@@ -214,6 +231,7 @@ module display_numbers #(
     reg [5:0]  step;         // 0..32
     reg        cur_neg;
     reg        busy;
+    reg [31:0] net_shown, bnet_shown;    // player's and bot's net worth, as last converted
 
     // add 3 to every digit that is 5 or more (before each shift)
     function [31:0] add3;
@@ -238,6 +256,9 @@ module display_numbers #(
             busy    <= 1'b0;
             bcd     <= {(`DN_N*32){1'b0}};
             neg     <= {`DN_N{1'b0}};
+            zero    <= {`DN_N{1'b1}};
+            net_shown  <= 32'd0;
+            bnet_shown <= 32'd0;
         end else if (!busy) begin
             bin     <= (val > MAX_SHOWN) ? MAX_SHOWN : val;
             cur_neg <= val_neg;
@@ -250,10 +271,40 @@ module display_numbers #(
         end else begin
             bcd[32*idx +: 32] <= acc;
             neg[idx]          <= cur_neg && (acc != 32'd0);
+            zero[idx]         <= (acc == 32'd0);
+            if (idx == `DN_NET)  net_shown  <= acc;
+            if (idx == `DN_BNET) bnet_shown <= acc;
             idx               <= (idx == `DN_N - 1) ? 7'd0 : idx + 7'd1;
             busy              <= 1'b0;
         end
     end
+
+    // ------------------------------------------------------------ the fields in RAM
+    wire        wr_field = busy && (step == 6'd32);
+    wire [32:0] wr_word  = {cur_neg && (acc != 32'd0), acc};
+
+    (* ram_style = "distributed" *) reg [32:0] vga_ram  [0:127];
+    (* ram_style = "block" *)       reg [32:0] oled_ram [0:127];
+    integer r;
+    initial begin
+        for (r = 0; r < 128; r = r + 1) begin
+            vga_ram[r]  = 33'd0;
+            oled_ram[r] = 33'd0;
+        end
+        oled_rd = 33'd0;
+    end
+    always @(posedge clk) begin
+        if (wr_field) begin
+            vga_ram[idx]  <= wr_word;
+            oled_ram[idx] <= wr_word;
+        end
+        oled_rd <= oled_ram[oled_f];
+    end
+    assign vga_rd = vga_ram[vga_f];
+
+    // net worth as shown (packed BCD compares like the number it holds)
+    assign lead = (net_shown > bnet_shown);
+    assign tie  = (net_shown == bnet_shown);
 endmodule
 
 `default_nettype wire

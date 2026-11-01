@@ -39,8 +39,11 @@ module vga_cells (
     input  [1:0]  order_dist,          // sw[7:6]: 1, 2, 5, 10%
     input         oled_bot_view,       // sw15
     input  [3:0]  up,                  // stock k at or above its price 30 days ago
-    input  [`DN_N*32-1:0] bcd,         // display_numbers
-    input  [`DN_N-1:0]    neg,
+    output reg [6:0] num_f,            // the display_numbers field this cell shows
+    input  [32:0] num_rd,              // that field from display_numbers' RAM: {negative, 8 digits}
+    input  [`DN_N-1:0] zero,           // field f is 0
+    input         lead,                // player's net worth above the bot's (as shown)
+    input         tie,
     input  [7:0]  book_valid,
     input  [7:0]  book_side,
     input  [15:0] book_stock,
@@ -125,14 +128,6 @@ module vga_cells (
         end
     endfunction
 
-    function [31:0] field;
-        input [`DN_N*32-1:0] all;
-        input [6:0] f;
-        begin
-            field = all[32*f +: 32];
-        end
-    endfunction
-
     function [7:0] reason_ch;              // why an order is / was rejected
         input [2:0] code;
         input [6:0] c;
@@ -178,30 +173,9 @@ module vga_cells (
 
     // ------------------------------------------------------------ numbers
     wire [1:0]  s       = selected_stock[1:0];
-    wire [31:0] n_cash  = field(bcd, `DN_CASH);
-    wire [31:0] n_net   = field(bcd, `DN_NET);
-    wire [31:0] n_npnl  = field(bcd, `DN_NETPNL);
-    wire [31:0] n_days  = field(bcd, `DN_DAYS);
-    wire [31:0] n_qty   = field(bcd, `DN_QTY);
-    wire [31:0] n_ordpx = field(bcd, `DN_ORDPX);
-    wire [31:0] n_ordt  = field(bcd, `DN_ORDTOT);
-    wire [31:0] n_ret   = field(bcd, `DN_RET);
-    wire [31:0] n_maxdd = field(bcd, `DN_MAXDD);
-    wire [31:0] n_bnet  = field(bcd, `DN_BNET);
-    wire [31:0] n_bret  = field(bcd, `DN_BRET);
-    wire [31:0] n_chi   = field(bcd, `DN_CHI);
-    wire [31:0] n_clo   = field(bcd, `DN_CLO);
-    wire [31:0] n_sl    = field(bcd, `DN_SL);
-    wire [31:0] n_tp    = field(bcd, `DN_TP);
     // market rows 4-7 -> stocks 0-3; holdings rows 11-14 -> stocks 0-3
     wire [1:0]  mk      = row[1:0];
     wire [1:0]  hk      = row[1:0] + 2'd1;
-    wire [31:0] n_mpx   = field(bcd, `DN_PX0  + mk);
-    wire [31:0] n_mchg  = field(bcd, `DN_CHG0 + mk);
-    wire        g_mchg  = neg[`DN_CHG0 + mk];
-    wire [31:0] n_hpos  = field(bcd, `DN_POS0 + hk);
-    wire [31:0] n_hpnl  = field(bcd, `DN_PNL0 + hk);
-    wire        g_hpnl  = neg[`DN_PNL0 + hk];
 
     // pending orders: row 18 + n shows the n-th order in the book (only real ones)
     wire [2:0]  pn = row[2:0] - 3'd2;                     // rows 18-25 -> 0-7
@@ -218,23 +192,12 @@ module vga_cells (
     end
     wire [1:0]  sl_stk  = book_stock[2*sl +: 2];
     wire [1:0]  sl_typ  = book_type[2*sl +: 2];
-    wire [31:0] n_slq   = field(bcd, `DN_SLQ0 + sl);
-    wire [31:0] n_slt   = field(bcd, `DN_SLT0 + sl);
     wire [3:0]  pending = book_valid[0] + book_valid[1] + book_valid[2] + book_valid[3]
                         + book_valid[4] + book_valid[5] + book_valid[6] + book_valid[7];
 
-    // bot trades on rows 25-26 (newest first)
+    // bot trades on rows 25-26 (newest first); you (row 22) and the bot (row 23)
     wire [2:0]  le      = row[2:0] - 3'd1;
-    wire [31:0] n_lpx   = field(bcd, `DN_LOGPX0  + le);
-    wire [31:0] n_lday  = field(bcd, `DN_LOGDAY0 + le);
-    // you (row 22) and the bot (row 23)
     wire        is_bot  = row[0];
-    wire [31:0] n_vnet  = is_bot ? n_bnet : n_net;
-    wire [31:0] n_vret  = is_bot ? n_bret : n_ret;
-    wire        g_vret  = is_bot ? neg[`DN_BRET] : neg[`DN_RET];
-    // net worth is never negative; packed BCD compares like the number it holds
-    wire        you_lead = (n_net > n_bnet);
-    wire        tie      = (n_net == n_bnet);
 
     wire in_order = (screen_state == `UI_BUY_STOCK) || (screen_state == `UI_SELL_STOCK) ||
                     (screen_state == `UI_QUANTITY)  || (screen_state == `UI_ORDER_REVIEW);
@@ -244,6 +207,65 @@ module vga_cells (
     wire right = (col >= 7'd36) && (col <= 7'd69);
     wire [6:0] cl = col - 7'd1;                           // column inside the left panel, 0..33
     wire [6:0] cr = col - 7'd36;                          // column inside the right panel, 0..33
+
+    // A cell shows at most one number. Work out which field and how it is
+    // laid out, read that one field, and format it with one num_ch for the
+    // whole screen (the cell logic below only says where it goes).
+    reg        d_sgn;                                     // show + / - when not zero
+    reg        d_dp2;
+    reg [7:0]  d_prefix;
+    reg [6:0]  d_w, d_p;
+    always @* begin
+        num_f = `DN_CASH; d_sgn = 1'b0; d_dp2 = 1'b1; d_prefix = "$"; d_w = 7'd1; d_p = 7'd0;
+        if (row == 5'd0) begin                                                    // days left
+            num_f = `DN_DAYS; d_dp2 = 1'b0; d_prefix = 8'd0; d_w = 7'd3; d_p = col - 7'd67;
+        end else if (row == 5'd27) begin                                          // the order
+            if (col <= 7'd9)       begin num_f = `DN_QTY;    d_dp2 = 1'b0; d_prefix = 8'd0; d_w = 7'd4; d_p = col - 7'd6; end
+            else if (col <= 7'd34) begin num_f = `DN_ORDPX;  d_w = 7'd9;  d_p = col - 7'd26; end
+            else                   begin num_f = `DN_ORDTOT; d_w = 7'd12; d_p = col - 7'd54; end
+        end else if (left) begin
+            if (row >= 5'd4 && row <= 5'd7) begin                                 // market
+                if (cl <= 7'd15) begin num_f = `DN_PX0 + mk;  d_w = 7'd9;  d_p = cl - 7'd7; end
+                else             begin num_f = `DN_CHG0 + mk; d_sgn = 1'b1; d_w = 7'd10; d_p = cl - 7'd17; end
+            end else if (row == 5'd10 || row == 5'd19) begin                      // chart high / low
+                num_f = (row == 5'd10) ? `DN_CHI : `DN_CLO; d_w = 7'd7; d_p = cl - 7'd27;
+            end else if (row == 5'd20) begin                                      // SL / TP
+                if (cl <= 7'd12) begin num_f = `DN_SL; d_w = 7'd8; d_p = cl - 7'd5; end
+                else             begin num_f = `DN_TP; d_w = 7'd8; d_p = cl - 7'd21; end
+            end else if (row == 5'd22 || row == 5'd23) begin                      // you / bot
+                if (cl <= 7'd16) begin num_f = is_bot ? `DN_BNET : `DN_NET; d_w = 7'd12; d_p = cl - 7'd5; end
+                else begin
+                    num_f = is_bot ? `DN_BRET : `DN_RET; d_sgn = 1'b1; d_prefix = 8'd0; d_w = 7'd8; d_p = cl - 7'd18;
+                end
+            end else if (row == 5'd25 || row == 5'd26) begin                      // bot trades
+                if (cl <= 7'd7) begin num_f = `DN_LOGDAY0 + le; d_dp2 = 1'b0; d_prefix = 8'd0; d_w = 7'd3; d_p = cl - 7'd5; end
+                else            begin num_f = `DN_LOGPX0 + le;  d_w = 7'd8; d_p = cl - 7'd24; end
+            end
+        end else begin
+            case (row)                                                            // portfolio
+                5'd3: begin num_f = `DN_NET;    d_w = 7'd17; d_p = cr - 7'd17; end
+                5'd4: begin num_f = `DN_CASH;   d_w = 7'd17; d_p = cr - 7'd17; end
+                5'd5: begin num_f = `DN_NETPNL; d_sgn = 1'b1; d_w = 7'd17; d_p = cr - 7'd17; end
+                5'd6: begin num_f = `DN_RET;    d_sgn = 1'b1; d_prefix = 8'd0; d_w = 7'd16; d_p = cr - 7'd17; end
+                5'd7: begin num_f = `DN_MAXDD;  d_prefix = 8'd0; d_w = 7'd16; d_p = cr - 7'd17; end
+                5'd11, 5'd12, 5'd13, 5'd14: begin                                 // holdings
+                    if (cr <= 7'd18) begin num_f = `DN_POS0 + hk; d_dp2 = 1'b0; d_prefix = 8'd0; d_w = 7'd6; d_p = cr - 7'd13; end
+                    else             begin num_f = `DN_PNL0 + hk; d_sgn = 1'b1; d_w = 7'd12; d_p = cr - 7'd22; end
+                end
+                5'd18, 5'd19, 5'd20, 5'd21, 5'd22, 5'd23, 5'd24, 5'd25: begin     // pending orders
+                    if (cr <= 7'd24) begin num_f = `DN_SLQ0 + sl; d_dp2 = 1'b0; d_prefix = 8'd0; d_w = 7'd4; d_p = cr - 7'd21; end
+                    else             begin num_f = `DN_SLT0 + sl; d_w = 7'd8; d_p = cr - 7'd26; end
+                end
+                default: ;
+            endcase
+        end
+    end
+
+    wire [31:0] num_v    = num_rd[31:0];
+    wire        num_neg  = num_rd[32];
+    wire        num_zero = (num_v == 32'd0);
+    wire [7:0]  num_char = num_ch(num_v, d_sgn && !num_zero, num_neg, d_dp2, d_prefix, d_w, d_p);
+
 
     always @* begin
         ch = " ";
@@ -256,8 +278,8 @@ module vga_cells (
             if (col >= 7'd1 && col <= 7'd28)       ch = s64("SCAM STOCK TRADING SIMULATOR                                    ", cl);
             else if (col >= 7'd57 && col <= 7'd65) begin ch = s16("DAYS LEFT       ", col - 7'd57); fg = K_GREY; end
             else if (col >= 7'd67 && col <= 7'd69) begin
-                ch = num_ch(n_days, 1'b0, 1'b0, 1'b0, 8'd0, 7'd3, col - 7'd67);
-                fg = (n_days[31:4] == 28'd0 && n_days[3:0] <= 4'd5) ? K_RED : K_YELLOW;
+                ch = num_char;
+                fg = (num_v[31:4] == 28'd0 && num_v[3:0] <= 4'd5) ? K_RED : K_YELLOW;
             end
         end
 
@@ -294,10 +316,10 @@ module vga_cells (
         else if (row >= 5'd4 && row <= 5'd7 && left) begin   // > AMD   $207.02   -$12.34  v DOWN
             if (cl == 7'd0)                       begin ch = (mk == s) ? ">" : " "; fg = K_YELLOW; end
             else if (cl >= 7'd2 && cl <= 7'd5)    ch = ticker_ch(mk, cl - 7'd2);
-            else if (cl >= 7'd7 && cl <= 7'd15)   ch = num_ch(n_mpx, 1'b0, 1'b0, 1'b1, "$", 7'd9, cl - 7'd7);
+            else if (cl >= 7'd7 && cl <= 7'd15)   ch = num_char;
             else if (cl >= 7'd17 && cl <= 7'd26) begin
-                ch = num_ch(n_mchg, n_mchg != 32'd0, g_mchg, 1'b1, "$", 7'd10, cl - 7'd17);
-                fg = (n_mchg == 32'd0) ? K_WHITE : g_mchg ? K_RED : K_GREEN;
+                ch = num_char;
+                fg = num_zero ? K_WHITE : num_neg ? K_RED : K_GREEN;
             end
             else if (cl == 7'd28)                 begin ch = up[mk] ? 8'h80 : 8'h81; fg = up[mk] ? K_GREEN : K_RED; end
             else if (cl >= 7'd30 && cl <= 7'd33)  begin ch = s16(up[mk] ? "UP              " : "DOWN            ", cl - 7'd30); fg = up[mk] ? K_GREEN : K_RED; end
@@ -313,31 +335,31 @@ module vga_cells (
             case (row)
                 5'd3: begin
                     if (cr <= 7'd16) ch = s16(" NET WORTH      ", cr);
-                    else begin ch = num_ch(n_net, 1'b0, 1'b0, 1'b1, "$", 7'd17, cr - 7'd17); fg = K_WHITE; end
+                    else begin ch = num_char; fg = K_WHITE; end
                 end
                 5'd4: begin
                     if (cr <= 7'd16) ch = s16(" CASH           ", cr);
-                    else begin ch = num_ch(n_cash, 1'b0, 1'b0, 1'b1, "$", 7'd17, cr - 7'd17); fg = K_WHITE; end
+                    else begin ch = num_char; fg = K_WHITE; end
                 end
                 5'd5: begin
                     if (cr <= 7'd16) ch = s16(" PROFIT/LOSS    ", cr);
                     else begin
-                        ch = num_ch(n_npnl, n_npnl != 32'd0, neg[`DN_NETPNL], 1'b1, "$", 7'd17, cr - 7'd17);
-                        fg = (n_npnl == 32'd0) ? K_WHITE : neg[`DN_NETPNL] ? K_RED : K_GREEN;
+                        ch = num_char;
+                        fg = num_zero ? K_WHITE : num_neg ? K_RED : K_GREEN;
                     end
                 end
                 5'd6: begin
                     if (cr <= 7'd16) ch = s16(" RETURN         ", cr);
                     else if (cr <= 7'd32) begin
-                        ch = num_ch(n_ret, n_ret != 32'd0, neg[`DN_RET], 1'b1, 8'd0, 7'd16, cr - 7'd17);
-                        fg = (n_ret == 32'd0) ? K_WHITE : neg[`DN_RET] ? K_RED : K_GREEN;
+                        ch = num_char;
+                        fg = num_zero ? K_WHITE : num_neg ? K_RED : K_GREEN;
                     end else begin ch = "%"; fg = K_WHITE; end
                 end
                 5'd7: begin
                     if (cr <= 7'd16) ch = s16(" MAX DRAWDOWN   ", cr);
                     else if (cr <= 7'd32) begin
-                        ch = num_ch(n_maxdd, 1'b0, 1'b0, 1'b1, 8'd0, 7'd16, cr - 7'd17);
-                        fg = (n_maxdd == 32'd0) ? K_WHITE : K_ORANGE;
+                        ch = num_char;
+                        fg = num_zero ? K_WHITE : K_ORANGE;
                     end else begin ch = "%"; fg = K_WHITE; end
                 end
                 default: begin                                // small print
@@ -350,20 +372,20 @@ module vga_cells (
         // ------------------------------------------------------------ chart labels (left, rows 10-20)
         else if (row >= 5'd10 && row <= 5'd20 && left) begin
             case (row)
-                5'd10: if (cl >= 7'd27) ch = num_ch(n_chi, 1'b0, 1'b0, 1'b1, "$", 7'd7, cl - 7'd27);
+                5'd10: if (cl >= 7'd27) ch = num_char;
                 5'd11: if (cl >= 7'd30) begin ch = s16("HIGH            ", cl - 7'd30); fg = K_DGREY; end
                 5'd18: if (cl >= 7'd31) begin ch = s16("LOW             ", cl - 7'd31); fg = K_DGREY; end
-                5'd19: if (cl >= 7'd27) ch = num_ch(n_clo, 1'b0, 1'b0, 1'b1, "$", 7'd7, cl - 7'd27);
+                5'd19: if (cl >= 7'd27) ch = num_char;
                 5'd20: begin                                  //  -- SL  $196.71     -- TP  $217.43   (only when set)
-                    if (n_sl != 32'd0 && cl <= 7'd12) begin
+                    if (!zero[`DN_SL] && cl <= 7'd12) begin
                         if (cl <= 7'd1)       begin ch = "-"; fg = K_RED; end
                         else if (cl <= 7'd4)  begin ch = s16(" SL             ", cl - 7'd2); fg = K_GREY; end
-                        else                  ch = num_ch(n_sl, 1'b0, 1'b0, 1'b1, "$", 7'd8, cl - 7'd5);
+                        else                  ch = num_char;
                     end
-                    else if (n_tp != 32'd0 && cl >= 7'd16 && cl <= 7'd28) begin
+                    else if (!zero[`DN_TP] && cl >= 7'd16 && cl <= 7'd28) begin
                         if (cl <= 7'd17)      begin ch = "-"; fg = K_GREEN; end
                         else if (cl <= 7'd20) begin ch = s16(" TP             ", cl - 7'd18); fg = K_GREY; end
-                        else                  ch = num_ch(n_tp, 1'b0, 1'b0, 1'b1, "$", 7'd8, cl - 7'd21);
+                        else                  ch = num_char;
                     end
                 end
                 default: ;
@@ -376,16 +398,16 @@ module vga_cells (
             ch = s64(" STOCK       SHARES            P/L                              ", cr);
         end
         else if (row >= 5'd11 && row <= 5'd14 && right) begin
-            if (n_hpos == 32'd0) begin                        // not held: just a dash
+            if (zero[`DN_POS0 + hk]) begin                        // not held: just a dash
                 fg = K_DGREY;
                 if (cr >= 7'd1 && cr <= 7'd4) ch = ticker_ch(hk, cr - 7'd1);
                 else if (cr == 7'd18)         ch = "-";
             end else begin
                 if (cr >= 7'd1 && cr <= 7'd4)        ch = ticker_ch(hk, cr - 7'd1);
-                else if (cr >= 7'd13 && cr <= 7'd18) ch = num_ch(n_hpos, 1'b0, 1'b0, 1'b0, 8'd0, 7'd6, cr - 7'd13);
+                else if (cr >= 7'd13 && cr <= 7'd18) ch = num_char;
                 else if (cr >= 7'd22 && cr <= 7'd33) begin
-                    ch = num_ch(n_hpnl, n_hpnl != 32'd0, g_hpnl, 1'b1, "$", 7'd12, cr - 7'd22);
-                    fg = (n_hpnl == 32'd0) ? K_WHITE : g_hpnl ? K_RED : K_GREEN;
+                    ch = num_char;
+                    fg = num_zero ? K_WHITE : num_neg ? K_RED : K_GREEN;
                 end
             end
         end
@@ -406,8 +428,8 @@ module vga_cells (
                                                       : ((sl_typ == `OT_LMT) ? "BUY LIMIT       " : "BUY STOP        "), cr - 7'd8);
                 fg = book_side[sl] ? K_RED : K_GREEN;
             end
-            else if (cr >= 7'd21 && cr <= 7'd24) ch = num_ch(n_slq, 1'b0, 1'b0, 1'b0, 8'd0, 7'd4, cr - 7'd21);
-            else if (cr >= 7'd26 && cr <= 7'd33) ch = num_ch(n_slt, 1'b0, 1'b0, 1'b1, "$", 7'd8, cr - 7'd26);
+            else if (cr >= 7'd21 && cr <= 7'd24) ch = num_char;
+            else if (cr >= 7'd26 && cr <= 7'd33) ch = num_char;
         end
 
         // ------------------------------------------------------------ YOU VS BOT (left, rows 22-26)
@@ -415,13 +437,13 @@ module vga_cells (
             case (row)
                 5'd22, 5'd23: begin                           //  YOU   $9967.85   -0.32%    LEAD
                     if (cl >= 7'd1 && cl <= 7'd3)        begin ch = s16(is_bot ? "BOT             " : "YOU             ", cl - 7'd1); fg = K_GREY; end
-                    else if (cl >= 7'd5 && cl <= 7'd16)  ch = num_ch(n_vnet, 1'b0, 1'b0, 1'b1, "$", 7'd12, cl - 7'd5);
+                    else if (cl >= 7'd5 && cl <= 7'd16)  ch = num_char;
                     else if (cl >= 7'd18 && cl <= 7'd25) begin
-                        ch = num_ch(n_vret, n_vret != 32'd0, g_vret, 1'b1, 8'd0, 7'd8, cl - 7'd18);
-                        fg = (n_vret == 32'd0) ? K_WHITE : g_vret ? K_RED : K_GREEN;
+                        ch = num_char;
+                        fg = num_zero ? K_WHITE : num_neg ? K_RED : K_GREEN;
                     end
                     else if (cl == 7'd26)                ch = "%";
-                    else if (cl >= 7'd29 && cl <= 7'd32 && !tie && (is_bot ? !you_lead : you_lead)) begin
+                    else if (cl >= 7'd29 && cl <= 7'd32 && !tie && (is_bot ? !lead : lead)) begin
                         ch = s16("LEAD            ", cl - 7'd29); fg = K_YELLOW;
                     end
                 end
@@ -431,11 +453,11 @@ module vga_cells (
                         if (row == 5'd25 && cl >= 7'd1) begin ch = s64("THE BOT HAS NOT TRADED YET                                      ", cl - 7'd1); fg = K_GREY; end
                     end
                     else if (cl >= 7'd1 && cl <= 7'd3)   begin ch = s16("DAY             ", cl - 7'd1); fg = K_GREY; end
-                    else if (cl >= 7'd5 && cl <= 7'd7)   begin ch = num_ch(n_lday, 1'b0, 1'b0, 1'b0, 8'd0, 7'd3, cl - 7'd5); fg = K_GREY; end
+                    else if (cl >= 7'd5 && cl <= 7'd7)   begin ch = num_char; fg = K_GREY; end
                     else if (cl >= 7'd10 && cl <= 7'd13) begin ch = s16(log_side[le] ? "SELL            " : "BUY             ", cl - 7'd10); fg = log_side[le] ? K_RED : K_GREEN; end
                     else if (cl >= 7'd15 && cl <= 7'd18) ch = ticker_ch(log_stock[2*le +: 2], cl - 7'd15);
                     else if (cl >= 7'd21 && cl <= 7'd22) begin ch = s16("AT              ", cl - 7'd21); fg = K_GREY; end
-                    else if (cl >= 7'd24 && cl <= 7'd31) ch = num_ch(n_lpx, 1'b0, 1'b0, 1'b1, "$", 7'd8, cl - 7'd24);
+                    else if (cl >= 7'd24 && cl <= 7'd31) ch = num_char;
                 end
             endcase
         end
@@ -445,18 +467,18 @@ module vga_cells (
             if (in_order) begin             //  BUY  3 MCD  LIMIT  AT  $297.04  5% BELOW     TOTAL  $892.12
                 bg = K_ROW;
                 if (col >= 7'd1 && col <= 7'd4)        begin ch = s16(trade_side ? "SELL            " : "BUY             ", col - 7'd1); fg = trade_side ? K_RED : K_GREEN; end
-                else if (col >= 7'd6 && col <= 7'd9)   ch = num_ch(n_qty, 1'b0, 1'b0, 1'b0, 8'd0, 7'd4, col - 7'd6);
+                else if (col >= 7'd6 && col <= 7'd9)   ch = num_char;
                 else if (col >= 7'd11 && col <= 7'd14) ch = ticker_ch(s, col - 7'd11);
                 else if (col >= 7'd16 && col <= 7'd21) begin ch = type_word(order_type, col - 7'd16); fg = K_GREY; end
                 else if (col >= 7'd23 && col <= 7'd24) begin ch = s16("AT              ", col - 7'd23); fg = K_GREY; end
-                else if (col >= 7'd26 && col <= 7'd34) ch = num_ch(n_ordpx, 1'b0, 1'b0, 1'b1, "$", 7'd9, col - 7'd26);
+                else if (col >= 7'd26 && col <= 7'd34) ch = num_char;
                 else if (col >= 7'd36 && col <= 7'd38 && order_type != `OT_MKT) begin ch = pct_word(order_dist, 1'b1, col - 7'd36); fg = K_GREY; end
                 else if (col >= 7'd40 && col <= 7'd44 && order_type != `OT_MKT) begin ch = s16(below ? "BELOW           " : "ABOVE           ", col - 7'd40); fg = K_GREY; end
                 else if (!order_valid) begin
                     if (col >= 7'd48 && col <= 7'd63) begin ch = reason_ch(validation_code, col - 7'd48); fg = K_RED; end
                 end
                 else if (col >= 7'd48 && col <= 7'd52) begin ch = s16("TOTAL           ", col - 7'd48); fg = K_GREY; end
-                else if (col >= 7'd54 && col <= 7'd65) ch = num_ch(n_ordt, 1'b0, 1'b0, 1'b1, "$", 7'd12, col - 7'd54);
+                else if (col >= 7'd54 && col <= 7'd65) ch = num_char;
             end else if (screen_state == `UI_TRADE_RESULT) begin  //  LAST ORDER  FILLED / PLACED / REJECTED  reason
                 bg = K_ROW;
                 if (col >= 7'd1 && col <= 7'd10)       begin ch = s16("LAST ORDER      ", col - 7'd1); fg = K_GREY; end

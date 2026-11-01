@@ -40,8 +40,11 @@ module vga_screen (
     input  wire [1:0]  order_dist,
     input  wire        oled_bot_view,
     input  wire [3:0]  stock_up,
-    input  wire [`DN_N*32-1:0] bcd,
-    input  wire [`DN_N-1:0]    neg,
+    output wire [6:0]  num_f,              // display_numbers field the writer needs now
+    input  wire [32:0] num_rd,             // that field, from display_numbers' RAM
+    input  wire [`DN_N-1:0] zero,
+    input  wire        lead,
+    input  wire        tie,
     input  wire [7:0]  book_valid,
     input  wire [7:0]  book_side,
     input  wire [15:0] book_stock,
@@ -120,7 +123,7 @@ module vga_screen (
         .trade_result_placed(trade_result_placed), .trade_result_code(trade_result_code),
         .order_valid(order_valid), .validation_code(validation_code),
         .order_type(order_type), .order_brk(order_brk), .order_dist(order_dist),
-        .oled_bot_view(oled_bot_view), .up(stock_up), .bcd(bcd), .neg(neg),
+        .oled_bot_view(oled_bot_view), .up(stock_up), .num_f(num_f), .num_rd(num_rd), .zero(zero), .lead(lead), .tie(tie),
         .book_valid(book_valid), .book_side(book_side), .book_stock(book_stock),
         .book_type(book_type), .book_leg(book_leg),
         .log_valid(log_valid), .log_side(log_side), .log_stock(log_stock),

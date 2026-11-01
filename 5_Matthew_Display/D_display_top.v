@@ -298,6 +298,10 @@ module D_display_top #(
 
     wire [`DN_N*32-1:0] numbers_bcd;
     wire [`DN_N-1:0]    numbers_neg;
+    wire [`DN_N-1:0]    numbers_zero;
+    wire                numbers_lead, numbers_tie;
+    wire [6:0]          vga_num_f, oled_num_f;
+    wire [32:0]         vga_num_rd, oled_num_rd;
     display_numbers display_numbers_inst (
         .clk(clk), .rst(rst),
         .cash(portfolio_cash), .portfolio_value(portfolio_value),
@@ -319,7 +323,10 @@ module D_display_top #(
         .log_price(bot_log_price), .log_day(bot_log_day),
         .book_qty(book_qty), .book_trig(book_trig),
         .ret_bp(ret_bp), .max_dd_bp(max_dd_bp), .bot_ret_bp(bot_ret_bp),
-        .bcd(numbers_bcd), .neg(numbers_neg)
+        .bcd(numbers_bcd), .neg(numbers_neg),
+        .vga_f(vga_num_f), .vga_rd(vga_num_rd),
+        .oled_f(oled_num_f), .oled_rd(oled_num_rd),
+        .zero(numbers_zero), .lead(numbers_lead), .tie(numbers_tie)
     );
 
 
@@ -353,7 +360,7 @@ module D_display_top #(
         .order_valid(order_valid), .validation_code(validation_code),
         .order_type(ord_type), .order_brk(ord_brk), .order_dist(ord_dist),
         .oled_bot_view(bot_view), .stock_up(stock_up),
-        .bcd(numbers_bcd), .neg(numbers_neg),
+        .num_f(vga_num_f), .num_rd(vga_num_rd), .zero(numbers_zero), .lead(numbers_lead), .tie(numbers_tie),
         .book_valid(book_valid), .book_side(book_side), .book_stock(book_stock),
         .book_type(book_type), .book_leg(book_leg),
         .log_valid(bot_log_valid), .log_side(bot_log_side), .log_stock(bot_log_stock),
@@ -376,8 +383,10 @@ module D_display_top #(
         .order_valid(order_valid),
         .validation_code(validation_code),
         .stock_samples(selected_samples_30),
-        .numbers_bcd(numbers_bcd),
+        .numbers_f(oled_num_f),
+        .numbers_rd(oled_num_rd[31:0]),
         .numbers_neg(numbers_neg),
+        .numbers_zero(numbers_zero),
         .stock_up(stock_up),
         .trade_result_placed(trade_result_placed),
         .order_type(ord_type),

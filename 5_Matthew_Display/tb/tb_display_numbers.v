@@ -28,6 +28,10 @@ module tb_display_numbers;
     reg [39:0] lday = {8'd0, 8'd0, 8'd0, 8'd4, 8'd9};
     wire [`DN_N*32-1:0] bcd;
     wire [`DN_N-1:0]    neg;
+    reg  [6:0]  vga_f = 7'd0, oled_f = 7'd0;
+    wire [32:0] vga_rd, oled_rd;
+    wire [`DN_N-1:0]    zero;
+    wire        lead, tie;
 
     display_numbers dut (
         .clk(clk), .rst(rst), .cash(cash), .portfolio_value(pv),
@@ -43,7 +47,9 @@ module tb_display_numbers;
         .log_price(lpx), .log_day(lday),
         .book_qty({48'd0, 8'd5, 8'd12}), .book_trig({96'd0, 16'd21743, 16'd29704}),
         .ret_bp(-32'sd81), .max_dd_bp(32'd91), .bot_ret_bp(32'sd1579),
-        .bcd(bcd), .neg(neg)
+        .bcd(bcd), .neg(neg),
+        .vga_f(vga_f), .vga_rd(vga_rd), .oled_f(oled_f), .oled_rd(oled_rd),
+        .zero(zero), .lead(lead), .tie(tie)
     );
 
     integer n_pass = 0, n_fail = 0;
@@ -57,6 +63,28 @@ module tb_display_numbers;
             else begin
                 n_fail = n_fail + 1;
                 $display("FAIL: %0s: got %h neg %b, want %h neg %b", name, bcd[32*f +: 32], neg[f], want_bcd, want_neg);
+            end
+        end
+    endtask
+
+    // the screens' RAM copies and flags agree with bcd / neg for every field
+    task check_ram;
+        integer f, bad;
+        begin
+            bad = 0;
+            for (f = 0; f < `DN_N; f = f + 1) begin
+                vga_f = f; oled_f = f;
+                @(posedge clk); #1;                   // the OLED copy is read on the clock
+                if (vga_rd  !== {neg[f], bcd[32*f +: 32]}) bad = bad + 1;
+                if (oled_rd !== {neg[f], bcd[32*f +: 32]}) bad = bad + 1;
+                if (zero[f] !== (bcd[32*f +: 32] == 32'd0)) bad = bad + 1;
+            end
+            if (lead !== (bcd[32*`DN_NET +: 32] >  bcd[32*`DN_BNET +: 32])) bad = bad + 1;
+            if (tie  !== (bcd[32*`DN_NET +: 32] == bcd[32*`DN_BNET +: 32])) bad = bad + 1;
+            if (bad == 0) n_pass = n_pass + 1;
+            else begin
+                n_fail = n_fail + 1;
+                $display("FAIL: RAM copies / zero / lead flags: %0d mismatches", bad);
             end
         end
     endtask
@@ -105,6 +133,7 @@ module tb_display_numbers;
         check(`DN_CHG0 + 3, 32'h00000010, 1, "GME down $0.10");
         check(`DN_CHI,      32'h00032150, 0, "chart high $321.50");
         check(`DN_CLO,      32'h00030000, 0, "chart low $300.00");
+        check_ram;
 
         otype = `OT_LMT; qty = 2;
         refresh;
@@ -118,6 +147,7 @@ module tb_display_numbers;
         check(`DN_ORDTOT,  32'h00000100, 1, "sell 0 shares: -1.00 (fee)");
         check(`DN_NETPNL,  32'h00050000, 1, "net P/L -500.00");
         check(`DN_CASH,    32'h99999999, 0, "huge value shows 99999999");
+        check_ram;
 
         if (n_fail == 0) $display("PASS: tb_display_numbers (%0d checks)", n_pass);
         else             $display("FAIL: tb_display_numbers (%0d failed, %0d passed)", n_fail, n_pass);

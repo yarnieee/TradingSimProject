@@ -22,8 +22,10 @@ module OLED_Renderer (
     input         order_valid,
     input  [2:0]  validation_code,
     input  [479:0] stock_samples,          // selected stock's 30-day history
-    input  [`DN_N*32-1:0] numbers_bcd,     // from display_numbers
+    output [6:0]  numbers_f,               // display_numbers field the screen needs now
+    input  [31:0] numbers_rd,              // that field (display_numbers' RAM, read on clk)
     input  [`DN_N-1:0]    numbers_neg,
+    input  [`DN_N-1:0]    numbers_zero,
     input  [3:0]  stock_up,                // stock k at or above its price 30 days ago
     input         trade_result_placed,
     input  [1:0]  order_type,
@@ -62,8 +64,10 @@ module OLED_Renderer (
         .trade_result_code(trade_result_code),
         .order_valid(order_valid),
         .validation_code(validation_code),
-        .bcd(numbers_bcd),
+        .num_f(numbers_f),
+        .num_rd(numbers_rd),
         .neg(numbers_neg),
+        .zero(numbers_zero),
         .up(stock_up),
         .trade_result_placed(trade_result_placed),
         .order_type(order_type),

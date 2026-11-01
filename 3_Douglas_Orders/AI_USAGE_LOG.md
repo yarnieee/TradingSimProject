@@ -390,3 +390,18 @@ the 15 heights and the SL / TP rows in a table; the pixel logic only looks them 
 the scanner after changing the history. A one-off comparison against the previous `chart_renderer`
 (600 random charts in all three modes, every pixel) gave identical pictures. Yosys estimate:
 about 1,670 -> 750 LUTs. Not yet built in Vivado.
+
+## 2026-11-01: screen numbers read from RAM, one formatter per screen (branch-douglas-vga-display)
+
+**Asked for:** keep moving storage into RAM to save LUTs.
+
+**Done by the AI:** `display_numbers.v` also writes every field into two RAM copies: LUT RAM read
+without a clock for the VGA writer, and block RAM read on `clk` for the right OLED. It also keeps
+`zero` flags per field and `lead` / `tie` for player vs bot. `vga_cells.v` and `text_layer.v`
+now work out which single field a cell shows, read it by number, and format it with one `num_ch`
+for the whole screen, instead of a copy of `num_ch` for every place a number appears. The `bcd` bus
+stays for `bot_log_page` and the tests; synthesis removes the parts nobody reads. Wiring through
+`vga_screen.v`, `OLED_Renderer.v` and `D_display_top.v`. One-off comparisons against the previous
+`vga_cells` (400 random states, every cell) and `text_layer` (3,000 random states, every screen and
+cell) gave identical characters and colours; both comparisons were checked to catch planted
+mistakes. `tb_display_numbers` checks the RAM copies and flags; all testbenches pass.

@@ -22,7 +22,9 @@
 //   GAME_END         net worth in big digits and the final profit/loss
 //   bot view (sw15)  the bot's value against yours, and per stock its signal,
 //                    shares and P/L (NO BOT YET until Tricia's bot is in)
-// Numbers come from display_numbers (bcd, neg).
+// Numbers come from display_numbers: a cell shows at most one, so the cell
+// asks for that field by number (num_f) and gets it back from display_numbers'
+// RAM (num_rd); one num_ch formats it for the whole screen.
 module text_layer (
     input  [2:0]  row,
     input  [3:0]  col,
@@ -35,8 +37,10 @@ module text_layer (
     input  [2:0]  trade_result_code,
     input         order_valid,         // the order on screen would pass the checks
     input  [2:0]  validation_code,     // if not, why
-    input  [`DN_N*32-1:0] bcd,
+    output reg [6:0]  num_f,           // the display_numbers field this cell shows
+    input  [31:0] num_rd,              // that field (display_numbers' RAM)
     input  [`DN_N-1:0]    neg,
+    input  [`DN_N-1:0]    zero,        // field f is 0
     input  [3:0]  up,                  // stock k is at or above its price 30 days ago
     input         trade_result_placed, // a limit / stop order went into the book
     input  [1:0]  order_type,          // the order's type and SL/TP (from the switches)
@@ -121,14 +125,6 @@ module text_layer (
         end
     endfunction
 
-    function [31:0] field;
-        input [`DN_N*32-1:0] all;
-        input [6:0] f;
-        begin
-            field = all[32*f +: 32];
-        end
-    endfunction
-
     function [7:0] reason_ch;              // why an order is / was rejected
         input [2:0] code;
         input [3:0] c;
@@ -173,29 +169,11 @@ module text_layer (
 
     // ------------------------------------------------------------ numbers used here
     wire [1:0]  s       = selected_stock[1:0];
-    wire [31:0] n_cash  = field(bcd, `DN_CASH);
-    wire [31:0] n_net   = field(bcd, `DN_NET);
-    wire [31:0] n_chg   = field(bcd, `DN_CHG);
-    wire [31:0] n_qty   = field(bcd, `DN_QTY);
-    wire [31:0] n_days  = field(bcd, `DN_DAYS);
-    wire [31:0] n_ordpx = field(bcd, `DN_ORDPX);
-    wire [31:0] n_ordt  = field(bcd, `DN_ORDTOT);
-    wire [31:0] n_npnl  = field(bcd, `DN_NETPNL);
-    wire [31:0] n_bnet  = field(bcd, `DN_BNET);
-    wire [31:0] n_bnpnl = field(bcd, `DN_BNETPNL);
     wire [1:0]  bk      = row[1:0] - 2'd3;            // bot view: rows 3-6 = stocks 0-3
-    wire [31:0] n_bpos  = field(bcd, `DN_BPOS0 + bk);
-    wire [31:0] n_bpnl  = field(bcd, `DN_BPNL0 + bk);
     wire        g_bpnl  = neg[`DN_BPNL0 + bk];
     wire [1:0]  b_sig   = bot_signal[2*bk +: 2];
-    wire        days_low = (n_days[31:4] == 28'd0) && (n_days[3:0] <= 4'd5);   // 5 days or fewer
-    wire [31:0] n_spx   = field(bcd, `DN_PX0  + s);
-    wire [31:0] n_spos  = field(bcd, `DN_POS0 + s);
     // the stock on this row: PORTFOLIO rows 3-6, STOCKS rows 1-4
     wire [1:0]  rk      = (screen_state == `UI_PORTFOLIO) ? row[1:0] - 2'd3 : row[1:0] - 2'd1;
-    wire [31:0] n_rpx   = field(bcd, `DN_PX0  + rk);
-    wire [31:0] n_rpos  = field(bcd, `DN_POS0 + rk);
-    wire [31:0] n_rpnl  = field(bcd, `DN_PNL0 + rk);
     wire        g_rpnl  = neg[`DN_PNL0 + rk];
 
     wire        sell     = trade_side;
@@ -207,6 +185,77 @@ module text_layer (
                                ((menu_selection == 4'd3) ? 2'd0 : (menu_selection == 4'd4) ? 2'd1 : 2'd3) :
                                ((menu_selection == 4'd0) ? 2'd0 : (menu_selection == 4'd1) ? 2'd1 : 2'd3);
     wire [3:0]  stock_row_sel = menu_selection - 4'd1;   // STOCKS: menu 2..5 = rows 1..4
+
+    // which field this cell shows, and how it is laid out
+    reg        d_sh8;                                 // whole dollars (drop the cents)
+    reg [1:0]  d_sgn;                                 // 0 no sign, 1 + / - when not 0, 2 - when negative
+    reg        d_dp2;
+    reg [7:0]  d_prefix;
+    reg [3:0]  d_w, d_p;
+    always @* begin
+        num_f = `DN_NET; d_sh8 = 1'b0; d_sgn = 2'd0; d_dp2 = 1'b0; d_prefix = 8'd0; d_w = 4'd1; d_p = 4'd0;
+        if (row == 3'd0) begin                                                     // days left
+            num_f = `DN_DAYS; d_w = 4'd3; d_p = col - 4'd13;
+        end else if (bot_view && screen_state != `UI_TITLE) begin
+            case (row)
+                3'd1:    begin num_f = `DN_BNET; d_dp2 = 1'b1; d_prefix = "$"; d_w = 4'd13; d_p = col - 4'd3; end
+                3'd2:    begin num_f = `DN_NET;  d_dp2 = 1'b1; d_prefix = "$"; d_w = 4'd13; d_p = col - 4'd3; end
+                default: begin
+                    if (col <= 4'd9) begin num_f = `DN_BPOS0 + bk; d_w = 4'd4; d_p = col - 4'd6; end
+                    else begin num_f = `DN_BPNL0 + bk; d_sh8 = 1'b1; d_sgn = 2'd1; d_w = 4'd6; d_p = col - 4'd10; end
+                end
+            endcase
+        end else begin
+            case (screen_state)
+                `UI_PORTFOLIO: begin
+                    case (row)
+                        3'd1:    begin num_f = `DN_NET;  d_dp2 = 1'b1; d_prefix = "$"; d_w = 4'd13; d_p = col - 4'd3; end
+                        3'd2:    begin num_f = `DN_CASH; d_dp2 = 1'b1; d_prefix = "$"; d_w = 4'd12; d_p = col - 4'd4; end
+                        default: begin
+                            if (col <= 4'd7) begin num_f = `DN_POS0 + rk; d_w = 4'd4; d_p = col - 4'd4; end
+                            else begin num_f = `DN_PNL0 + rk; d_sgn = 2'd1; d_dp2 = 1'b1; d_w = 4'd8; d_p = col - 4'd8; end
+                        end
+                    endcase
+                end
+                `UI_STOCKS: begin num_f = `DN_PX0 + rk; d_dp2 = 1'b1; d_w = 4'd6; d_p = col - 4'd6; end
+                `UI_SPECIFIC: begin
+                    if (row == 3'd1)     begin num_f = `DN_PX0 + s; d_dp2 = 1'b1; d_prefix = "$"; d_w = 4'd12; d_p = col - 4'd4; end
+                    else if (col <= 4'd8) begin num_f = `DN_CHG; d_sgn = 2'd1; d_dp2 = 1'b1; d_w = 4'd6; d_p = col - 4'd3; end
+                    else                 begin num_f = `DN_POS0 + s; d_w = 4'd3; d_p = col - 4'd13; end
+                end
+                `UI_BUY_STOCK, `UI_SELL_STOCK, `UI_ORDER_REVIEW: begin
+                    case (row)
+                        3'd1: begin
+                            num_f = `DN_QTY;
+                            if (screen_state == `UI_ORDER_REVIEW) begin d_w = 4'd5;  d_p = col - 4'd4; end
+                            else                                  begin d_w = 4'd13; d_p = col - 4'd3; end
+                        end
+                        3'd2: begin num_f = `DN_ORDPX;  d_dp2 = 1'b1; d_prefix = "$"; d_w = 4'd11; d_p = col - 4'd5; end
+                        3'd3: begin num_f = `DN_ORDTOT; d_sgn = 2'd2; d_dp2 = 1'b1; d_prefix = "$"; d_w = 4'd11; d_p = col - 4'd5; end
+                        default: begin
+                            if (!sell) begin num_f = `DN_CASH; d_dp2 = 1'b1; d_prefix = "$"; d_w = 4'd12; d_p = col - 4'd4; end
+                            else       begin num_f = `DN_POS0 + s; d_w = 4'd13; d_p = col - 4'd3; end
+                        end
+                    endcase
+                end
+                `UI_QUANTITY:     num_f = `DN_QTY;                                  // big digits
+                `UI_TRADE_RESULT: begin num_f = `DN_QTY; d_w = 4'd5; d_p = col - 4'd4; end
+                `UI_GAME_END: begin
+                    if (row == 3'd1) begin num_f = `DN_NET; d_sh8 = 1'b1; d_prefix = "$"; d_w = 4'd8; d_p = col; end
+                    else begin num_f = `DN_NETPNL; d_sgn = 2'd1; d_dp2 = 1'b1; d_prefix = "$"; d_w = 4'd13; d_p = col - 4'd3; end
+                end
+                default: ;
+            endcase
+        end
+    end
+
+    // the field, formatted (one num_ch for the whole screen)
+    wire [31:0] num_v    = d_sh8 ? num_rd >> 8 : num_rd;
+    wire        num_zero = (num_v == 32'd0);
+    wire        num_neg  = neg[num_f];
+    wire [7:0]  num_char = num_ch(num_v, (d_sgn == 2'd1) ? !num_zero : (d_sgn == 2'd2) ? num_neg : 1'b0,
+                                  (d_sgn == 2'd2) ? 1'b1 : num_neg, d_dp2, d_prefix, d_w, d_p);
+    wire        days_low = (num_rd[31:4] == 28'd0) && (num_rd[3:0] <= 4'd5);   // 5 days or fewer
 
     // ------------------------------------------------------------ the cell
     reg [1:0] b;
@@ -223,7 +272,7 @@ module text_layer (
             // ---------------------------------------------------- header bar
             bg = bot_view ? BOTHDR : HDR;
             if (col >= 4'd12 && screen_state != `UI_GAME_END) begin   // days left: D120 .. D  1
-                ch = (col == 4'd12) ? "D" : num_ch(n_days, 1'b0, 1'b0, 1'b0, 8'd0, 4'd3, col - 4'd13);
+                ch = (col == 4'd12) ? "D" : num_char;
                 fg = days_low ? RED : YELLOW;
             end else if (bot_view) begin
                 ch = str_ch("BOT VS YOU      ", col);
@@ -262,14 +311,14 @@ module text_layer (
                     if (!bot_active) begin ch = str_ch("NO BOT YET      ", col); fg = GREY; end
                     else if (col <= 4'd2) begin ch = str_ch("BOT             ", col); fg = CYAN; end
                     else begin
-                        ch = num_ch(n_bnet, 1'b0, 1'b0, 1'b1, "$", 4'd13, col - 4'd3);
+                        ch = num_char;
                         fg = neg[`DN_BNETPNL] ? RED : GREEN;
                     end
                 end
                 3'd2: begin                                             // YOU  $13079.50
                     if (col <= 4'd2) begin ch = str_ch("YOU             ", col); fg = CYAN; end
                     else begin
-                        ch = num_ch(n_net, 1'b0, 1'b0, 1'b1, "$", 4'd13, col - 4'd3);
+                        ch = num_char;
                         fg = neg[`DN_NETPNL] ? RED : GREEN;
                     end
                 end
@@ -281,12 +330,12 @@ module text_layer (
                         fg = (b_sig == 2'd1) ? GREEN : (b_sig == 2'd2) ? RED : GREY;
                     end
                     else if (col >= 4'd6 && col <= 4'd9) begin
-                        ch = num_ch(n_bpos, 1'b0, 1'b0, 1'b0, 8'd0, 4'd4, col - 4'd6);
-                        fg = (n_bpos == 32'd0) ? GREY : WHITE;
+                        ch = num_char;
+                        fg = num_zero ? GREY : WHITE;
                     end
                     else if (col >= 4'd10) begin
-                        ch = num_ch(n_bpnl >> 8, (n_bpnl >> 8) != 32'd0, g_bpnl, 1'b0, 8'd0, 4'd6, col - 4'd10);
-                        fg = ((n_bpnl >> 8) == 32'd0) ? GREY : g_bpnl ? RED : GREEN;
+                        ch = num_char;
+                        fg = num_zero ? GREY : g_bpnl ? RED : GREEN;
                     end
                 end
             endcase
@@ -297,22 +346,22 @@ module text_layer (
                     case (row)
                         3'd1: begin                                     // NET   $13079.50
                             if (col <= 4'd2) begin ch = str_ch("NET             ", col); fg = CYAN; end
-                            else begin ch = num_ch(n_net, 1'b0, 1'b0, 1'b1, "$", 4'd13, col - 4'd3); fg = YELLOW; end
+                            else begin ch = num_char; fg = YELLOW; end
                         end
                         3'd2: begin                                     // CASH   $8423.50
                             if (col <= 4'd3) begin ch = str_ch("CASH            ", col); fg = CYAN; end
-                            else ch = num_ch(n_cash, 1'b0, 1'b0, 1'b1, "$", 4'd12, col - 4'd4);
+                            else ch = num_char;
                         end
                         default: begin                                  // AMD   10  +84.50
                             if (col <= 4'd3) begin
                                 ch = ticker_ch(rk, col);
-                                fg = (n_rpos == 32'd0) ? GREY : CYAN;
+                                fg = zero[`DN_POS0 + rk] ? GREY : CYAN;
                             end else if (col <= 4'd7) begin
-                                ch = num_ch(n_rpos, 1'b0, 1'b0, 1'b0, 8'd0, 4'd4, col - 4'd4);
-                                fg = (n_rpos == 32'd0) ? GREY : WHITE;
+                                ch = num_char;
+                                fg = zero[`DN_POS0 + rk] ? GREY : WHITE;
                             end else begin
-                                ch = num_ch(n_rpnl, n_rpnl != 32'd0, g_rpnl, 1'b1, 8'd0, 4'd8, col - 4'd8);
-                                fg = (n_rpnl == 32'd0) ? GREY : g_rpnl ? RED : GREEN;
+                                ch = num_char;
+                                fg = num_zero ? GREY : g_rpnl ? RED : GREEN;
                             end
                         end
                     endcase
@@ -321,7 +370,7 @@ module text_layer (
                 `UI_STOCKS: begin                                       // > MCD   305.10 ^
                     if (row <= 3'd4) begin
                         if (col >= 4'd1 && col <= 4'd4)       begin ch = ticker_ch(rk, col - 4'd1); fg = CYAN; end
-                        else if (col >= 4'd6 && col <= 4'd11) ch = num_ch(n_rpx, 1'b0, 1'b0, 1'b1, 8'd0, 4'd6, col - 4'd6);
+                        else if (col >= 4'd6 && col <= 4'd11) ch = num_char;
                         else if (col == 4'd13)                begin ch = up[rk] ? 8'h80 : 8'h81; fg = up[rk] ? GREEN : RED; end
                         if ({1'b0, row} == stock_row_sel) begin              // the cursor's row
                             bg = YELLOW; fg = BLACK;
@@ -335,16 +384,16 @@ module text_layer (
                     case (row)
                         3'd1: begin                                     // MCD      $305.10
                             if (col <= 4'd3) begin ch = ticker_ch(s, col); fg = CYAN; end
-                            else ch = num_ch(n_spx, 1'b0, 1'b0, 1'b1, "$", 4'd12, col - 4'd4);
+                            else ch = num_char;
                         end
                         3'd2: begin                                     // 30D -9.90  OWN  5
                             if (col <= 4'd2)      begin ch = str_ch("30D             ", col); fg = GREY; end
                             else if (col <= 4'd8) begin
-                                ch = num_ch(n_chg, n_chg != 32'd0, neg[`DN_CHG], 1'b1, 8'd0, 4'd6, col - 4'd3);
+                                ch = num_char;
                                 fg = neg[`DN_CHG] ? RED : GREEN;
                             end
                             else if (col >= 4'd10 && col <= 4'd12) begin ch = str_ch("OWN             ", col - 4'd10); fg = GREY; end
-                            else if (col >= 4'd13) ch = num_ch(n_spos, 1'b0, 1'b0, 1'b0, 8'd0, 4'd3, col - 4'd13);
+                            else if (col >= 4'd13) ch = num_char;
                         end
                         3'd6: begin                                     //  BUY   SELL  BACK
                             ch = str_ch(" BUY  SELL  BACK", col);
@@ -359,11 +408,11 @@ module text_layer (
                         3'd1: begin
                             if (screen_state == `UI_ORDER_REVIEW) begin // BUY    12  MCD
                                 if (col <= 4'd3)       begin ch = str_ch(sell ? "SELL            " : "BUY             ", col); fg = side_col; end
-                                else if (col <= 4'd8)  ch = num_ch(n_qty, 1'b0, 1'b0, 1'b0, 8'd0, 4'd5, col - 4'd4);
+                                else if (col <= 4'd8)  ch = num_char;
                                 else if (col >= 4'd10 && col <= 4'd13) begin ch = ticker_ch(s, col - 4'd10); fg = CYAN; end
                             end else begin                              // QTY        12
                                 if (col <= 4'd2) begin ch = str_ch("QTY             ", col); fg = CYAN; end
-                                else ch = num_ch(n_qty, 1'b0, 1'b0, 1'b0, 8'd0, 4'd13, col - 4'd3);
+                                else ch = num_char;
                             end
                         end
                         3'd2: begin                                     // PRICE / LIMIT / STOP  $305.15
@@ -372,12 +421,12 @@ module text_layer (
                                             (order_type == `OT_STP) ? "STOP            " : "PRICE           ", col);
                                 fg = CYAN;
                             end
-                            else ch = num_ch(n_ordpx, 1'b0, 1'b0, 1'b1, "$", 4'd11, col - 4'd5);
+                            else ch = num_char;
                         end
                         3'd3: begin                                     // TOTAL  $3662.80
                             if (col <= 4'd4) begin ch = str_ch("TOTAL           ", col); fg = CYAN; end
                             else begin
-                                ch = num_ch(n_ordt, neg[`DN_ORDTOT], 1'b1, 1'b1, "$", 4'd11, col - 4'd5);
+                                ch = num_char;
                                 fg = YELLOW;
                             end
                         end
@@ -394,10 +443,10 @@ module text_layer (
                                 end
                             end else if (!sell) begin                       // CASH   $8423.50
                                 if (col <= 4'd3) begin ch = str_ch("CASH            ", col); fg = GREY; end
-                                else begin ch = num_ch(n_cash, 1'b0, 1'b0, 1'b1, "$", 4'd12, col - 4'd4); fg = GREY; end
+                                else begin ch = num_char; fg = GREY; end
                             end else begin                              // OWN           5
                                 if (col <= 4'd2) begin ch = str_ch("OWN             ", col); fg = GREY; end
-                                else begin ch = num_ch(n_spos, 1'b0, 1'b0, 1'b0, 8'd0, 4'd13, col - 4'd3); fg = GREY; end
+                                else begin ch = num_char; fg = GREY; end
                             end
                         end
                         3'd5: begin
@@ -432,7 +481,7 @@ module text_layer (
                     case (row)
                         3'd1: begin                                     // big: 0012
                             if (col >= 4'd2 && col <= 4'd5) begin
-                                ch = "0" + n_qty[4*(5 - col) +: 4];
+                                ch = "0" + num_rd[4*(5 - col) +: 4];
                                 if (col == 4'd5 - {2'b00, quantity_cursor}) begin bg = YELLOW; fg = BLACK; end
                             end
                         end
@@ -464,7 +513,7 @@ module text_layer (
                         3'd3: begin
                             if (!trade_result_success) ch = reason_ch(trade_result_code, col);
                             else if (col <= 4'd3)      begin ch = str_ch(sell ? "SELL            " : "BUY             ", col); fg = side_col; end
-                            else if (col <= 4'd8)      ch = num_ch(n_qty, 1'b0, 1'b0, 1'b0, 8'd0, 4'd5, col - 4'd4);
+                            else if (col <= 4'd8)      ch = num_char;
                             else if (col >= 4'd10 && col <= 4'd13) begin ch = ticker_ch(s, col - 4'd10); fg = CYAN; end
                         end
                         3'd6: begin
@@ -478,13 +527,13 @@ module text_layer (
                 `UI_GAME_END: begin
                     case (row)
                         3'd1: begin                                     // big: $13079 (whole dollars)
-                            ch = num_ch(n_net >> 8, 1'b0, 1'b0, 1'b0, "$", 4'd8, col);
+                            ch = num_char;
                             fg = neg[`DN_NETPNL] ? RED : GREEN;
                         end
                         3'd3: begin                                     // P/L  +$3079.50
                             if (col <= 4'd2) begin ch = str_ch("P/L             ", col); fg = CYAN; end
                             else begin
-                                ch = num_ch(n_npnl, n_npnl != 32'd0, neg[`DN_NETPNL], 1'b1, "$", 4'd13, col - 4'd3);
+                                ch = num_char;
                                 fg = neg[`DN_NETPNL] ? RED : GREEN;
                             end
                         end

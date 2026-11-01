@@ -30,7 +30,14 @@
 //   dd_bp     = (peak - equity) * 10000 / peak         drawdown now, in basis points
 //   max_dd_bp = largest dd_bp so far
 // Both divides share ONE seq_divider (48-bit), run one after the other.
-module risk_metrics #(parameter [31:0] START_CASH = 32'd1_000_000) (
+module risk_metrics #(
+    parameter [31:0] START_CASH = 32'd1_000_000,
+    // The return/drawdown divider is useful in simulation and analysis, but
+    // it is not part of the current board display.  Keeping it optional lets
+    // the integration build fit the Basys3 LUT budget while preserving the
+    // full metric implementation for standalone tests.
+    parameter integer ENABLE_DIVIDERS = 1
+) (
     input  wire        clk,
     input  wire        rst,
     input  wire        tick,                              // 1-clock pulse from A
@@ -73,13 +80,22 @@ module risk_metrics #(parameter [31:0] START_CASH = 32'd1_000_000) (
     reg         div_start;
     wire [47:0] div_q, div_r;
     wire        div_busy, div_done;
-    seq_divider #(.W(48)) u_div (
-        .clk(clk), .rst(rst), .start(div_start),
-        .dividend(div_sel ? dd_num        : {16'd0, pnl_abs}),
-        .divisor (div_sel ? {16'd0, peak} : 48'd100),
-        .quotient(div_q), .remainder(div_r),
-        .busy(div_busy), .done(div_done)
-    );
+    generate
+        if (ENABLE_DIVIDERS) begin : gen_metric_divider
+            seq_divider #(.W(48)) u_div (
+                .clk(clk), .rst(rst), .start(div_start),
+                .dividend(div_sel ? dd_num        : {16'd0, pnl_abs}),
+                .divisor (div_sel ? {16'd0, peak} : 48'd100),
+                .quotient(div_q), .remainder(div_r),
+                .busy(div_busy), .done(div_done)
+            );
+        end else begin : gen_no_metric_divider
+            assign div_q    = 48'd0;
+            assign div_r    = 48'd0;
+            assign div_busy = 1'b0;
+            assign div_done = 1'b0;
+        end
+    endgenerate
 
     always @(posedge clk) begin
         div_start <= 1'b0;
@@ -121,9 +137,20 @@ module risk_metrics #(parameter [31:0] START_CASH = 32'd1_000_000) (
                 equity    <= acc;
                 pnl       <= acc - START_CASH;
                 if (acc > peak) peak <= acc;
-                div_sel   <= 1'b0;               // first job: return
-                div_start <= 1'b1;
-                state     <= DIV_RET;
+                if (ENABLE_DIVIDERS) begin
+                    div_sel   <= 1'b0;           // first job: return
+                    div_start <= 1'b1;
+                    state     <= DIV_RET;
+                end else begin
+                    // The board build does not display return/drawdown.
+                    // Finish the mark-to-market update immediately instead
+                    // of instantiating the two large divider datapaths.
+                    ret_bp    <= 32'sd0;
+                    dd_bp     <= 32'd0;
+                    max_dd_bp <= 32'd0;
+                    mtm_done  <= 1'b1;
+                    state     <= IDLE;
+                end
             end
 
             DIV_RET: if (div_done) begin

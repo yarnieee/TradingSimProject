@@ -29,7 +29,8 @@
 module Integration_Top #(
     parameter DAY_MAX_COUNT = 199_999_999,      // Yi An: 2 s per trading day
     parameter DEBOUNCE_CTR  = 32'd1_999_999,    // Matthew: 20 ms
-    parameter FINAL_TRADING_DAY = 32'd60       // Game ends after this many days (60 x 2 s = 2 minutes)
+    parameter FINAL_TRADING_DAY = 32'd60,      // Game ends after this many days (60 x 2 s = 2 minutes)
+    parameter integer ENABLE_BOT = 1
 ) (
     input  wire        clk,
     input  wire        rst,
@@ -105,6 +106,8 @@ module Integration_Top #(
     wire [1:0]  bot_last_stock;
     wire [7:0]  bot_last_qty;
     wire [15:0] bot_last_price;
+    wire        bot_trade_event;
+    wire [7:0]  bot_signal;
     reg  [7:0]  bot_trades;                      // the bot's last 5 trades, newest first (built below)
     reg  [4:0]  bot_log_valid, bot_log_side;
     reg  [9:0]  bot_log_stock;
@@ -134,10 +137,10 @@ module Integration_Top #(
         .order_fill(fill), .order_reject(reject), .order_reject_code(reject_code),
         .order_placed(ord_placed), .order_from_submit(res_submit),
         .sl_price(sl_price), .tp_price(tp_price),
-        .bot_view(bot_view), .bot_active(1'b1), .bot_cash(bot_cash), .bot_value(bot_equity),
+        .bot_view(bot_view), .bot_active(ENABLE_BOT != 0), .bot_cash(bot_cash), .bot_value(bot_equity),
         .bot_pos0(bot_pos0), .bot_pos1(bot_pos1), .bot_pos2(bot_pos2), .bot_pos3(bot_pos3),
         .bot_upnl0(bot_upnl0), .bot_upnl1(bot_upnl1), .bot_upnl2(bot_upnl2), .bot_upnl3(bot_upnl3),
-        .bot_signal(8'd0),                       // Tricia's bot does not output its signals
+        .bot_signal(bot_signal),
         .bot_log_valid(bot_log_valid), .bot_log_side(bot_log_side),
         .bot_log_stock(bot_log_stock), .bot_log_price(bot_log_price), .bot_log_day(bot_log_day),
         .left_pixel(ticket_pixel), .left_x(xL), .left_y(yL),
@@ -277,7 +280,7 @@ module Integration_Top #(
     wire [1:0]  fill_stock;
     wire [7:0]  fill_qty;
     wire [15:0] fill_price, fill_fee;
-    C_portfolio_top tricia_portfolio (
+    C_portfolio_top #(.ENABLE_BOT(ENABLE_BOT)) tricia_portfolio (
         .clk(clk), .sys_reset(sys_reset), .bot_run(game_state == `GS_PLAYING),
         .tick(tick), .price0(price0), .price1(price1), .price2(price2), .price3(price3),
         .fill(fill), .fill_stock(fill_stock), .fill_side(fill_side),
@@ -291,17 +294,15 @@ module Integration_Top #(
         .bot_realised(bot_realised), .bot_equity(bot_equity), .bot_pnl(bot_pnl),
         .bot_ret_bp(bot_ret_bp), .bot_max_dd_bp(bot_max_dd_bp),
         .bot_last_valid(bot_last_valid), .bot_last_stock(bot_last_stock), .bot_last_side(bot_last_side),
-        .bot_last_qty(bot_last_qty), .bot_last_price(bot_last_price)
+        .bot_last_qty(bot_last_qty), .bot_last_price(bot_last_price),
+        .bot_trade_event(bot_trade_event), .bot_signal(bot_signal)
     );
 
     // The bot reports its most recent trade; the bot screen lists the last 5.
-    // A new trade is seen as a change in the reported one (the bot alternates
-    // buy / sell per stock, so two trades in a row always differ).
-    reg [27:0] bot_last_d;
-    wire [27:0] bot_last = {bot_last_valid, bot_last_side, bot_last_stock, bot_last_qty, bot_last_price};
+    // Capture the actual fill pulse, rather than inferring events from a
+    // change in the last-trade fields. Every fill gets exactly one log row.
     always @(posedge clk) begin
         if (sys_reset) begin
-            bot_last_d    <= 28'd0;
             bot_trades    <= 8'd0;
             bot_log_valid <= 5'd0;
             bot_log_side  <= 5'd0;
@@ -309,8 +310,7 @@ module Integration_Top #(
             bot_log_price <= 80'd0;
             bot_log_day   <= 40'd0;
         end else begin
-            bot_last_d <= bot_last;
-            if (bot_last_valid && bot_last != bot_last_d) begin
+            if (bot_trade_event) begin
                 bot_trades    <= bot_trades + 8'd1;
                 bot_log_valid <= {bot_log_valid[3:0], 1'b1};
                 bot_log_side  <= {bot_log_side[3:0], bot_last_side};

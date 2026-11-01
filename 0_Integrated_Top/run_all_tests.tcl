@@ -16,6 +16,9 @@ set all_tbs {
     tb_matthew_game_fsm
     tb_ledger
     tb_bot_trader
+    tb_bot_regression
+    tb_bot_portfolio
+    tb_price_equivalence
     tb_risk_metrics
     tb_seq_divider
     tb_BC_ledger
@@ -64,4 +67,9 @@ foreach tb $tbs {
 
 puts "\n=============== SUMMARY ==============="
 foreach line $summary { puts $line }
+if {[info exists summary_file]} {
+    set fh [open $summary_file w]
+    puts $fh [join $summary "\n"]
+    close $fh
+}
 puts "(Module A price-model tests are expected to PASS after the signed arithmetic fix.)"

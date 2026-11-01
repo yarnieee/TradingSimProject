@@ -48,10 +48,11 @@ module bot_trader #(
     output reg         last_side,
     output reg  [7:0]  last_qty,
     output reg  [15:0] last_price,
-    output reg         tick_done                     // 1-clock pulse, this tick's trades finished
+    output reg         tick_done,                    // 1-clock pulse, this tick's trades finished
+    output reg  [7:0]  signals                       // per stock: 0 neutral, 1 above, 2 below MA band
 );
     localparam [2:0] IDLE = 3'd0, UPD = 3'd1, DECIDE = 3'd2, SEND = 3'd3,
-                     WAIT_HI = 3'd4, WAIT_LO = 3'd5, NEXT = 3'd6;
+                     WAIT_HI = 3'd4, WAIT_LO = 3'd5, NEXT = 3'd6, INIT = 3'd7;
     localparam [15:0] FEE16 = FEE;
     localparam [7:0]  QTY8  = QTY;
 
@@ -60,9 +61,13 @@ module bot_trader #(
     reg        first;                 // 1 until the first tick after reset is done
 
     // price history: 8 slots per stock, slot address = {stock, wptr}
-    reg [15:0] hist [0:31];
+    // One asynchronous read and ONE synchronous write permit a 32x16 LUTRAM.
+    // Do not reset this array or initialize eight addresses in one clock.
+    // INIT writes all eight copies before the first DECIDE for each stock.
+    (* ram_style = "distributed" *) reg [15:0] hist [0:31];
     reg [18:0] sum  [0:3];            // 8 x 65535 fits in 19 bits
     reg [2:0]  wptr;                  // oldest slot (shared: all stocks advance together)
+    reg [2:0]  init_slot;
     reg [15:0] p_l  [0:3];            // prices latched on tick
 
     // ---------------- datapath for stock k ----------------
@@ -94,8 +99,13 @@ module bot_trader #(
                          && (buy_cost <= cash);
     wire want_sell = run && (pos_k != 10'd0) && ({1'b0, p} + band < {1'b0, ma});
 
+    wire history_write = !rst && ((state == INIT) || ((state == UPD) && !first));
+    wire [4:0] history_address = {k, (state == INIT) ? init_slot : wptr};
+    always @(posedge clk) begin
+        if (history_write) hist[history_address] <= p;
+    end
+
     // ---------------- control FSM ----------------
-    integer j;
     always @(posedge clk) begin
         fill      <= 1'b0;                           // pulses default low
         tick_done <= 1'b0;
@@ -104,6 +114,8 @@ module bot_trader #(
             k          <= 2'd0;
             first      <= 1'b1;
             wptr       <= 3'd0;
+            init_slot  <= 3'd0;
+            signals    <= 8'd0;
             fill_stock <= 2'd0;
             fill_side  <= 1'b0;
             fill_qty   <= 8'd0;
@@ -124,16 +136,24 @@ module bot_trader #(
 
             UPD: begin                               // put today's price into the history
                 if (first) begin
-                    for (j = 0; j < 8; j = j + 1) hist[k*8 + j] <= p;
+                    init_slot <= 3'd0;
                     sum[k] <= {p, 3'b000};           // 8 x price
+                    state <= INIT;
                 end else begin
-                    hist[{k, wptr}] <= p;            // overwrite the oldest
                     sum[k]          <= sum_up;
+                    state <= DECIDE;
                 end
-                state <= DECIDE;
+            end
+
+            INIT: begin
+                // The separate single-port memory process writes this slot.
+                if (init_slot == 3'd7) state <= DECIDE;
+                else init_slot <= init_slot + 1'b1;
             end
 
             DECIDE: begin                            // MA/band now include today
+                signals[2*k +: 2] <= ({1'b0, p} > {1'b0, ma} + band) ? 2'd1 :
+                                    ({1'b0, p} + band < {1'b0, ma}) ? 2'd2 : 2'd0;
                 if (want_buy) begin
                     fill_stock <= k; fill_side <= 1'b0; fill_qty <= QTY8;
                     fill_price <= ask; fill_fee <= FEE16;

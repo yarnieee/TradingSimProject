@@ -8,7 +8,7 @@
 //   rows 1-5  09 B AMD   213.50   the bot's last 5 trades, newest first (NO BOT YET
 //                                 while bot_trader is still the stub):
 //                                 day, Buy / Sell (green / red), stock, price
-//   row 6     RULE: BUY >MA8      the bot's rule (Tricia's bot_trader)
+//   row 6     CASH $ 10000.00    live bot cash, including spread and fees
 //
 // FLIP_180 = 1 turns the page for the upside-down left OLED, as the ticket does.
 module bot_log_page #(
@@ -92,6 +92,7 @@ module bot_log_page #(
     wire [1:0]  e_k   = log_stock[2*n +: 2];
     wire [31:0] e_px  = bcd[32*(`DN_LOGPX0 + n)  +: 32];
     wire [31:0] e_day = bcd[32*(`DN_LOGDAY0 + n) +: 32];
+    wire [31:0] cash_digits = bcd[32*`DN_BCASH +: 32];
 
     always @* begin
         ch = " ";
@@ -118,7 +119,21 @@ module bot_log_page #(
                 ch = price_ch(e_px, col - 4'd10);
             end
         end else begin
-            ch = str_ch("RULE: BUY >MA8  ", col);
+            // Six whole-dollar digits and two cents, using the shared BCD
+            // converter. This is enough for its 99,999,999-cent display cap.
+            case (col)
+                0,1,2,3,4,5: ch = str_ch("CASH $          ", col);
+                6: ch = cash_digits[31:28] == 0 ? " " : "0" + cash_digits[31:28];
+                7: ch = cash_digits[31:24] == 0 ? " " : "0" + cash_digits[27:24];
+                8: ch = cash_digits[31:20] == 0 ? " " : "0" + cash_digits[23:20];
+                9: ch = cash_digits[31:16] == 0 ? " " : "0" + cash_digits[19:16];
+                10: ch = cash_digits[31:12] == 0 ? " " : "0" + cash_digits[15:12];
+                11: ch = "0" + cash_digits[11:8];
+                12: ch = ".";
+                13: ch = "0" + cash_digits[7:4];
+                14: ch = "0" + cash_digits[3:0];
+                default: ch = " ";
+            endcase
             fg = GREY;
         end
     end

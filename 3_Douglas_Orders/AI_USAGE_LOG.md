@@ -378,3 +378,15 @@ loading waits one clock for each read. A one-off check against the previous `sto
 history, close and date for all four seed files. All testbenches pass. Yosys estimate: title art
 about 1,550 -> 30 LUTs (2 block RAMs), each stock about 410 -> 260 LUTs (1 block RAM). Not yet
 built in Vivado.
+
+## 2026-11-01: OLED chart heights kept in a table (branch-douglas-vga-display)
+
+**Asked for:** keep moving logic into RAM / storage to save LUTs.
+
+**Done by the AI:** `chart_renderer.v` worked out the chart's min, max, scale and every column height
+again for each pixel. A small scanner on `clk` now does this once per pass (about 40 clocks) and keeps
+the 15 heights and the SL / TP rows in a table; the pixel logic only looks them up. `clk` added to
+`chart_renderer` and `OLED_Renderer` (connected in `D_display_top.v`); `tb_chart_renderer` waits for
+the scanner after changing the history. A one-off comparison against the previous `chart_renderer`
+(600 random charts in all three modes, every pixel) gave identical pictures. Yosys estimate:
+about 1,670 -> 750 LUTs. Not yet built in Vivado.

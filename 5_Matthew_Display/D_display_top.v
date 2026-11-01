@@ -364,6 +364,7 @@ module D_display_top #(
 
 
     OLED_Renderer oled_renderer_R (
+        .clk(clk),
         .pixel_index(pixel_index_R),
         .screen_state(screen_state),
         .selected_stock(selected_stock),

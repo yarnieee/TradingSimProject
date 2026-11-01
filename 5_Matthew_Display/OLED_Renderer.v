@@ -10,6 +10,7 @@
 // line of the header bar is a progress bar: how much of the game has gone.
 // The title screen is drawn by title_art_renderer in D_display_top.
 module OLED_Renderer (
+    input         clk,                     // 100 MHz, for the chart's scanner
     input  [12:0] pixel_index,
     input  [3:0]  screen_state,
     input  [2:0]  selected_stock,
@@ -77,6 +78,7 @@ module OLED_Renderer (
     wire        chart_active;
     wire [15:0] chart_color;
     chart_renderer chart_renderer_inst (
+        .clk(clk),
         .pixel_x(pixel_x),
         .pixel_y(pixel_y),
         .chart_mode(chart_on ? 2'b01 : 2'b00),

@@ -13,9 +13,10 @@
 //   row 0       title bar                                      days left
 //   row 1       game progress bar (graphics)
 //   rows 2-7    MARKET: price, 30-day change, trend | YOUR PORTFOLIO
-//   rows 9-20   <stock> LAST 30 DAYS: chart with    | HOLDINGS (rows 9-14)
-//               high / low prices, SL / TP levels   | PENDING ORDERS (rows 16-25)
-//   rows 21-26  YOU VS BOT, recent bot trades       |
+//   rows 9-19   <stock> LAST 30 DAYS: chart with    | HOLDINGS (rows 9-14)
+//               high / low and SL / TP prices       | PENDING ORDERS (rows 16-25)
+//   rows 20-26  LEADERBOARD: you and the 5 bots,    |
+//               place, net worth and return         |
 //   row 27      the order being made, or the last result
 //   row 28      NOW: which buttons to press on this screen (highlighted bar)
 //   row 29      the switches and what they are set to
@@ -38,20 +39,17 @@ module vga_cells (
     input  [1:0]  order_brk,
     input  [1:0]  order_dist,          // sw[7:6]: 1, 2, 5, 10%
     input         oled_bot_view,       // sw15
+    input  [2:0]  bot_sel,             // the bot the OLEDs show in the bot view
+    input  [17:0] ranks,               // places 1-6: you [2:0], bot n [3*n+3 +: 3]
     input  [3:0]  up,                  // stock k at or above its price 30 days ago
     output reg [6:0] num_f,            // the display_numbers field this cell shows
     input  [32:0] num_rd,              // that field from display_numbers' RAM: {negative, 8 digits}
     input  [`DN_N-1:0] zero,           // field f is 0
-    input         lead,                // player's net worth above the bot's (as shown)
-    input         tie,
     input  [7:0]  book_valid,
     input  [7:0]  book_side,
     input  [15:0] book_stock,
     input  [15:0] book_type,
     input  [7:0]  book_leg,
-    input  [4:0]  log_valid,           // bot trades, newest first
-    input  [4:0]  log_side,
-    input  [9:0]  log_stock,
     output reg [7:0] ch,
     output reg [3:0] fg,
     output reg [3:0] bg
@@ -128,6 +126,20 @@ module vga_cells (
         end
     endfunction
 
+    function [87:0] bot_name;              // leaderboard entry e: 0 you, 1-5 bots 0-4 (11 cells)
+        input [2:0] e;
+        begin
+            case (e)
+                3'd0:    bot_name = "YOU        ";
+                3'd1:    bot_name = "MA BOT     ";
+                3'd2:    bot_name = "OVERNIGHT  ";
+                3'd3:    bot_name = "DAY TRADE  ";
+                3'd4:    bot_name = "AVG DOWN   ";
+                default: bot_name = "SL / TP    ";
+            endcase
+        end
+    endfunction
+
     function [7:0] reason_ch;              // why an order is / was rejected
         input [2:0] code;
         input [6:0] c;
@@ -195,9 +207,10 @@ module vga_cells (
     wire [3:0]  pending = book_valid[0] + book_valid[1] + book_valid[2] + book_valid[3]
                         + book_valid[4] + book_valid[5] + book_valid[6] + book_valid[7];
 
-    // bot trades on rows 25-26 (newest first); you (row 22) and the bot (row 23)
-    wire [2:0]  le      = row[2:0] - 3'd1;
-    wire        is_bot  = row[0];
+    // leaderboard rows 21-26: entry 0 you, 1-5 bots 0-4
+    wire [2:0]  ent     = row[2:0] - 3'd5;
+    wire [2:0]  place   = ranks[3*ent +: 3];
+    wire        shown   = oled_bot_view ? (ent == bot_sel + 3'd1) : (ent == 3'd0);  // on the OLEDs now
 
     wire in_order = (screen_state == `UI_BUY_STOCK) || (screen_state == `UI_SELL_STOCK) ||
                     (screen_state == `UI_QUANTITY)  || (screen_state == `UI_ORDER_REVIEW);
@@ -212,11 +225,12 @@ module vga_cells (
     // laid out, read that one field, and format it with one num_ch for the
     // whole screen (the cell logic below only says where it goes).
     reg        d_sgn;                                     // show + / - when not zero
+    reg        d_sh8;                                     // drop two digits (P/L -> return %)
     reg        d_dp2;
     reg [7:0]  d_prefix;
     reg [6:0]  d_w, d_p;
     always @* begin
-        num_f = `DN_CASH; d_sgn = 1'b0; d_dp2 = 1'b1; d_prefix = "$"; d_w = 7'd1; d_p = 7'd0;
+        num_f = `DN_CASH; d_sgn = 1'b0; d_sh8 = 1'b0; d_dp2 = 1'b1; d_prefix = "$"; d_w = 7'd1; d_p = 7'd0;
         if (row == 5'd0) begin                                                    // days left
             num_f = `DN_DAYS; d_dp2 = 1'b0; d_prefix = 8'd0; d_w = 7'd3; d_p = col - 7'd67;
         end else if (row == 5'd27) begin                                          // the order
@@ -227,19 +241,17 @@ module vga_cells (
             if (row >= 5'd4 && row <= 5'd7) begin                                 // market
                 if (cl <= 7'd15) begin num_f = `DN_PX0 + mk;  d_w = 7'd9;  d_p = cl - 7'd7; end
                 else             begin num_f = `DN_CHG0 + mk; d_sgn = 1'b1; d_w = 7'd10; d_p = cl - 7'd17; end
-            end else if (row == 5'd10 || row == 5'd19) begin                      // chart high / low
-                num_f = (row == 5'd10) ? `DN_CHI : `DN_CLO; d_w = 7'd7; d_p = cl - 7'd27;
-            end else if (row == 5'd20) begin                                      // SL / TP
-                if (cl <= 7'd12) begin num_f = `DN_SL; d_w = 7'd8; d_p = cl - 7'd5; end
-                else             begin num_f = `DN_TP; d_w = 7'd8; d_p = cl - 7'd21; end
-            end else if (row == 5'd22 || row == 5'd23) begin                      // you / bot
-                if (cl <= 7'd16) begin num_f = is_bot ? `DN_BNET : `DN_NET; d_w = 7'd12; d_p = cl - 7'd5; end
+            end else if (row >= 5'd10 && row <= 5'd19) begin                      // chart labels
+                num_f = (row == 5'd10) ? `DN_CHI : (row == 5'd19) ? `DN_CLO :
+                        (row == 5'd14) ? `DN_SL  : `DN_TP;
+                d_w = 7'd7; d_p = cl - 7'd27;
+            end else if (row >= 5'd21) begin                                      // leaderboard
+                // return % = P/L / $100.00 (everyone starts with $10,000.00): drop 2 digits
+                if (cl <= 7'd24) begin num_f = (ent == 3'd0) ? `DN_NET : `DN_LBNET0 + ent - 7'd1; d_w = 7'd11; d_p = cl - 7'd14; end
                 else begin
-                    num_f = is_bot ? `DN_BRET : `DN_RET; d_sgn = 1'b1; d_prefix = 8'd0; d_w = 7'd8; d_p = cl - 7'd18;
+                    num_f = (ent == 3'd0) ? `DN_NETPNL : `DN_LBPNL0 + ent - 7'd1;
+                    d_sh8 = 1'b1; d_sgn = 1'b1; d_prefix = 8'd0; d_w = 7'd7; d_p = cl - 7'd26;
                 end
-            end else if (row == 5'd25 || row == 5'd26) begin                      // bot trades
-                if (cl <= 7'd7) begin num_f = `DN_LOGDAY0 + le; d_dp2 = 1'b0; d_prefix = 8'd0; d_w = 7'd3; d_p = cl - 7'd5; end
-                else            begin num_f = `DN_LOGPX0 + le;  d_w = 7'd8; d_p = cl - 7'd24; end
             end
         end else begin
             case (row)                                                            // portfolio
@@ -261,7 +273,7 @@ module vga_cells (
         end
     end
 
-    wire [31:0] num_v    = num_rd[31:0];
+    wire [31:0] num_v    = d_sh8 ? num_rd[31:0] >> 8 : num_rd[31:0];
     wire        num_neg  = num_rd[32];
     wire        num_zero = (num_v == 32'd0);
     wire [7:0]  num_char = num_ch(num_v, d_sgn && !num_zero, num_neg, d_dp2, d_prefix, d_w, d_p);
@@ -284,7 +296,7 @@ module vga_cells (
         end
 
         // ------------------------------------------------------------ panel header bars
-        else if ((row == 5'd2 || row == 5'd9 || row == 5'd21) && left) begin
+        else if ((row == 5'd2 || row == 5'd9 || row == 5'd20) && left) begin
             bg = K_PANEL;
             case (row)
                 5'd2: ch = s16(" MARKET         ", cl);
@@ -292,7 +304,12 @@ module vga_cells (
                     if (cl >= 7'd1 && cl <= 7'd4) begin ch = ticker_ch(s, cl - 7'd1); fg = K_YELLOW; end
                     else if (cl >= 7'd6)            ch = s16("LAST 30 DAYS    ", cl - 7'd6);
                 end
-                default: ch = s16(" YOU VS BOT     ", cl);
+                default: begin                                //  # LEADERBOARD  NET WORTH   RETURN
+                    ch = s64(" # LEADERBOARD  NET WORTH   RETURN                              ", cl);
+                    if (screen_state == `UI_GAME_END && cl >= 7'd3 && cl <= 7'd13) begin
+                        ch = s16("FINAL           ", cl - 7'd3); fg = K_YELLOW;
+                    end
+                end
             endcase
         end
         else if ((row == 5'd2 || row == 5'd9 || row == 5'd16) && right) begin
@@ -369,25 +386,17 @@ module vga_cells (
             endcase
         end
 
-        // ------------------------------------------------------------ chart labels (left, rows 10-20)
-        else if (row >= 5'd10 && row <= 5'd20 && left) begin
-            case (row)
+        // ------------------------------------------------------------ chart labels (left, rows 10-19)
+        else if (row >= 5'd10 && row <= 5'd19 && left) begin
+            case (row)                                        // in the column right of the chart
                 5'd10: if (cl >= 7'd27) ch = num_char;
                 5'd11: if (cl >= 7'd30) begin ch = s16("HIGH            ", cl - 7'd30); fg = K_DGREY; end
+                5'd13: if (cl >= 7'd27 && !zero[`DN_SL]) begin ch = s16("STOP            ", cl - 7'd27); fg = K_RED; end
+                5'd14: if (cl >= 7'd27 && !zero[`DN_SL]) begin ch = num_char; fg = K_RED; end
+                5'd15: if (cl >= 7'd27 && !zero[`DN_TP]) begin ch = s16("TARGET          ", cl - 7'd27); fg = K_GREEN; end
+                5'd16: if (cl >= 7'd27 && !zero[`DN_TP]) begin ch = num_char; fg = K_GREEN; end
                 5'd18: if (cl >= 7'd31) begin ch = s16("LOW             ", cl - 7'd31); fg = K_DGREY; end
                 5'd19: if (cl >= 7'd27) ch = num_char;
-                5'd20: begin                                  //  -- SL  $196.71     -- TP  $217.43   (only when set)
-                    if (!zero[`DN_SL] && cl <= 7'd12) begin
-                        if (cl <= 7'd1)       begin ch = "-"; fg = K_RED; end
-                        else if (cl <= 7'd4)  begin ch = s16(" SL             ", cl - 7'd2); fg = K_GREY; end
-                        else                  ch = num_char;
-                    end
-                    else if (!zero[`DN_TP] && cl >= 7'd16 && cl <= 7'd28) begin
-                        if (cl <= 7'd17)      begin ch = "-"; fg = K_GREEN; end
-                        else if (cl <= 7'd20) begin ch = s16(" TP             ", cl - 7'd18); fg = K_GREY; end
-                        else                  ch = num_char;
-                    end
-                end
                 default: ;
             endcase
         end
@@ -432,34 +441,15 @@ module vga_cells (
             else if (cr >= 7'd26 && cr <= 7'd33) ch = num_char;
         end
 
-        // ------------------------------------------------------------ YOU VS BOT (left, rows 22-26)
-        else if (row >= 5'd22 && row <= 5'd26 && left) begin
-            case (row)
-                5'd22, 5'd23: begin                           //  YOU   $9967.85   -0.32%    LEAD
-                    if (cl >= 7'd1 && cl <= 7'd3)        begin ch = s16(is_bot ? "BOT             " : "YOU             ", cl - 7'd1); fg = K_GREY; end
-                    else if (cl >= 7'd5 && cl <= 7'd16)  ch = num_char;
-                    else if (cl >= 7'd18 && cl <= 7'd25) begin
-                        ch = num_char;
-                        fg = num_zero ? K_WHITE : num_neg ? K_RED : K_GREEN;
-                    end
-                    else if (cl == 7'd26)                ch = "%";
-                    else if (cl >= 7'd29 && cl <= 7'd32 && !tie && (is_bot ? !lead : lead)) begin
-                        ch = s16("LEAD            ", cl - 7'd29); fg = K_YELLOW;
-                    end
-                end
-                5'd24: if (cl >= 7'd1) begin ch = s64("RECENT BOT TRADES                                               ", cl - 7'd1); fg = K_DGREY; end
-                default: begin                                // DAY  40   SELL  GME   AT  $33.80
-                    if (!log_valid[le]) begin
-                        if (row == 5'd25 && cl >= 7'd1) begin ch = s64("THE BOT HAS NOT TRADED YET                                      ", cl - 7'd1); fg = K_GREY; end
-                    end
-                    else if (cl >= 7'd1 && cl <= 7'd3)   begin ch = s16("DAY             ", cl - 7'd1); fg = K_GREY; end
-                    else if (cl >= 7'd5 && cl <= 7'd7)   begin ch = num_char; fg = K_GREY; end
-                    else if (cl >= 7'd10 && cl <= 7'd13) begin ch = s16(log_side[le] ? "SELL            " : "BUY             ", cl - 7'd10); fg = log_side[le] ? K_RED : K_GREEN; end
-                    else if (cl >= 7'd15 && cl <= 7'd18) ch = ticker_ch(log_stock[2*le +: 2], cl - 7'd15);
-                    else if (cl >= 7'd21 && cl <= 7'd22) begin ch = s16("AT              ", cl - 7'd21); fg = K_GREY; end
-                    else if (cl >= 7'd24 && cl <= 7'd31) ch = num_char;
-                end
-            endcase
+        // ------------------------------------------------------------ LEADERBOARD (left, rows 21-26)
+        else if (row >= 5'd21 && row <= 5'd26 && left) begin  // > 1 OVERNIGHT   $10123.45   +1.23%
+            if (ent == 3'd0) bg = K_ROW;                      // your row
+            if (cl == 7'd0)                       begin ch = shown ? ">" : " "; fg = K_YELLOW; end
+            else if (cl == 7'd1)                  begin ch = "0" + place; fg = (place == 3'd1) ? K_YELLOW : K_GREY; end
+            else if (cl >= 7'd3 && cl <= 7'd13)   begin ch = bot_name(ent) >> (8 * (7'd13 - cl)); fg = (ent == 3'd0) ? K_CYAN : K_WHITE; end
+            else if (cl >= 7'd14 && cl <= 7'd24)  ch = num_char;
+            else if (cl >= 7'd26 && cl <= 7'd32)  begin ch = num_char; fg = num_zero ? K_WHITE : num_neg ? K_RED : K_GREEN; end
+            else if (cl == 7'd33)                 ch = "%";
         end
 
         // ------------------------------------------------------------ row 27: the order, or the last result
@@ -496,6 +486,9 @@ module vga_cells (
         else if (row == 5'd28) begin
             bg = K_NAVY;
             if (col >= 7'd1 && col <= 7'd3) begin ch = s16("NOW             ", col - 7'd1); fg = K_YELLOW; end
+            else if (col >= 7'd5 && col <= 7'd69 && oled_bot_view &&
+                     screen_state != `UI_TITLE && screen_state != `UI_GAME_END)
+                ch = s64("BTNL / BTNR  CHOOSE THE BOT ON THE OLEDS    SW15 DOWN  PLAY     ", col - 7'd5);
             else if (col >= 7'd5 && col <= 7'd69) begin
                 case (screen_state)
                     `UI_TITLE:        ch = s64("PRESS BTNC TO START                                             ", col - 7'd5);

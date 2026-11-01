@@ -7,7 +7,9 @@
 //   JB (right OLED): the game screens (OLED_Renderer); title artwork on the title screen
 //   JA (left OLED):  the page given on left_pixel (Douglas's order ticket);
 //                    title artwork on the title screen
-//   bot_view (sw15): JB shows the bot against the player, JA the bot's last trades;
+//   bot_view (sw15): JB shows a bot against the player, JA that bot's last trades;
+//                    BTNL / BTNR choose the bot (bot_sel 0-4: the moving-average bot,
+//                    then bot_squad's OVERNIGHT, DAY TRADE, AVG DOWN, SL / TP);
 //                    the buttons are ignored while it is up
 //   VGA monitor:     1280 x 720, everything at once (vga_screen, pixel clock from
 //                    vga_clock): market, portfolio, chart,
@@ -44,6 +46,8 @@ module D_display_top #(
     // bot (sw1 shows it)
     input  wire        bot_view,
     input  wire        bot_active,        // 0 until the bot's strategy exists: "NO BOT YET"
+    output reg  [2:0]  bot_sel,           // the bot the bot view shows (its numbers come in on bot_*)
+    input  wire [32*`BOTS-1:0] bots_value, // every bot's value, for the leaderboard
     input  wire [31:0] bot_cash,
     input  wire [31:0] bot_value,
     input  wire [9:0]  bot_pos0,
@@ -167,8 +171,16 @@ module D_display_top #(
     // game_fsm sees only the order just sent: its fill or reject, or it being placed
     wire fsm_fill   = (order_fill && order_from_submit) || order_placed;
     wire fsm_reject = order_reject && order_from_submit;
-    // the buttons are ignored in the bot view
+    // the buttons are ignored in the bot view, where BTNL / BTNR choose the bot
     wire buttons_on = !bot_view;
+    always @(posedge clk) begin
+        if (rst)
+            bot_sel <= 3'd0;
+        else if (bot_view && btnR_p)
+            bot_sel <= (bot_sel == `BOTS - 1) ? 3'd0 : bot_sel + 3'd1;
+        else if (bot_view && btnL_p)
+            bot_sel <= (bot_sel == 3'd0) ? `BOTS - 1 : bot_sel - 3'd1;
+    end
 
     // The chart and selected-stock price follow the same four-stock index
     // that is sent to the order engine.
@@ -300,6 +312,7 @@ module D_display_top #(
     wire [`DN_N-1:0]    numbers_neg;
     wire [`DN_N-1:0]    numbers_zero;
     wire                numbers_lead, numbers_tie;
+    wire [17:0]         numbers_ranks;            // places 1-6: you, then bots 0-4
     wire [6:0]          vga_num_f, oled_num_f;
     wire [32:0]         vga_num_rd, oled_num_rd;
     display_numbers display_numbers_inst (
@@ -326,7 +339,8 @@ module D_display_top #(
         .bcd(numbers_bcd), .neg(numbers_neg),
         .vga_f(vga_num_f), .vga_rd(vga_num_rd),
         .oled_f(oled_num_f), .oled_rd(oled_num_rd),
-        .zero(numbers_zero), .lead(numbers_lead), .tie(numbers_tie)
+        .zero(numbers_zero), .lead(numbers_lead), .tie(numbers_tie),
+        .bots_value(bots_value), .ranks(numbers_ranks)
     );
 
 
@@ -359,11 +373,10 @@ module D_display_top #(
         .trade_result_placed(trade_result_placed), .trade_result_code(trade_result_code),
         .order_valid(order_valid), .validation_code(validation_code),
         .order_type(ord_type), .order_brk(ord_brk), .order_dist(ord_dist),
-        .oled_bot_view(bot_view), .stock_up(stock_up),
-        .num_f(vga_num_f), .num_rd(vga_num_rd), .zero(numbers_zero), .lead(numbers_lead), .tie(numbers_tie),
+        .oled_bot_view(bot_view), .bot_sel(bot_sel), .ranks(numbers_ranks), .stock_up(stock_up),
+        .num_f(vga_num_f), .num_rd(vga_num_rd), .zero(numbers_zero),
         .book_valid(book_valid), .book_side(book_side), .book_stock(book_stock),
         .book_type(book_type), .book_leg(book_leg),
-        .log_valid(bot_log_valid), .log_side(bot_log_side), .log_stock(bot_log_stock),
         .stock_samples(selected_samples_30), .sel_sl(sel_sl), .sel_tp(sel_tp),
         .progress_w(vga_progress_w),
         .vga_r(vga_r), .vga_g(vga_g), .vga_b(vga_b), .hsync(vga_hs), .vsync(vga_vs)
@@ -393,6 +406,8 @@ module D_display_top #(
         .order_brk(ord_brk),
         .bot_view(bot_view),
         .bot_active(bot_active),
+        .bot_sel(bot_sel),
+        .ranks(numbers_ranks),
         .bot_signal(bot_signal),
         .sel_sl(sel_sl),
         .sel_tp(sel_tp),
@@ -453,6 +468,7 @@ module D_display_top #(
         .pix_x(left_x), .pix_y(left_y),
         .bcd(numbers_bcd),
         .active(bot_active),
+        .bot_sel(bot_sel), .game_over(screen_state == `UI_GAME_END),
         .log_valid(bot_log_valid), .log_side(bot_log_side), .log_stock(bot_log_stock),
         .pixel(bot_log_pixel)
     );

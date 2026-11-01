@@ -21,6 +21,8 @@ set all_tbs {
     tb_matthew_game_fsm
     tb_ledger
     tb_bot_trader
+    tb_bot_squad
+    tb_bot_logbook
     tb_risk_metrics
     tb_seq_divider
     tb_BC_ledger

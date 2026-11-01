@@ -4,11 +4,12 @@
 
 // bot_log_page: the left OLED in the bot view (sw15 up), on the text_grid layout.
 //
-//   row 0     BOT TRADES          header (plum, as the bot view on the right OLED)
-//   rows 1-5  009B AMD   213.50   the bot's last 5 trades, newest first (NO BOT YET
-//                                 while bot_trader is still the stub):
+//   row 0     OVERNIGHT TRADES    header (plum, as the bot view on the right OLED): the
+//                                 chosen bot (bot_sel); FINAL instead of TRADES once
+//                                 the game is over
+//   rows 1-5  009B AMD   213.50   that bot's last 5 trades, newest first:
 //                                 day, Buy / Sell (green / red), stock, price
-//   row 6     RULE: BUY >MA8      the bot's rule (Tricia's bot_trader)
+//   row 6     HOLD OVERNIGHT      the bot's rule
 //
 // FLIP_180 = 1 turns the page for the upside-down left OLED, as the ticket does.
 module bot_log_page #(
@@ -18,6 +19,8 @@ module bot_log_page #(
     input  wire [5:0]  pix_y,
     input  wire [`DN_N*32-1:0] bcd,       // display_numbers (log prices and days)
     input  wire        active,            // 0: the bot is not written yet
+    input  wire [2:0]  bot_sel,           // 0 moving average, 1-4 bot_squad's bots
+    input  wire        game_over,
     input  wire [4:0]  log_valid,
     input  wire [4:0]  log_side,
     input  wire [9:0]  log_stock,
@@ -54,6 +57,35 @@ module bot_log_page #(
                 default: t = "GME ";
             endcase
             ticker_ch = (p > 4'd3) ? " " : t[31 - 8*p -: 8];
+        end
+    endfunction
+
+    function [127:0] header;               // name, then TRADES or FINAL
+        input [2:0] b;
+        input       over;
+        reg [79:0] name;
+        begin
+            case (b)
+                3'd0:    name = "MA BOT    ";
+                3'd1:    name = "OVERNIGHT ";
+                3'd2:    name = "DAY TRADE ";
+                3'd3:    name = "AVG DOWN  ";
+                default: name = "SL / TP   ";
+            endcase
+            header = {name, over ? " FINAL" : "TRADES"};
+        end
+    endfunction
+
+    function [127:0] rule;
+        input [2:0] b;
+        begin
+            case (b)
+                3'd0:    rule = "RULE: BUY >MA8  ";
+                3'd1:    rule = "HOLD OVERNIGHT  ";
+                3'd2:    rule = "HOLD OPEN-CLOSE ";
+                3'd3:    rule = "ADD -5% OUT +5% ";
+                default: rule = "CUT -5% TAKE+10%";
+            endcase
         end
     endfunction
 
@@ -99,7 +131,8 @@ module bot_log_page #(
         bg = BLACK;
         if (row == 3'd0) begin
             bg = BOTHDR;
-            ch = str_ch("BOT TRADES      ", col);
+            ch = str_ch(header(bot_sel, game_over), col);
+            if (game_over && col >= 4'd11) fg = 16'hFFE0;    // FINAL in yellow
         end else if (row <= 3'd5) begin
             if (!active) begin
                 if (row == 3'd1) begin ch = str_ch("NO BOT YET      ", col); fg = GREY; end
@@ -118,7 +151,7 @@ module bot_log_page #(
                 ch = price_ch(e_px, col - 4'd10);
             end
         end else begin
-            ch = str_ch("RULE: BUY >MA8  ", col);
+            ch = str_ch(rule(bot_sel), col);
             fg = GREY;
         end
     end

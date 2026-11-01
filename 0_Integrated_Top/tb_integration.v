@@ -53,6 +53,31 @@ module tb_integration;
         if (dut.tick)       n_tick = n_tick + 1;
         if (dut.ord_req)    n_ord_req = n_ord_req + 1;
     end
+    // bot_squad's trades; after each open / close: OVERNIGHT holds nothing in the day,
+    // DAY TRADE nothing overnight
+    integer n_squad = 0, n_close = 0, bad_night = 0, bad_day = 0, q;
+    always @(posedge clk) if (!dut.sys_reset) begin
+        if (dut.squad_trade) n_squad = n_squad + 1;
+        if (dut.close_tick)  n_close = n_close + 1;
+    end
+    always @(posedge dut.tick) begin
+        repeat (400) @(posedge clk);
+        for (q = 0; q < 4; q = q + 1) if (dut.bots.pos_m[q] != 0) bad_night = bad_night + 1;
+    end
+    always @(posedge dut.close_tick) begin
+        repeat (400) @(posedge clk);
+        for (q = 4; q < 8; q = q + 1) if (dut.bots.pos_m[q] != 0) bad_day = bad_day + 1;
+    end
+    // the six places are 1..6, each once
+    function places_ok;
+        input [17:0] r;
+        integer e, f, seen;
+        begin
+            seen = 0;
+            for (e = 0; e < 6; e = e + 1) seen = seen | (1 << r[3*e +: 3]);
+            places_ok = (seen == 7'b1111110);
+        end
+    endfunction
 
     // one press, held long enough for the debouncer (50 clocks)
     task press;
@@ -187,12 +212,42 @@ module tb_integration;
               "sw15 up: left OLED shows the bot's trades");
         press(R); press(C);
         check(dut.screen_state == S_PORTFOLIO, "sw15 up: buttons are ignored");
+        check(dut.bot_sel == 3'd1, "sw15 up: BTNR chooses the next bot (OVERNIGHT)");
+        press(L); press(L);
+        check(dut.bot_sel == 3'd4, "sw15 up: BTNL goes back, round to the last bot (SL / TP)");
+        repeat (20) @(posedge clk);
+        check(dut.matthew_display.bot_value == dut.squad_value[127:96], "the bot view shows the chosen bot's value");
+        press(R);
+        check(dut.bot_sel == 3'd0, "and round again to the moving-average bot");
         view_sw = 0;
         repeat (5) @(posedge clk);
         check(dut.matthew_display.pixel_data_L == dut.ticket_pixel,
               "sw15 down: left OLED back to the order ticket");
         press(R); press(C);
         check(dut.screen_state == S_STOCKS, "sw15 down: buttons work again");
+
+        // ---------------- the four bot_squad bots
+        check(n_squad > 0 && n_close > 0, "bot_squad's bots trade at the opens and closes");
+        check(bad_night == 0, "OVERNIGHT holds nothing during any day");
+        check(bad_day == 0, "DAY TRADE holds nothing after any close");
+        check(places_ok(dut.matthew_display.numbers_ranks), "the leaderboard places are 1 to 6, each once");
+        $display("     bot_squad: %0d trades; values %0d %0d %0d %0d c", n_squad,
+                 dut.squad_value[31:0], dut.squad_value[63:32], dut.squad_value[95:64], dut.squad_value[127:96]);
+
+        // ---------------- game over: everything stops
+        while (dut.screen_state != `UI_GAME_END) @(posedge clk);
+        repeat (DAY) @(posedge clk);
+        begin : frozen
+            reg [31:0] d0, v0; reg [15:0] p0; integer s0, b0, t0;
+            d0 = dut.amd_date; p0 = dut.price0; v0 = dut.portfolio_value;
+            s0 = n_squad; b0 = dut.bot_trades; t0 = n_tick;
+            repeat (3 * DAY) @(posedge clk);
+            check(dut.amd_date == d0 && dut.price0 == p0 && n_tick == t0,
+                  "game over: the market stops (no new days, prices stay)");
+            check(dut.portfolio_value == v0, "game over: your net worth stays at the final value");
+            check(n_squad == s0 && dut.bot_trades == b0, "game over: no bot trades any more");
+            check(dut.time_remaining == 0, "game over: no days left");
+        end
 
         check(n_err == 0, "Tricia's ledger never rejected a fill from Douglas");
         $display("     cash %0d c, AMD position %0d, realised %0d c, %0d fills, %0d rejects",

@@ -97,7 +97,12 @@
 `define DN_CHG0    63   // stock 0..3: price now - price 30 days ago, DN_CHG0 + k
 `define DN_CHI     67   // selected stock: highest price of the last 30 days (VGA chart)
 `define DN_CLO     68   // selected stock: lowest price of the last 30 days
-`define DN_N       69
+`define DN_LBNET0  69   // leaderboard: bot 0..4 value (0 = moving average, 1-4 = bot_squad), DN_LBNET0 + n
+`define DN_LBPNL0  74   // leaderboard: bot 0..4 value - starting cash, DN_LBPNL0 + n
+`define DN_N       79
+
+// the bots, in leaderboard and bot-view order
+`define BOTS       5
 
 // btn_pulse bit positions, in Basys3 master XDC order (btnC, btnU, btnL, btnR, btnD)
 `define BTN_C 0

@@ -405,3 +405,23 @@ stays for `bot_log_page` and the tests; synthesis removes the parts nobody reads
 `vga_cells` (400 random states, every cell) and `text_layer` (3,000 random states, every screen and
 cell) gave identical characters and colours; both comparisons were checked to catch planted
 mistakes. `tb_display_numbers` checks the RAM copies and flags; all testbenches pass.
+
+## 2026-11-02: four more bots, the bot view and leaderboard, game-over fixes (branch-douglas-vga-display)
+
+**Asked for:** create the 4 bots from Tricia's to-do list within the LUT budget, keep Tricia's
+moving-average bot as a fifth, show all the bots on the screens; and from testing: bot results on the
+GAME OVER screen, trading still going after game over, and no sign of game over in the bot view.
+
+**Done by the AI:** New `4_Tricia_Ledger/submodules/bot_squad.v`: OVERNIGHT, DAY TRADE, AVG DOWN and
+SL / TP in one engine that visits each bot and stock in turn, with their cash, shares, cost and
+reference prices in small RAMs (open = the day tick, close = 90% into the day, same price, as agreed).
+New `bot_logbook.v`: every bot's recent trades. `Integration_Top.v`: close tick, both modules, the
+chosen bot's numbers to the screens, the market stopped at game over (new `run` input on `A_top`),
+and the trigger price worked out over 3 clocks (Matthew's timing report: worst path). `D_display_top`:
+BTNL / BTNR choose the bot in the bot view. `display_numbers`: leaderboard fields, places 1-6, and a
+4-clock settle before a field's value is taken (multicycle in `Integration.xdc`). Screens: VGA
+leaderboard (rows 20-26) with SL / TP labels moved beside the chart; OLED bot view and trade page
+show the chosen bot's name and rule and FINAL after the game; GAME OVER shows your place and who
+finished first. New `tb_bot_squad` and `tb_bot_logbook` (checked to fail on planted bugs);
+`tb_integration` checks the bots, bot choice and that everything stops at game over; all testbenches
+pass. Yosys estimate about 16,900 LUTs (81%). Not yet built in Vivado.

@@ -32,6 +32,8 @@ module OLED_Renderer (
     input  [1:0]  order_brk,
     input         bot_view,                // sw15: the bot's screen
     input         bot_active,              // 0: no bot yet
+    input  [2:0]  bot_sel,                 // the bot the bot view shows
+    input  [17:0] ranks,                   // places 1-6: you, then bots 0-4
     input  [7:0]  bot_signal,
     input  [15:0] sel_sl,                  // selected stock's SL / TP levels (0 = none)
     input  [15:0] sel_tp,
@@ -74,6 +76,8 @@ module OLED_Renderer (
         .order_brk(order_brk),
         .bot_view(bot_view),
         .bot_active(bot_active),
+        .bot_sel(bot_sel),
+        .ranks(ranks),
         .bot_signal(bot_signal),
         .big(big), .chart_on(chart_on),
         .ch(ch), .fg(fg), .bg(bg)

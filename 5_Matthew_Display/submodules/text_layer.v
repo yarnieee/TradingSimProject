@@ -19,9 +19,11 @@
 //   QUANTITY         the quantity in big digits, the digit being changed in yellow
 //   ORDER_REVIEW     the order, its type and SL/TP, and its total; SEND
 //   TRADE_RESULT     FILLED, PLACED (in the book) or REJECTED in big letters, and why
-//   GAME_END         net worth in big digits and the final profit/loss
-//   bot view (sw15)  the bot's value against yours, and per stock its signal,
-//                    shares and P/L (NO BOT YET until Tricia's bot is in)
+//   GAME_END         net worth in big digits, the final profit/loss, your place
+//                    among you and the 5 bots, and who finished first
+//   bot view (sw15)  the chosen bot (bot_sel; BTNL / BTNR) by name, its value against
+//                    yours, and per stock its signal, shares and P/L; once the game
+//                    is over the header turns red and says FINAL
 // Numbers come from display_numbers: a cell shows at most one, so the cell
 // asks for that field by number (num_f) and gets it back from display_numbers'
 // RAM (num_rd); one num_ch formats it for the whole screen.
@@ -47,6 +49,8 @@ module text_layer (
     input  [1:0]  order_brk,
     input         bot_view,            // sw15: show the bot instead of the player
     input         bot_active,          // 0: the bot is not written yet (NO BOT YET)
+    input  [2:0]  bot_sel,             // the bot shown: 0 moving average, 1-4 bot_squad's
+    input  [17:0] ranks,               // places 1-6: you [2:0], bot n [3*n+3 +: 3]
     input  [7:0]  bot_signal,          // per stock [2k+1:2k]: 1 above its 8-day average, 2 below
     output reg        big,             // this screen uses the big row
     output reg        chart_on,        // rows 3-5 are the chart (SPECIFIC)
@@ -122,6 +126,19 @@ module text_layer (
             end else if (r == rm + 2) begin
                 if (prefix != 8'd0 && sgn) num_ch = sign_c;
             end
+        end
+    endfunction
+
+    function [87:0] bot_name;              // 11 characters
+        input [2:0] b;
+        begin
+            case (b)
+                3'd0:    bot_name = "MA BOT     ";
+                3'd1:    bot_name = "OVERNIGHT  ";
+                3'd2:    bot_name = "DAY TRADE  ";
+                3'd3:    bot_name = "AVG DOWN   ";
+                default: bot_name = "SL / TP    ";
+            endcase
         end
     endfunction
 
@@ -257,6 +274,12 @@ module text_layer (
                                   (d_sgn == 2'd2) ? 1'b1 : num_neg, d_dp2, d_prefix, d_w, d_p);
     wire        days_low = (num_rd[31:4] == 28'd0) && (num_rd[3:0] <= 4'd5);   // 5 days or fewer
 
+    // who finished first: you, or the bot in place 1
+    wire        you_first = (ranks[2:0] == 3'd1);
+    wire [2:0]  first_bot = (ranks[5:3]   == 3'd1) ? 3'd0 : (ranks[8:6]   == 3'd1) ? 3'd1 :
+                            (ranks[11:9]  == 3'd1) ? 3'd2 : (ranks[14:12] == 3'd1) ? 3'd3 : 3'd4;
+    wire        over      = (screen_state == `UI_GAME_END);
+
     // ------------------------------------------------------------ the cell
     reg [1:0] b;
     always @* begin
@@ -270,12 +293,13 @@ module text_layer (
 
         if (row == 3'd0) begin
             // ---------------------------------------------------- header bar
-            bg = bot_view ? BOTHDR : HDR;
-            if (col >= 4'd12 && screen_state != `UI_GAME_END) begin   // days left: D120 .. D  1
+            bg = bot_view ? (over ? 16'hA000 : BOTHDR) : HDR;
+            if (col >= 4'd12 && !over) begin                        // days left: D120 .. D  1
                 ch = (col == 4'd12) ? "D" : num_char;
                 fg = days_low ? RED : YELLOW;
-            end else if (bot_view) begin
-                ch = str_ch("BOT VS YOU      ", col);
+            end else if (bot_view) begin                            // OVERNIGHT   D 87 / FINAL
+                if (over && col >= 4'd11) begin ch = str_ch("FINAL           ", col - 4'd11); fg = YELLOW; end
+                else if (col <= 4'd10)    ch = bot_name(bot_sel) >> (8 * (10 - col));
             end else if (tabs) begin
                 // HOME (cells 0-3) and MARKET (5-10): the cursor's tab in yellow
                 if (col <= 4'd3 || (col >= 4'd5 && col <= 4'd10)) begin
@@ -537,7 +561,15 @@ module text_layer (
                                 fg = neg[`DN_NETPNL] ? RED : GREEN;
                             end
                         end
-                        3'd4: begin ch = str_ch("START  $10000.00", col); fg = GREY; end
+                        3'd4: begin                                     // YOUR PLACE 2/6
+                            ch = (col == 4'd11) ? "0" + ranks[2:0] : str_ch("YOUR PLACE  /6  ", col);
+                            fg = you_first ? GREEN : WHITE;
+                        end
+                        3'd5: begin                                     // FIRST: AVG DOWN
+                            if (you_first) begin ch = str_ch("YOU BEAT 5 BOTS!", col); fg = GREEN; end
+                            else if (col <= 4'd6) begin ch = str_ch("FIRST:          ", col); fg = GREY; end
+                            else begin ch = bot_name(first_bot) >> (8 * (17 - col)); fg = YELLOW; end
+                        end
                         3'd6: begin ch = str_ch(" SW0: NEW GAME  ", col); fg = GREY; end
                         default: ;
                     endcase

@@ -6,8 +6,11 @@
 //
 // One field at a time (list in trading_defs.vh, DN_*): work out the value,
 // then convert it to 8 BCD digits with a shift-and-add-3 converter (32 clocks).
-// All fields refresh about every 1,500 clocks (15 us), so the screens always
+// All fields refresh about every 3,000 clocks (30 us), so the screens always
 // read finished digits from registers: no dividers in the pixel logic.
+// A field's value is taken 4 clocks after the field number changes (load_v), so
+// its arithmetic (order total = price x quantity, ...) has 4 clocks to settle;
+// Integration.xdc gives load_v / cur_neg that multicycle allowance.
 // Values above 99,999,999 show as 99999999.
 //
 // bcd[32*f +: 32] is field f, digit 0 (ones) in bits [3:0].
@@ -77,6 +80,8 @@ module display_numbers #(
     input  wire signed [31:0] ret_bp,
     input  wire [31:0]  max_dd_bp,
     input  wire signed [31:0] bot_ret_bp,
+    input  wire [32*`BOTS-1:0] bots_value,  // every bot's value, bot n at [32*n +: 32] (leaderboard)
+    output reg  [17:0] ranks,             // place 1..6 of: you [2:0], bot n [3*n+3 +: 3]
     output reg  [`DN_N*32-1:0] bcd,
     output reg  [`DN_N-1:0]    neg,
     // the same fields in RAM, for the screens
@@ -93,9 +98,11 @@ module display_numbers #(
     reg  [6:0] idx;
 
     // ------------------------------------------------------------ which stock / log entry
-    reg [2:0] k;               // stock 0-3 or log entry 0-4 of this field
+    reg [2:0] k;               // stock 0-3, log entry 0-4 or bot 0-4 of this field
     always @* begin
-        if      (idx >= `DN_CHI)     k = 3'd0;
+        if      (idx >= `DN_LBPNL0)  k = idx - `DN_LBPNL0;
+        else if (idx >= `DN_LBNET0)  k = idx - `DN_LBNET0;
+        else if (idx >= `DN_CHI)     k = 3'd0;
         else if (idx >= `DN_CHG0)    k = idx - `DN_CHG0;
         else if (idx >= `DN_RET)     k = 3'd0;
         else if (idx >= `DN_SLT0)    k = idx - `DN_SLT0;
@@ -109,6 +116,8 @@ module display_numbers #(
         else                         k = idx - `DN_PX0;
     end
     wire bot = (idx >= `DN_BPOS0) && (idx < `DN_LOGPX0);
+
+    wire [31:0] lb_k = bots_value[32*k +: 32];
 
     reg [15:0] px_k, ref_k;
     reg [9:0]  pos_k;
@@ -206,7 +215,12 @@ module display_numbers #(
             `DN_CHI:    val = {16'd0, chart_hi};
             `DN_CLO:    val = {16'd0, chart_lo};
             default: begin
-                if (idx >= `DN_CHG0) begin                                               // 30-day change of stock k
+                if (idx >= `DN_LBPNL0) begin                                             // bot k: value - start
+                    val_neg = lb_k < START_CASH;
+                    val     = val_neg ? START_CASH - lb_k : lb_k - START_CASH;
+                end
+                else if (idx >= `DN_LBNET0)       val = lb_k;                            // bot k: value
+                else if (idx >= `DN_CHG0) begin                                          // 30-day change of stock k
                     val_neg = px_k < ref_k;
                     val     = val_neg ? ref_k - px_k : px_k - ref_k;
                 end
@@ -231,6 +245,8 @@ module display_numbers #(
     reg [5:0]  step;         // 0..32
     reg        cur_neg;
     reg        busy;
+    reg [2:0]  settle;       // clocks since the field number changed
+    reg [31:0] load_v;       // the field's value, taken at settle 3
     reg [31:0] net_shown, bnet_shown;    // player's and bot's net worth, as last converted
 
     // add 3 to every digit that is 5 or more (before each shift)
@@ -254,17 +270,26 @@ module display_numbers #(
             step    <= 6'd0;
             cur_neg <= 1'b0;
             busy    <= 1'b0;
+            settle  <= 3'd0;
+            load_v  <= 32'd0;
             bcd     <= {(`DN_N*32){1'b0}};
             neg     <= {`DN_N{1'b0}};
             zero    <= {`DN_N{1'b1}};
             net_shown  <= 32'd0;
             bnet_shown <= 32'd0;
         end else if (!busy) begin
-            bin     <= (val > MAX_SHOWN) ? MAX_SHOWN : val;
-            cur_neg <= val_neg;
-            acc     <= 32'd0;
-            step    <= 6'd0;
-            busy    <= 1'b1;
+            settle <= settle + 3'd1;
+            if (settle == 3'd3) begin
+                load_v  <= (val > MAX_SHOWN) ? MAX_SHOWN : val;
+                cur_neg <= val_neg;
+            end
+            if (settle == 3'd4) begin
+                bin    <= load_v;
+                acc    <= 32'd0;
+                step   <= 6'd0;
+                busy   <= 1'b1;
+                settle <= 3'd0;
+            end
         end else if (step != 6'd32) begin
             {acc, bin} <= {acc_adj, bin} << 1;
             step       <= step + 6'd1;
@@ -301,6 +326,35 @@ module display_numbers #(
         oled_rd <= oled_ram[oled_f];
     end
     assign vga_rd = vga_ram[vga_f];
+
+    // ------------------------------------------------------------ places, you and the bots
+    // Entry 0 is you, 1..5 the bots. Place = 1 + how many are worth more (ties go
+    // to the earlier entry). One comparison a clock, 36 clocks a round.
+    function [31:0] entry;
+        input [2:0] e;
+        begin
+            entry = (e == 3'd0) ? portfolio_value : bots_value[32*(e - 3'd1) +: 32];
+        end
+    endfunction
+    reg  [2:0] ri, rj, rcnt;
+    wire [31:0] v_i = entry(ri), v_j = entry(rj);
+    wire        ahead = (v_j > v_i) || ((v_j == v_i) && (rj < ri));
+    always @(posedge clk) begin
+        if (rst) begin
+            ri <= 3'd0; rj <= 3'd0; rcnt <= 3'd0;
+            ranks <= {3'd6, 3'd5, 3'd4, 3'd3, 3'd2, 3'd1};
+        end else begin
+            if (rj == 3'd5) begin
+                ranks[3*ri +: 3] <= rcnt + ahead + 3'd1;
+                rcnt <= 3'd0;
+                rj   <= 3'd0;
+                ri   <= (ri == 3'd5) ? 3'd0 : ri + 3'd1;
+            end else begin
+                rcnt <= rcnt + ahead;
+                rj   <= rj + 3'd1;
+            end
+        end
+    end
 
     // net worth as shown (packed BCD compares like the number it holds)
     assign lead = (net_shown > bnet_shown);

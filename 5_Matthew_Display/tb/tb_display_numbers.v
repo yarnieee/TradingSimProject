@@ -32,6 +32,9 @@ module tb_display_numbers;
     wire [32:0] vga_rd, oled_rd;
     wire [`DN_N-1:0]    zero;
     wire        lead, tie;
+    // the five bots' values: $10,000.00, $10,250.00, $9,875.50, $10,250.00, $12,000.00
+    wire [159:0] bots = {32'd1_200_000, 32'd1_025_000, 32'd987_550, 32'd1_025_000, 32'd1_000_000};
+    wire [17:0]  ranks;
 
     display_numbers dut (
         .clk(clk), .rst(rst), .cash(cash), .portfolio_value(pv),
@@ -47,6 +50,7 @@ module tb_display_numbers;
         .log_price(lpx), .log_day(lday),
         .book_qty({48'd0, 8'd5, 8'd12}), .book_trig({96'd0, 16'd21743, 16'd29704}),
         .ret_bp(-32'sd81), .max_dd_bp(32'd91), .bot_ret_bp(32'sd1579),
+        .bots_value(bots), .ranks(ranks),
         .bcd(bcd), .neg(neg),
         .vga_f(vga_f), .vga_rd(vga_rd), .oled_f(oled_f), .oled_rd(oled_rd),
         .zero(zero), .lead(lead), .tie(tie)
@@ -90,7 +94,7 @@ module tb_display_numbers;
     endtask
 
     task refresh;            // one full pass over all fields
-        begin repeat (`DN_N * 36) @(posedge clk); #1; end
+        begin repeat (`DN_N * 40) @(posedge clk); #1; end
     endtask
 
     initial begin
@@ -133,6 +137,13 @@ module tb_display_numbers;
         check(`DN_CHG0 + 3, 32'h00000010, 1, "GME down $0.10");
         check(`DN_CHI,      32'h00032150, 0, "chart high $321.50");
         check(`DN_CLO,      32'h00030000, 0, "chart low $300.00");
+        check(`DN_LBNET0 + 2, 32'h00987550, 0, "leaderboard: bot 2 worth $9875.50");
+        check(`DN_LBPNL0 + 2, 32'h00012450, 1, "bot 2 down $124.50");
+        check(`DN_LBPNL0 + 4, 32'h00200000, 0, "bot 4 up $2000.00");
+        check(`DN_LBPNL0 + 0, 32'h00000000, 0, "bot 0 level");
+        // you $13,079.50 first; bot 4, bots 1 and 3 (a tie: the earlier first), bot 0, bot 2
+        if (ranks === {3'd2, 3'd4, 3'd6, 3'd3, 3'd5, 3'd1}) n_pass = n_pass + 1;
+        else begin n_fail = n_fail + 1; $display("FAIL: places, got %b", ranks); end
         check_ram;
 
         otype = `OT_LMT; qty = 2;
@@ -147,6 +158,9 @@ module tb_display_numbers;
         check(`DN_ORDTOT,  32'h00000100, 1, "sell 0 shares: -1.00 (fee)");
         check(`DN_NETPNL,  32'h00050000, 1, "net P/L -500.00");
         check(`DN_CASH,    32'h99999999, 0, "huge value shows 99999999");
+        // you now $9,500.00: last of six
+        if (ranks === {3'd1, 3'd3, 3'd5, 3'd2, 3'd4, 3'd6}) n_pass = n_pass + 1;
+        else begin n_fail = n_fail + 1; $display("FAIL: places after you fall behind, got %b", ranks); end
         check_ram;
 
         if (n_fail == 0) $display("PASS: tb_display_numbers (%0d checks)", n_pass);

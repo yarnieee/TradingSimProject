@@ -19,9 +19,8 @@ module tb_vga_screen;
         .trade_side(1'b0), .trade_result_success(1'b0), .trade_result_placed(1'b0),
         .trade_result_code(3'd0), .order_valid(1'b1), .validation_code(3'd0),
         .order_type(`OT_MKT), .order_brk(`BRK_OFF), .order_dist(2'd0), .oled_bot_view(1'b0),
-        .stock_up(4'b0101), .num_f(), .num_rd(33'd0), .zero({`DN_N{1'b1}}), .lead(1'b0), .tie(1'b1),
+        .stock_up(4'b0101), .num_f(), .num_rd(33'd0), .zero({`DN_N{1'b1}}), .bot_sel(3'd0), .ranks(18'd0),
         .book_valid(8'd0), .book_side(8'd0), .book_stock(16'd0), .book_type(16'd0), .book_leg(8'd0),
-        .log_valid(5'd0), .log_side(5'd0), .log_stock(10'd0),
         .stock_samples({30{16'd10000}}), .sel_sl(16'd0), .sel_tp(16'd0),
         .progress_w(11'd621),                       // half of the 1242-pixel bar
         .vga_r(r), .vga_g(g), .vga_b(b), .hsync(hs), .vsync(vs)

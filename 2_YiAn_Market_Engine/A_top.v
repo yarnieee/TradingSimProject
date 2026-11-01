@@ -32,6 +32,7 @@ module A_top #(
     )(
     input wire clk,
     input wire rst,
+    input wire run,                 // 0: the market stops (no new days), e.g. after the game ends
     output wire [1:0] market_state,
     output wire [2:0] market_event,
     output wire amd_ready,
@@ -99,6 +100,7 @@ module A_top #(
     );
 
     wire day_tick;
+    wire day_count_tick;
     wire [31:0] startup_random_seed;
     wire startup_seed_valid;
 
@@ -114,8 +116,9 @@ module A_top #(
         ) day_ticker_inst (
         .clk(clk),
         .rst(rst),
-        .tick(day_tick)
+        .tick(day_count_tick)
     );
+    assign day_tick = day_count_tick && run;
 
     // Distinct derivations keep the seven random streams independent while
     // avoiding a user-configurable seed input.

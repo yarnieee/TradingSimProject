@@ -21,14 +21,22 @@ C Tricia, D Matthew). Still to rename by its owner: `A_top` to `A_market_top`.
 
 ## Open in Vivado
 
-1. Clone to a short path with no spaces:
+This is `branch-douglas-vga-display` (the team build plus the VGA monitor). Its own folder and
+its own Vivado project keep it apart from a `branch-team-integration` copy.
+
+1. Clone this branch to a short path with no spaces:
    ```
-   git clone -b branch-team-integration https://github.com/yarnieee/TradingSimProject.git C:/EE2026/TradingSimProject
+   git clone -b branch-douglas-vga-display https://github.com/yarnieee/TradingSimProject.git C:/EE2026/TradingSimProject_vga
    ```
+   (Already have a clone? In it: `git fetch` then `git checkout branch-douglas-vga-display`, and
+   use its folder in the paths below.)
 2. Open Vivado 2025.2 and type in the Tcl Console:
    ```
-   source C:/EE2026/TradingSimProject/0_Integrated_Top/create_integration_project.tcl
+   set proj_dir C:/EE2026/vga_vivado
+   source C:/EE2026/TradingSimProject_vga/0_Integrated_Top/create_integration_project.tcl
    ```
+   Without `set proj_dir` the project goes to `C:/EE2026/Integration_vivado`, replacing a team
+   project already there.
 3. Generate Bitstream, then program the board.
 
 After a `git pull`, run step 2 again.
@@ -37,7 +45,7 @@ After a `git pull`, run step 2 again.
 
 In the Tcl Console:
 ```
-source C:/EE2026/TradingSimProject/0_Integrated_Top/run_all_tests.tcl
+source C:/EE2026/TradingSimProject_vga/0_Integrated_Top/run_all_tests.tcl
 ```
 Each test prints `PASS` or `FAIL`.
 

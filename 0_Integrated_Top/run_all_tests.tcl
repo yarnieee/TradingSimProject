@@ -11,7 +11,10 @@ set all_tbs {
     tb_chart_renderer
     tb_display_numbers
     tb_vga_screen
+    tb_portfolio_history
     tb_yian_market
+    tb_market_state
+    tb_history_timeframes
     tb_stock_price
     tb_stock_pipeline
     tb_normalise_lfsr

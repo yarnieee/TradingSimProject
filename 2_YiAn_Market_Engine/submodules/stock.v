@@ -39,20 +39,32 @@ module stock #(
 
     // The repository's packed seed files provide the four stock histories
     // (AMD, MCD, NVDA, and GME) consumed by the four A_top channels.
-    reg [RECORD_WIDTH-1:0] seed_memory [0:BUFFER_DEPTH-1];
+    (* rom_style = "block" *) reg [RECORD_WIDTH-1:0] seed_memory [0:BUFFER_DEPTH-1];
     reg [INDEX_WIDTH-1:0] seed_index;
 
     initial begin
         $readmemh(SEED_FILE, seed_memory);
     end
 
+    // The seed records are read on the clock so they sit in block RAM rather
+    // than logic: seed_record is record seed_index one clock later.
+    // seed_valid: seed_record holds a record still to be loaded;
+    // seed_last: it is the last one.
+    reg [RECORD_WIDTH-1:0] seed_record;
+    reg seed_valid;
+    reg seed_last;
+
+    always @(posedge clk) begin
+        seed_record <= seed_memory[seed_index];
+    end
+
     wire [31:0] seed_date;
     wire [15:0] seed_close;
     wire [31:0] seed_volume;
 
-    assign seed_date = seed_memory[seed_index][79:48];
-    assign seed_close = seed_memory[seed_index][47:32];
-    assign seed_volume = seed_memory[seed_index][31:0];
+    assign seed_date = seed_record[79:48];
+    assign seed_close = seed_record[47:32];
+    assign seed_volume = seed_record[31:0];
 
     function [7:0] adjust_random_for_market;
         input [7:0] random_value;
@@ -321,7 +333,7 @@ module stock #(
     wire [31:0] buffer_volume;
     wire [31:0] buffer_date;
 
-    assign buffer_write = !ready || p_commit;
+    assign buffer_write = (!ready && seed_valid) || p_commit;
     assign buffer_close = ready ? p_close : seed_close;
     assign buffer_volume = ready ? current_volume : seed_volume;
     assign buffer_date = ready ? p_date : seed_date;
@@ -363,6 +375,8 @@ module stock #(
         if (rst) begin
             ready <= 1'b0;
             seed_index <= {INDEX_WIDTH{1'b0}};
+            seed_valid <= 1'b0;
+            seed_last <= 1'b0;
             current_close <= 16'b0;
             current_volume <= 32'b0;
             current_date <= 32'b0;
@@ -371,7 +385,11 @@ module stock #(
             calendar_day <= INITIAL_DAY;
             calendar_weekday <= INITIAL_WEEKDAY;
         end else if (!ready) begin
-            if (seed_index == BUFFER_DEPTH-1) begin
+            seed_valid <= 1'b1;
+            seed_last <= (seed_index == BUFFER_DEPTH-1);
+            if (seed_index != BUFFER_DEPTH-1)
+                seed_index <= seed_index + 1'b1;
+            if (seed_valid && seed_last) begin
                 ready <= 1'b1;
                 current_close <= seed_close;
                 current_volume <= seed_volume;
@@ -380,8 +398,6 @@ module stock #(
                 calendar_month <= INITIAL_MONTH;
                 calendar_day <= INITIAL_DAY;
                 calendar_weekday <= INITIAL_WEEKDAY;
-            end else begin
-                seed_index <= seed_index + 1'b1;
             end
         end else if (p_commit) begin
             current_close <= p_close;

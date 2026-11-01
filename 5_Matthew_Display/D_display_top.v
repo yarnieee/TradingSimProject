@@ -428,6 +428,7 @@ module D_display_top #(
     assign title_pixel_index_L = (title_display_y_L * 13'd96) + title_display_x_L;
 
     title_art_renderer title_art_renderer_inst (
+        .clk(clk),
         .pixel_index_R(pixel_index_R),
         .pixel_index_L(title_pixel_index_L),
         .pixel_data_R(title_pixel_R),

@@ -365,3 +365,16 @@ clock, so `Integration_Top` is unchanged. New `tb_stock_pipeline` (3,000 days ag
 a reference calendar; checked to fail on planted bugs), added to `run_all_tests.tcl`. All testbenches
 pass. Yosys estimate per stock: about 990 -> 290 LUTs, logic depth 47 -> 10 LUT levels. Timing not
 yet re-checked in Vivado.
+
+## 2026-11-01: ROMs moved into block RAM (branch-douglas-vga-display)
+
+**Asked for:** move whatever can be moved into RAM, to save LUTs.
+
+**Done by the AI:** `title_art_renderer.v`: the two title images are read on the clock (new `clk`
+port, connected in `D_display_top.v`) and marked `rom_style = "block"`, so they sit in block RAM.
+The 10 ns read is far inside the 160 ns the OLED driver allows between a pixel's index changing and
+the pixel being sent. `stock.v`: the seed records are read on the clock the same way, and history
+loading waits one clock for each read. A one-off check against the previous `stock.v` gave the same
+history, close and date for all four seed files. All testbenches pass. Yosys estimate: title art
+about 1,550 -> 30 LUTs (2 block RAMs), each stock about 410 -> 260 LUTs (1 block RAM). Not yet
+built in Vivado.

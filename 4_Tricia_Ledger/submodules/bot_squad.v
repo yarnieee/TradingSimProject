@@ -78,8 +78,8 @@ module bot_squad #(
     reg [31:0] cash_m [0:3];
     reg [9:0]  pos_m  [0:15];
     reg [31:0] cb_m   [0:15];             // cost basis, fees included
-    reg [15:0] ref_m  [0:15];             // AVG DOWN: last buy; SL / TP: entry price
-    reg [1:0]  adds_m [0:15];             // AVG DOWN: buys added
+    reg [15:0] ref_m  [0:15];             // AVG DOWN: last buy; SL / TP: entry price; MOMENTUM: yesterday's price
+    reg [1:0]  adds_m [0:15];             // AVG DOWN: buys added; MOMENTUM: up days in a row
 
     // the step being worked on (registered reads)
     reg [31:0] r_cash, r_cb;

@@ -279,7 +279,7 @@ module tb_integration;
         while (dut.screen_state != `UI_GAME_END) @(posedge clk);
         repeat (DAY) @(posedge clk);
         begin : frozen
-            reg [31:0] d0, v0; reg [15:0] p0; integer s0, b0, t0;
+            reg [31:0] d0, v0; reg [15:0] p0; integer s0, b0, t0, pn; reg [63:0] dd;
             d0 = dut.amd_date; p0 = dut.price0; v0 = dut.portfolio_value;
             s0 = n_squad; b0 = dut.bot_trades; t0 = n_tick;
             repeat (3 * DAY) @(posedge clk);
@@ -288,6 +288,14 @@ module tb_integration;
             check(dut.portfolio_value == v0, "game over: your net worth stays at the final value");
             check(n_squad == s0 && dut.bot_trades == b0, "game over: no bot trades any more");
             check(dut.time_remaining == 0, "game over: no days left");
+            // return % and max drawdown (basis points) on the portfolio panel
+            pn = dut.pnl;
+            dd = ({32'd0, dut.tricia_portfolio.peak - dut.equity} * 64'd10000) / dut.tricia_portfolio.peak;
+            check(dut.pnl != 0 && dut.ret_bp == pn / 100, "return % = P/L / $100 (start $10,000)");
+            check(dut.tricia_portfolio.dd_bp == dd[31:0] && dut.max_dd_bp >= dut.tricia_portfolio.dd_bp
+                  && dut.max_dd_bp != 0, "drawdown = (peak - net worth) / peak; max drawdown is the largest");
+            $display("     you: P/L %0d c, return %0d bp, drawdown %0d bp, max drawdown %0d bp",
+                     pn, $signed(dut.ret_bp), dut.tricia_portfolio.dd_bp, dut.max_dd_bp);
         end
 
         // ---------------- a new game (sw0 up, down), started at another time: another market

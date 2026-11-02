@@ -87,7 +87,9 @@ module C_portfolio_top #(
     wire [31:0] peak, dd_bp;
     wire        mtm_done;
 
-    risk_metrics #(.ENABLE_DIVIDERS(0)) u_risk (
+    // the player's return % and max drawdown are on the monitor: dividers on (the
+    // moving-average bot's below stay off, no screen shows them)
+    risk_metrics #(.ENABLE_DIVIDERS(1)) u_risk (
         .clk(clk), .rst(sys_reset), .tick(tick),
         .price0(price0), .price1(price1), .price2(price2), .price3(price3),
         .cash(cash), .pos0(pos0), .pos1(pos1), .pos2(pos2), .pos3(pos3),

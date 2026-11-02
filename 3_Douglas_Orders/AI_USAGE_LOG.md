@@ -499,3 +499,13 @@ SL/TP and the PREP stage are caught. Renamed DAY TRADE to MOMENTUM in `vga_cells
 and `bot_log_page.v`; rule rows "2 UP:BUY DN:SELL" and "CUT -3% TAKE+10%"; README and comments.
 `tb_vga_leaderboard` / `tb_vga_gameover` now check two letters of each name (MA BOT and MOMENTUM
 share the first). Removed `bot_difficulty.v` and its checks. All 30 testbenches pass.
+
+## 2026-11-02: return % and max drawdown on the monitor
+
+**Asked for:** turn the risk_metrics divider back on so RETURN and MAX DRAWDOWN stop showing 0.00.
+
+**Done by the AI:** `C_portfolio_top.v`: the player's `risk_metrics` built with
+`ENABLE_DIVIDERS(1)`; the moving-average bot's stays off (no screen shows it). `tb_integration`
+checks that at game over return = P/L / $100 and drawdown = (peak - net worth) / peak, with max
+drawdown the largest (54 checks; both fail with the divider off). All 30 testbenches pass. Tricia's
+Vivado build estimated about +460 LUTs.

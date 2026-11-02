@@ -1,0 +1,206 @@
+BOT ENABLEMENT AND RESOURCE OPTIMIZATION
+Vivado 2025.2 / xc7a35tcpg236-1 / Integration_Top
+Measured 2026-11-01. No commit was made.
+
+RESULT
+The actual bot-enabled integrated design fits the Basys3. The synthesis
+report gives 14,037 Slice LUTs; the final routed report gives 14,011.
+The final margin against 20,800 is 6,789 LUTs. All 20 testbenches pass.
+Placement, routing, bitstream DRC and write_bitstream completed successfully.
+The generated hardware is NOT timing-closed at 100 MHz: WNS -39.978 ns.
+Board programming and physical validation were not performed.
+
+MEASURED BASELINE (same source collection, seeds, part and Default directive)
+Configuration                      LUTs       FFs     BRAM tiles    DSPs
+Previously verified bot disabled    20,109     5,567       3          38
+Fresh original bot enabled          22,325     7,467       3          46
+Optimized bot enabled, synthesis    14,037     6,983       3          42
+Optimized bot enabled, routed       14,011     7,047       3          42
+
+Synthesis-to-synthesis savings: 8,288 LUTs, 484 FFs and 4 DSPs.
+BRAM consumption is unchanged. Distributed RAM rises from 19 to 31 LUTs.
+The earlier 22,150-LUT report is stale: its synthesis omitted the four seed
+files, inferred no BRAM, and therefore is not an equivalent baseline.
+The fresh baseline includes all four seed files and produces the expected
+one RAMB36 and four RAMB18s, totaling three BRAM tiles.
+
+HIERARCHICAL MEASUREMENTS (synthesis, LUTs)
+Block                              Fresh baseline       Optimized
+Market (yian_market)                    9,747               3,265
+Display (matthew_display)               6,623               6,674
+Orders (douglas_orders)                 2,039               2,039
+Portfolio (tricia_portfolio)            2,752               2,076
+  Bot trader                             959                 272
+  Bot ledger                             657                 679
+  Bot risk / mark-to-market               266                 255
+  Player ledger                          748                 748
+  Player risk                            136                 136
+
+Vivado can attribute optimized combinational logic to different hierarchy
+boundaries and combine LUTs across boundaries. Parent/child counts therefore
+must not be summed to reconstruct the top-level Slice LUT count. The overall
+report is the acceptance criterion. In particular, additional market logic
+was attributed to the top level in the original baseline. The unchanged
+bot ledger's small LUT difference is a mapping effect, not a source change.
+
+OPTIONS CONSIDERED BEFORE IMPLEMENTATION
+These were engineering estimates, not claimed measurements. All estimates
+are relative to the original full bot-enabled design.
+
+1. Share player/bot ledger and risk arithmetic using an arbiter.
+   Estimated saving: 500-900 LUTs, 300-600 FFs, 4-7 DSPs; no extra BRAM.
+   Latency: tens to hundreds of additional cycles while requests serialize.
+   Risks: changes player-order backpressure, fill handshakes and snapshot
+   ownership; more invasive verification. Can preserve behavior if designed
+   carefully, but is unnecessary given the measured result below.
+
+2. Replace bot ledger/risk with a compact fixed-lot accountant.
+   Estimated saving: 400-700 LUTs, 250-500 FFs, 3-5 DSPs; no extra BRAM.
+   Latency: roughly 5-20 accounting cycles per update.
+   The current bot is flat or holds one 20-share lot, so it never needs the
+   general ledger's partial-sale division. Its cost basis, fees, cash and
+   per-stock unrealized P&L could be kept in a compact FSM.
+   Risks: dedicated accounting logic must be proven against ledger.v;
+   future variable-lot/partial-sale behavior would need further support.
+
+3. Single-write history RAM plus mathematically bounded market arithmetic.
+   Estimated saving: 1,500-3,000 LUTs, approximately 500 FFs, 0-4 DSPs;
+   no extra BRAM. Measured overall saving is larger: 8,288 LUTs / 484 FFs /
+   4 DSPs, including synthesis's changed arithmetic sharing and LUT mapping.
+   Latency: 32 extra clocks (0.32 us at 100 MHz) only on the first tick;
+   subsequent bot ticks and all market output latencies are unchanged.
+   Risks: RAM must not be read before initialization; narrowed signed
+   arithmetic must preserve rounding, clamp order and saturation.
+   SELECTED: retains both existing ledgers and the existing risk datapaths.
+
+Reusing the market history was also inspected. Its published interfaces
+expose 7 days and bucketed 30/180-day histories, not the exact bot-padded
+8-day window. Adding an 8-day interface would couple startup padding to
+the market and require extra handling. A 512-bit local LUTRAM is simpler.
+
+WHY THE IMPLEMENTATION SAVES HARDWARE
+1. bot_trader.v previously assigned eight history addresses in one clock
+   during startup. Vivado could not infer RAM and used 512 history FFs plus
+   large read/write selection logic. INIT now writes one slot per clock.
+   There is one unreset memory write process and one asynchronous read.
+   Synthesis confirms hist_reg is 32 x 16 distributed RAM (RAM32M x 3).
+   All eight padded copies exist before that stock's first decision.
+   The bot trader itself drops from 648 FFs to 133 and 959 LUTs to 272.
+
+2. stock.v used signed 32-bit temporaries and a signed 64-bit division for
+   each stock's combinational price update. Explicit bounds are:
+     random plus bias: -10..285, signed 10 bits;
+     clamped random: 0..100; offset: -50..50;
+     volatility, clamped before narrowing: 0..100;
+     weighted offset: -5000..5000, signed 14 bits;
+     daily percent: -100..100, signed 8 bits;
+     multiplier: 0..200, unsigned 8 bits;
+     scaled price: at most 65535*200 = 13,107,000 < 2^24.
+   Signed /50 retains truncation toward zero. Since scaled price is always
+   nonnegative, unsigned 24-bit /100 gives the identical integer result.
+   The 1..65534 output saturation is unchanged. No reciprocal approximation
+   or arithmetic synthesis directive is used. One DSP per stock is saved.
+
+BOT BEHAVIOR AND VIEWS
+ENABLE_BOT defaults to 1 in Integration_Top and C_portfolio_top. The direct
+synthesis script also explicitly supplies ENABLE_BOT=1. bot_active follows
+that parameter, so the normal board build has active bot hardware and UI.
+All four stocks retain their exact padded 8-day windows, MA>>8 dead band,
+20-share buy when flat, full-position sell, spread, fees, affordability
+checks, one fill per stock per day and ledger busy handshake.
+The player ledger, bot ledger, order book and game FSM are preserved.
+The existing non-displayed return/drawdown dividers remain disabled as they
+were in the measured starting tree; no additional metric was disabled here.
+Real MA-band signals now feed the right OLED instead of constant zeros.
+The trade log captures actual fill pulses, rather than detecting changes
+in last-trade fields. Left bot-view row 6 now shows live cash using the shared
+BCD fields. Right bot view retains equity, holdings and per-stock P&L.
+There is no strategy compromise. The startup latency above is the only
+intentional change to the trading schedule.
+
+TESTS
+The initial pre-change run exposed two existing integration assertions that
+failed with the bot disabled (ledger error signal and accounting invariant).
+The final enabled build passes those assertions and all other tests.
+The full existing runner was used; no failing tests were removed or masked.
+
+Final results (20 / 20 PASS):
+  tb_integration (29 checks), tb_chart_renderer (14), tb_display_numbers (31),
+  tb_yian_market (9), tb_stock_price (8), tb_normalise_lfsr (5),
+  tb_matthew_game_fsm (36), tb_ledger, tb_bot_trader, tb_bot_regression,
+  tb_bot_portfolio, tb_price_equivalence, tb_risk_metrics, tb_seq_divider,
+  tb_BC_ledger (73), tb_order_validate (36), tb_order_book (47),
+  tb_exec_engine (31), tb_ticket_screen (37), tb_B_order_top (78).
+
+New tb_bot_regression checks 176 deterministic trading days against an
+independent window/cash/cost-basis model, all four stocks' buys and sells,
+no duplicate fills, wraparound, gameplay off, insufficient cash, saturated
+ask arithmetic, exact signal output, fees and realised P&L.
+New tb_bot_portfolio tests the actual C integration and independently checks
+bot equity, cash, unrealized P&L, liquidation and isolation of player cash.
+New tb_price_equivalence performs 147,456 comparisons against the original
+wide signed formula over boundary/random prices, all 256 random inputs at
+boundaries, all four regimes, volatilities 0/8/10/14/20/100 and invalid -1/101.
+The new reference tests also passed before the RTL change.
+
+IMPLEMENTATION AND REMAINING RISK
+Placement, routing and bitstream DRC: completed, no errors.
+write_bitstream: completed successfully, 2026-11-01 19:16:45.
+Final WNS: -39.978 ns; TNS: -43,552.629 ns; 6,735 failing setup endpoints.
+Hold slack: +0.017 ns, no hold violations.
+OLED clock setup slack: +112.415 ns.
+Worst setup path: yian_market/stock2_lfsr_inst/q_reg[4] to
+yian_market/stock2_inst/current_close_reg[5], under the 10 ns system clock.
+The clock and pin constraints were not relaxed or changed.
+The LUT objective and RTL simulations pass, but the existing single-cycle
+normalization/price arithmetic still needs pipelining/scheduling before
+claiming reliable 100 MHz board operation. Passing bitstream DRC is not a
+substitute for timing closure. The next work should stage that path with a
+consistent market-day commit and re-run the integration/timing checks.
+
+FILES CHANGED DURING THIS OPTIMIZATION
+  0_Integrated_Top/Integration_Top.v
+    Enabled bot by default, connected real MA signals and fill-event logging.
+  4_Tricia_Ledger/C_portfolio_top.v
+    Exposed bot signals and real fill event; retained both ledgers/risk blocks.
+  4_Tricia_Ledger/submodules/bot_trader.v
+    Single-port history initialization and actual MA-band signal output.
+  2_YiAn_Market_Engine/submodules/stock.v
+    Exact bounded signed/unsigned price datapath.
+  5_Matthew_Display/submodules/bot_log_page.v
+    Live cash in the bot-view footer.
+  0_Integrated_Top/run_all_tests.tcl
+    Added focused tests and optional persistent summary output.
+  0_Integrated_Top/direct_synth_current.tcl (existing local helper)
+    Explicit enabled-bot synthesis, hierarchical report, configurable output.
+The existing uncommitted risk_metrics.v divider-option changes and other
+unrelated local helpers/build artifacts were preserved.
+
+NEW FILES
+  4_Tricia_Ledger/tb/tb_bot_regression.v
+  4_Tricia_Ledger/tb/tb_bot_portfolio.v
+  2_YiAn_Market_Engine/tb/tb_price_equivalence.v
+  0_Integrated_Top/run_bot_verification.tcl
+  0_Integrated_Top/measure_bot_baseline.tcl (one-time capture, overwrite guarded)
+  0_Integrated_Top/BOT_OPTIMIZATION_REPORT.txt
+
+REPRODUCING THE FINAL BUILD (PowerShell, from repository root)
+  $env:XILINX_LOCAL_USER_DATA = Join-Path (Get-Location) '.vivado_user_direct'
+  & 'C:\AMDDesignTools\2025.2\Vivado\bin\vivado.bat' -mode batch -source 0_Integrated_Top/run_bot_verification.tcl
+  & 'C:\AMDDesignTools\2025.2\Vivado\bin\vivado.bat' -mode batch -source 0_Integrated_Top/direct_synth_current.tcl
+  & 'C:\AMDDesignTools\2025.2\Vivado\bin\vivado.bat' -mode batch -source 0_Integrated_Top/direct_impl_current.tcl
+Do not run implementation after a failed synthesis; it would read an older
+checkpoint. The final invocation logs are vivado_bot_tests_final.log,
+vivado_bot_optimized_synth.log and vivado_bot_final_impl.log.
+
+REPORTS / OUTPUTS (repository-relative)
+  .b/bot_baseline/Integration_Top_utilization_synth.rpt
+  .b/bot_baseline/Integration_Top_utilization_hier_synth.rpt
+  .b/direct/Integration_Top_utilization_hier_disabled.rpt
+  .b/direct/Integration_Top_utilization_synth.rpt
+  .b/direct/Integration_Top_utilization_hier_synth.rpt
+  .b/direct/Integration_Top_utilization_impl.rpt
+  .b/direct/Integration_Top_timing_summary.rpt
+  .b/direct/Integration_Top_drc.rpt
+  .b/bot_tests/test_summary.txt
+  .b/direct/Integration_Top.bit

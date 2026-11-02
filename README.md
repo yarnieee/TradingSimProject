@@ -98,9 +98,9 @@ the day and its "close" is 4.5 s in, at the same price.
 |---|---|
 | MA BOT (Tricia's) | buys when a price is above its 8-day average, sells when it falls below |
 | OVERNIGHT | buys at the close, sells everything at the next open |
-| DAY TRADE | buys at the open, sells everything at the close (so it only pays spread and fees) |
+| MOMENTUM | buys once a price has gone up 2 days in a row, sells everything on the first down day |
 | AVG DOWN | buys, then buys more each time the price is 5% below its last buy (up to 3 times); sells all at 5% above what it paid |
-| SL / TP | buys, then sells at +10% (take profit) or -5% (stop loss); buys again the next day |
+| SL / TP | buys, then sells at +10% (take profit) or -3% (stop loss); buys again the next day |
 
 **Bot view (sw[15] up)**: BTNL / BTNR choose a bot. The right OLED shows its value against yours and
 its holdings, the left its last 5 trades and its rule. The monitor's leaderboard marks it with `>`.

@@ -25,10 +25,6 @@ module tb_bot_squad;
         .trade_side(trade_side), .trade_price(trade_price)
     );
 
-    // difficulty labels for the screens (bot_sel numbering: 0 MA, 1..4 = bot_squad 0..3)
-    wire [9:0] level;
-    bot_difficulty levels (.level(level));
-
     integer n_pass = 0, n_fail = 0;
     task check;
         input          cond;
@@ -208,11 +204,6 @@ module tb_bot_squad;
         repeat (100) @(posedge clk); #1;
         check(value === {4{32'd1_000_000}} && dut.pos_m[8] == 0 && dut.adds_m[8] == 0 && dut.ref_m[7] == 0,
               "reset: a new game starts flat (MOMENTUM forgets yesterday)");
-
-        // ---------------- difficulty labels: 1 easy, 2 medium, 3 hard
-        check(level[1:0] == 2'd3 && level[5:4] == 2'd3, "levels: MA bot and MOMENTUM are HARD");
-        check(level[3:2] == 2'd1 && level[7:6] == 2'd1, "levels: OVERNIGHT and AVG DOWN are EASY");
-        check(level[9:8] == 2'd2, "levels: SL/TP is MEDIUM");
 
         if (n_fail == 0) $display("PASS: tb_bot_squad (%0d checks)", n_pass);
         else             $display("FAIL: tb_bot_squad (%0d failed, %0d passed)", n_fail, n_pass);

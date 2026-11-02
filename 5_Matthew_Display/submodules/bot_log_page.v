@@ -68,7 +68,7 @@ module bot_log_page #(
             case (b)
                 3'd0:    name = "MA BOT    ";
                 3'd1:    name = "OVERNIGHT ";
-                3'd2:    name = "DAY TRADE ";
+                3'd2:    name = "MOMENTUM  ";
                 3'd3:    name = "AVG DOWN  ";
                 default: name = "SL / TP   ";
             endcase
@@ -82,9 +82,9 @@ module bot_log_page #(
             case (b)
                 3'd0:    rule = "RULE: BUY >MA8  ";
                 3'd1:    rule = "HOLD OVERNIGHT  ";
-                3'd2:    rule = "HOLD OPEN-CLOSE ";
+                3'd2:    rule = "2 UP:BUY DN:SELL";
                 3'd3:    rule = "ADD -5% OUT +5% ";
-                default: rule = "CUT -5% TAKE+10%";
+                default: rule = "CUT -3% TAKE+10%";
             endcase
         end
     endfunction

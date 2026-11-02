@@ -8,6 +8,7 @@ module tb_vga_leaderboard;
     reg  [4:0]  row = 5'd0;
     reg  [6:0]  col = 7'd0;
     reg  [17:0] order;
+    reg  [7:0]  c1;                      // the second letter of a name
     wire [6:0]  num_f;
     wire [7:0]  ch;
     wire [3:0]  fg, bg;
@@ -49,9 +50,10 @@ module tb_vga_leaderboard;
                 check(num_f == ((e == 0) ? `DN_NET : `DN_LBNET0 + e - 1), "row shows that entry's net worth");
                 col = 7'd27; #1;                                     // return
                 check(num_f == ((e == 0) ? `DN_NETPNL : `DN_LBPNL0 + e - 1), "row shows that entry's return");
-                col = 7'd4; #1;                                      // name, first letter
-                check(ch == ((e == 0) ? "Y" : (e == 1) ? "M" : (e == 2) ? "O" :
-                             (e == 3) ? "D" : (e == 4) ? "A" : "S"), "row shows that entry's name");
+                col = 7'd5; #1; c1 = ch;                             // name, first two letters
+                col = 7'd4; #1;
+                check({ch, c1} == ((e == 0) ? "YO" : (e == 1) ? "MA" : (e == 2) ? "OV" :
+                                   (e == 3) ? "MO" : (e == 4) ? "AV" : "SL"), "row shows that entry's name");
                 check((bg == 4'd12) == (e == 0), "only your row is highlighted");
             end
         end

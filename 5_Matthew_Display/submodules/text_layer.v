@@ -135,7 +135,7 @@ module text_layer (
             case (b)
                 3'd0:    bot_name = "MA BOT     ";
                 3'd1:    bot_name = "OVERNIGHT  ";
-                3'd2:    bot_name = "DAY TRADE  ";
+                3'd2:    bot_name = "MOMENTUM   ";
                 3'd3:    bot_name = "AVG DOWN   ";
                 default: bot_name = "SL / TP    ";
             endcase

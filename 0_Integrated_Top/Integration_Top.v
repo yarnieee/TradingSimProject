@@ -11,7 +11,7 @@
 //   douglas_orders   B_order_top     Douglas  validates and fills orders, order book, ticket page
 //   tricia_portfolio C_portfolio_top Tricia   ledger (cash, positions, ledger_busy), risk metrics,
 //                                             and the moving-average bot with its own ledger
-//   bots             bot_squad       Tricia   four more bots: overnight, day trade, average
+//   bots             bot_squad       Tricia   four more bots: overnight, momentum, average
 //                                             down, stop-loss / take-profit
 //   bot_log          bot_logbook     Tricia   every bot's recent trades, for the bot view
 //   matthew_display  D_display_top   Matthew  buttons, game screens, 7-seg, both OLEDs

@@ -45,11 +45,16 @@ module tb_vga_gameover;
         begin row = r; col = c; #1; end
     endtask
 
-    // first letter of an entry's name
-    function [7:0] initial_of;
+    // first two letters of an entry's name (MA BOT and MOMENTUM share the first)
+    function [15:0] initial_of;
         input [2:0] e;
-        initial_of = (e == 0) ? "Y" : (e == 1) ? "M" : (e == 2) ? "O" : (e == 3) ? "D" : (e == 4) ? "A" : "S";
+        initial_of = (e == 0) ? "YO" : (e == 1) ? "MA" : (e == 2) ? "OV" : (e == 3) ? "MO" : (e == 4) ? "AV" : "SL";
     endfunction
+    reg [7:0] ch1;                     // the character one cell to the right
+    task at2;
+        input [4:0] r; input [6:0] c;
+        begin row = r; col = c + 7'd1; #1; ch1 = ch; col = c; #1; end
+    endtask
 
     // the results table and the line under it for one standing
     task results_for;
@@ -61,8 +66,8 @@ module tb_vga_gameover;
                 e = o[3*p +: 3];
                 at(5'd14 + p, 7'd6);
                 check(ch == "0" + p + 1, "rows go 1st to 6th");
-                at(5'd14 + p, 7'd14);
-                check(ch == initial_of(e), "the name of who is in that place");
+                at2(5'd14 + p, 7'd14);
+                check({ch, ch1} == initial_of(e), "the name of who is in that place");
                 check((bg == K_ROW) == (e == 0), "only your row is highlighted");
                 at(5'd14 + p, 7'd30);
                 check(num_f == ((e == 0) ? `DN_NET : `DN_LBNET0 + e - 1), "net worth field");
@@ -77,7 +82,7 @@ module tb_vga_gameover;
             end else begin
                 at(5'd21, 7'd6);  check(ch == "Y", "YOU FINISHED ...");
                 at(5'd21, 7'd19); check(ch == "1" + you, "... your place");
-                at(5'd21, 7'd39); check(ch == initial_of(o[2:0]), "... and the winner");
+                at2(5'd21, 7'd39); check({ch, ch1} == initial_of(o[2:0]), "... and the winner");
             end
         end
     endtask

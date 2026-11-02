@@ -487,3 +487,15 @@ tested game), Matthew's `ENABLE_BOT` kept, his `bot_trade_event` fill pulse now 
 moving-average bot's trades. `run_all_tests.tcl`: both branches' new tests. `bot_log_page.v`: the
 chosen bot's rule on row 6 (five bots) rather than the moving-average bot's cash. README: clone and
 Vivado steps for `branch-team-integration`. All 30 testbenches pass. Not yet built in Vivado.
+
+## 2026-11-02: Tricia's bot changes reviewed; DAY TRADE renamed MOMENTUM on the screens
+
+**Asked for:** check Tricia's `tricia-bot-improvements` (bot_trader PREP stage, MOMENTUM in place of
+DAY TRADE, SL/TP stop at -3%), then rename the bot on the screens and show strategies, not
+difficulty levels.
+
+**Done by the AI:** Reviewed her five commits; all 30 testbenches pass and planted bugs in MOMENTUM,
+SL/TP and the PREP stage are caught. Renamed DAY TRADE to MOMENTUM in `vga_cells.v`, `text_layer.v`
+and `bot_log_page.v`; rule rows "2 UP:BUY DN:SELL" and "CUT -3% TAKE+10%"; README and comments.
+`tb_vga_leaderboard` / `tb_vga_gameover` now check two letters of each name (MA BOT and MOMENTUM
+share the first). Removed `bot_difficulty.v` and its checks. All 30 testbenches pass.

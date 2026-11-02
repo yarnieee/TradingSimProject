@@ -9,7 +9,7 @@
 //                    title artwork on the title screen
 //   bot_view (sw15): JB shows a bot against the player, JA that bot's last trades;
 //                    BTNL / BTNR choose the bot (bot_sel 0-4: the moving-average bot,
-//                    then bot_squad's OVERNIGHT, DAY TRADE, AVG DOWN, SL / TP);
+//                    then bot_squad's OVERNIGHT, MOMENTUM, AVG DOWN, SL / TP);
 //                    the buttons are ignored while it is up
 //   VGA monitor:     1280 x 720, everything at once (vga_screen, pixel clock from
 //                    vga_clock): market, portfolio, chart,

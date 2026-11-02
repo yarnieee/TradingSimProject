@@ -20,6 +20,9 @@
 //                as dashed lines, dotted lines at the high and low
 // Pixel path (pixel clock, pipelined): counters -> RAM address -> RAM data ->
 // font + graphics -> colour; the syncs are delayed to match.
+// Title screen: the OLEDs' two title pictures side by side, each pixel 6 x 6
+// (x 64..1215, y 72..455), from their own copy in block RAM read on the pixel
+// clock; the chart is hidden.
 // GAME OVER: the big GAME OVER flashes for about 3 s (36 steps of 2^GO_STEP
 // clocks), then the final results show; the chart is hidden.
 module vga_screen #(
@@ -125,11 +128,11 @@ module vga_screen #(
     end
     wire go_results = (go_t == 6'd36);
     wire go_blink   = !go_t[2];                    // on 4 steps, off 4 steps
-    // to the pixel clock, to hide the chart
-    reg        go_c;
-    reg  [1:0] go_p;
-    always @(posedge clk)  go_c <= (screen_state == `UI_GAME_END);
-    always @(posedge pclk) go_p <= {go_p[0], go_c};
+    // to the pixel clock, to hide the chart (and show the title pictures)
+    reg        go_c, ti_c;
+    reg  [1:0] go_p, ti_p;
+    always @(posedge clk)  begin go_c <= (screen_state == `UI_GAME_END); ti_c <= (screen_state == `UI_TITLE); end
+    always @(posedge pclk) begin go_p <= {go_p[0], go_c}; ti_p <= {ti_p[0], ti_c}; end
 
     // ------------------------------------------------------------ writer: one cell every 4 clocks
     reg  [4:0] wr_row;
@@ -262,6 +265,49 @@ module vga_screen #(
         endcase
     end
 
+    // ------------------------------------------------------------ title pictures
+    // ax / ay: the picture pixel of (h, v); asx / asy count its 6 screen pixels;
+    // ar: the right picture (from x 640)
+    (* rom_style = "block" *) reg [3:0] art_l [0:6143];
+    (* rom_style = "block" *) reg [3:0] art_r [0:6143];
+    initial begin
+        $readmemh("title_art_left.mem", art_l);
+        $readmemh("title_art_right.mem", art_r);
+    end
+    function [11:0] art_rgb;                   // the OLEDs' 16 colours, 4 bits each
+        input [3:0] c;
+        begin
+            case (c)
+                4'h0: art_rgb = 12'h000; 4'h1: art_rgb = 12'h012; 4'h2: art_rgb = 12'h015; 4'h3: art_rgb = 12'h237;
+                4'h4: art_rgb = 12'h99A; 4'h5: art_rgb = 12'hFFE; 4'h6: art_rgb = 12'hFD1; 4'h7: art_rgb = 12'hF60;
+                4'h8: art_rgb = 12'hC11; 4'h9: art_rgb = 12'h1A2; 4'hA: art_rgb = 12'h051; 4'hB: art_rgb = 12'hE96;
+                4'hC: art_rgb = 12'h632; 4'hD: art_rgb = 12'h666; 4'hE: art_rgb = 12'hCA8; default: art_rgb = 12'h2BB;
+            endcase
+        end
+    endfunction
+    reg  [6:0] ax;
+    reg  [5:0] ay;
+    reg  [2:0] asx, asy;
+    reg        ar;
+    always @(posedge pclk) begin
+        if (h == 11'd63) begin
+            ax <= 7'd0; asx <= 3'd0; ar <= 1'b0;
+        end else if (asx == 3'd5) begin
+            asx <= 3'd0;
+            if (ax == 7'd95) begin ax <= 7'd0; ar <= 1'b1; end
+            else ax <= ax + 7'd1;
+        end else
+            asx <= asx + 3'd1;
+        if (h == 11'd1649) begin                // the next line
+            if (v == 10'd71) begin
+                ay <= 6'd0; asy <= 3'd0;
+            end else if (asy == 3'd5) begin
+                asy <= 3'd0; ay <= ay + 6'd1;
+            end else
+                asy <= asy + 3'd1;
+        end
+    end
+
     // ------------------------------------------------------------ pixel pipeline
     // stage 1: RAM address, the pixel's position, its chart day
     reg  [10:0] s1_h;
@@ -269,9 +315,14 @@ module vga_screen #(
     reg  [4:0]  s1_px, s1_ly, s1_bn;
     reg  [3:0]  s1_bp;
     reg         s1_vis, s1_hs, s1_vs;
+    reg  [12:0] art_addr;
+    reg         s1_art, s1_ar;
     wire [10:0] bx = h - 11'd18;               // chart x: day = bx / 16
     always @(posedge pclk) begin
         rd_addr <= {cy, cx};
+        art_addr <= {ay, 6'd0} + {1'b0, ay, 5'd0} + {6'd0, ax};   // ay * 96 + ax
+        s1_art  <= (h >= 11'd64) && (h <= 11'd1215) && (v >= 10'd72) && (v <= 10'd455);
+        s1_ar   <= ar;
         s1_h    <= h;
         s1_v    <= v;
         s1_px   <= px;
@@ -290,7 +341,13 @@ module vga_screen #(
     reg  [3:0]  p_bp;
     reg  [7:0]  p_hc, p_hp;
     reg         p_vis, p_hs, p_vs;
+    reg  [3:0]  p_art_l, p_art_r;
+    reg         p_art, p_ar;
     always @(posedge pclk) begin
+        p_art_l <= art_l[art_addr];
+        p_art_r <= art_r[art_addr];
+        p_art   <= s1_art && ti_p[1];
+        p_ar    <= s1_ar;
         p_h <= s1_h; p_v <= s1_v; p_px <= s1_px; p_ly <= s1_ly; p_bn <= s1_bn; p_bp <= s1_bp;
         p_hc <= h_tab[s1_bn];
         p_hp <= h_tab[(s1_bn == 5'd0) ? 5'd0 : s1_bn - 5'd1];
@@ -307,7 +364,7 @@ module vga_screen #(
                         .pixel_on(glyph));
 
     // chart area: x 18..497, y 240..479 (rows 10-19); lines at y = 468 - height (252 = high, 468 = low)
-    wire       in_chart = !go_p[1] && (p_h >= 11'd18) && (p_h <= 11'd497) && (p_v >= 10'd240) && (p_v <= 10'd479);
+    wire       in_chart = !go_p[1] && !ti_p[1] && (p_h >= 11'd18) && (p_h <= 11'd497) && (p_v >= 10'd240) && (p_v <= 10'd479);
     wire [9:0] y_cur = 10'd468 - {2'd0, p_hc};
     wire [9:0] y_prv = 10'd468 - {2'd0, p_hp};
     wire [9:0] y_sl  = 10'd468 - {2'd0, h_tab[30]};
@@ -330,7 +387,8 @@ module vga_screen #(
     always @(posedge pclk) begin
         s2_text <= glyph ? rgb(rd_data[15:12]) : rgb(rd_data[11:8]);
         s2_gfx_on <= 1'b1;
-        if (in_bar)                                 s2_gfx <= bar_on ? 12'hFC0 : 12'h222;
+        if (p_art)                                  s2_gfx <= art_rgb(p_ar ? p_art_r : p_art_l);
+        else if (in_bar)                            s2_gfx <= bar_on ? 12'hFC0 : 12'h222;
         else if (in_chart && on_line)               s2_gfx <= rising ? 12'h0F0 : 12'hF44;
         else if (in_chart && on_sl)                 s2_gfx <= 12'hF00;
         else if (in_chart && on_tp)                 s2_gfx <= 12'h0F0;

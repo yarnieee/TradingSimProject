@@ -443,8 +443,6 @@ module D_display_top #(
     wire [12:0] pixel_index_L;
     wire [15:0] title_pixel_L;
     wire [15:0] pixel_data_L;
-    wire [6:0]  title_display_x_L;
-    wire [5:0]  title_display_y_L;
     wire [12:0] title_pixel_index_L;
     wire        frame_begin_L;
     wire        sending_pixels_L;
@@ -452,10 +450,9 @@ module D_display_top #(
 
     assign left_x = pixel_index_L % 96;
     assign left_y = pixel_index_L / 96;
-    // JA sits upside down: read the title artwork rotated 180 degrees
-    assign title_display_x_L = 7'd95 - (pixel_index_L % 96);
-    assign title_display_y_L = 6'd63 - (pixel_index_L / 96);
-    assign title_pixel_index_L = (title_display_y_L * 13'd96) + title_display_x_L;
+    // JA sits upside down: read the title artwork rotated 180 degrees, which for a
+    // whole 96 x 64 picture is just the pixels in reverse order
+    assign title_pixel_index_L = 13'd6143 - pixel_index_L;
 
     title_art_renderer title_art_renderer_inst (
         .clk(clk),

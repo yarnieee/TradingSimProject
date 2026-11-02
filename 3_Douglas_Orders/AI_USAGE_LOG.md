@@ -464,3 +464,15 @@ bar explains the controls. `tb_integration`: the market waits on the title, a se
 seed and different prices, and sw14 cancels an order with the game ignoring the buttons (checked to
 fail with sw14 not blocking the game); the DAY TRADE check now looks before the next open (it read
 just after it). All testbenches pass.
+
+## 2026-11-02: title screen on the monitor; left OLED title address (branch-douglas-vga-display)
+
+**Asked for:** the same start screen on the monitor (enough RAM?); the left OLED's title picture
+does not show clearly.
+
+**Done by the AI:** `vga_screen`: on the title screen the two OLED title pictures side by side, each
+pixel 6 x 6 (x 64..1215, y 72..455), from their own block RAM copy read on the pixel clock (+2
+RAMB36, about +100 LUTs); `vga_cells`: PRESS BTNC TO START under them. `D_display_top`: the left
+OLED's rotated title address is now 6143 - pixel_index (the same pixel, checked for all 6144) instead
+of a divide, remainder and multiply. New `tb_vga_title` checks every pixel of three picture rows
+(checked to fail with the pictures one pixel off); all testbenches pass.

@@ -68,7 +68,7 @@ every pending order, a leaderboard of you and the 5 bots in place order (net wor
 are making, what the buttons do on the current screen, and what the switches are set to.
 
 Screens: the right OLED shows the game, the left OLED your order ticket (and title artwork on the
-title screen). The 7-seg shows the quantity being set; LEDs flash on a fill (led 15) or a
+title screen; the monitor shows both title pictures). The 7-seg shows the quantity being set; LEDs flash on a fill (led 15) or a
 reject (led 14) and show pending orders (led 11-8).
 
 **Buying or selling**

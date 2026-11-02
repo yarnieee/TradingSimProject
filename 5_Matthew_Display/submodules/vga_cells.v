@@ -20,6 +20,7 @@
 //   row 27      the order being made, or the last result
 //   row 28      NOW: which buttons to press on this screen (highlighted bar)
 //   row 29      the switches and what they are set to
+// TITLE (rows 2-27 instead): the title pictures (vga_screen) and PRESS BTNC TO START.
 // GAME OVER (rows 2-27 instead): a big flashing GAME OVER for a few seconds,
 // then GAME OVER at the top and the final results, 1st to 6th, below it.
 //
@@ -381,6 +382,14 @@ module vga_cells (
                 else if (col >= 7'd22 && col <= 7'd26) ch = s16(" OF 6           ", col - 7'd22);
                 else if (col >= 7'd31 && col <= 7'd37) begin ch = s16("WINNER:         ", col - 7'd31); fg = K_GREY; end
                 else if (col >= 7'd39 && col <= 7'd49) begin ch = bot_name(order[2:0]) >> (8 * (7'd49 - col)); fg = K_YELLOW; end
+            end
+        end
+
+        // ------------------------------------------------------------ TITLE (rows 2-27): pictures above
+        else if (screen_state == `UI_TITLE && row >= 5'd2 && row <= 5'd27) begin
+            if (row == 5'd21 && col >= 7'd26 && col <= 7'd44) begin
+                ch = s64("PRESS BTNC TO START                                             ", col - 7'd26);
+                fg = K_YELLOW;
             end
         end
 

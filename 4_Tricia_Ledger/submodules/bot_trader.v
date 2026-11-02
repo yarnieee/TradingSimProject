@@ -18,9 +18,11 @@
 //      to go high and then low again before moving to the next stock.
 // tick_done pulses when all 4 stocks are finished (bot's cash/positions final).
 //
-//   IDLE --tick--> UPD -> DECIDE --trade--> SEND -> WAIT_HI -> WAIT_LO -> NEXT
-//                   ^        \--no trade--------------------------------> NEXT
-//                   \------------------- k < 3 ------------------------- NEXT --k = 3--> IDLE
+//   IDLE --tick--> UPD -> PREP -> DECIDE --trade--> SEND -> WAIT_HI -> WAIT_LO -> NEXT
+//                   ^                \--no trade--------------------------------> NEXT
+//                   \------------------------ k < 3 ---------------------------- NEXT --k = 3--> IDLE
+// PREP registers ask, bid and ask*QTY + FEE, so DECIDE only compares registers.
+// (In one clock, price mux -> ask -> multiply -> compare -> fill_price failed 100 MHz.)
 module bot_trader #(
     parameter QTY    = 20,       // shares per buy
     parameter SPREAD = 5,        // cents per side (same as spread_calc)
@@ -51,12 +53,13 @@ module bot_trader #(
     output reg         tick_done,                    // 1-clock pulse, this tick's trades finished
     output reg  [7:0]  signals                       // per stock: 0 neutral, 1 above, 2 below MA band
 );
-    localparam [2:0] IDLE = 3'd0, UPD = 3'd1, DECIDE = 3'd2, SEND = 3'd3,
-                     WAIT_HI = 3'd4, WAIT_LO = 3'd5, NEXT = 3'd6, INIT = 3'd7;
+    localparam [3:0] IDLE = 4'd0, UPD = 4'd1, DECIDE = 4'd2, SEND = 4'd3,
+                     WAIT_HI = 4'd4, WAIT_LO = 4'd5, NEXT = 4'd6, INIT = 4'd7,
+                     PREP = 4'd8;
     localparam [15:0] FEE16 = FEE;
     localparam [7:0]  QTY8  = QTY;
 
-    reg [2:0]  state;
+    reg [3:0]  state;
     reg [1:0]  k;                     // stock being processed (0..3)
     reg        first;                 // 1 until the first tick after reset is done
 
@@ -94,9 +97,11 @@ module bot_trader #(
     wire [15:0] bid      = (p > SPREAD) ? p - SPREAD : 16'd1;
 
     // 17-bit compares so MA + band can't overflow
-    wire [31:0] buy_cost = ask * QTY + FEE;
+    wire [31:0] buy_cost = ask * QTY + FEE;          // registered in PREP
+    reg  [31:0] r_cost;
+    reg  [15:0] r_ask, r_bid;
     wire want_buy  = run && (pos_k == 10'd0) && ({1'b0, p} > {1'b0, ma} + band)
-                         && (buy_cost <= cash);
+                         && (r_cost <= cash);
     wire want_sell = run && (pos_k != 10'd0) && ({1'b0, p} + band < {1'b0, ma});
 
     wire history_write = !rst && ((state == INIT) || ((state == UPD) && !first));
@@ -141,14 +146,21 @@ module bot_trader #(
                     state <= INIT;
                 end else begin
                     sum[k]          <= sum_up;
-                    state <= DECIDE;
+                    state <= PREP;
                 end
             end
 
             INIT: begin
                 // The separate single-port memory process writes this slot.
-                if (init_slot == 3'd7) state <= DECIDE;
+                if (init_slot == 3'd7) state <= PREP;
                 else init_slot <= init_slot + 1'b1;
+            end
+
+            PREP: begin                              // price maths for stock k, one clock
+                r_ask  <= ask;
+                r_bid  <= bid;
+                r_cost <= buy_cost;
+                state  <= DECIDE;
             end
 
             DECIDE: begin                            // MA/band now include today
@@ -156,12 +168,12 @@ module bot_trader #(
                                     ({1'b0, p} + band < {1'b0, ma}) ? 2'd2 : 2'd0;
                 if (want_buy) begin
                     fill_stock <= k; fill_side <= 1'b0; fill_qty <= QTY8;
-                    fill_price <= ask; fill_fee <= FEE16;
+                    fill_price <= r_ask; fill_fee <= FEE16;
                     state      <= SEND;
                 end else if (want_sell) begin
                     // the bot only ever holds QTY shares, so the position fits in 8 bits
                     fill_stock <= k; fill_side <= 1'b1; fill_qty <= pos_k[7:0];
-                    fill_price <= bid; fill_fee <= FEE16;
+                    fill_price <= r_bid; fill_fee <= FEE16;
                     state      <= SEND;
                 end else
                     state <= NEXT;

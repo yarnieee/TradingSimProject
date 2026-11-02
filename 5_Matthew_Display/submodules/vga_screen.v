@@ -40,7 +40,7 @@ module vga_screen (
     input  wire [1:0]  order_dist,
     input  wire        oled_bot_view,
     input  wire [2:0]  bot_sel,            // the bot the OLEDs show
-    input  wire [17:0] ranks,              // leaderboard places
+    input  wire [17:0] order,              // leaderboard: who is 1st..6th
     input  wire [3:0]  stock_up,
     output wire [6:0]  num_f,              // display_numbers field the writer needs now
     input  wire [32:0] num_rd,             // that field, from display_numbers' RAM
@@ -120,7 +120,7 @@ module vga_screen (
         .trade_result_placed(trade_result_placed), .trade_result_code(trade_result_code),
         .order_valid(order_valid), .validation_code(validation_code),
         .order_type(order_type), .order_brk(order_brk), .order_dist(order_dist),
-        .oled_bot_view(oled_bot_view), .up(stock_up), .num_f(num_f), .num_rd(num_rd), .zero(zero), .bot_sel(bot_sel), .ranks(ranks),
+        .oled_bot_view(oled_bot_view), .up(stock_up), .num_f(num_f), .num_rd(num_rd), .zero(zero), .bot_sel(bot_sel), .order(order),
         .book_valid(book_valid), .book_side(book_side), .book_stock(book_stock),
         .book_type(book_type), .book_leg(book_leg),
         .ch(c_ch), .fg(c_fg), .bg(c_bg)

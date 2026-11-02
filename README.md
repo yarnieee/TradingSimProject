@@ -63,7 +63,7 @@ Each test prints `PASS` or `FAIL`.
 **VGA monitor** (plug a monitor into the Basys3 VGA port): shows everything at once in widescreen
 1280 x 720 (fills a 24" monitor), updated live: the four stocks with their 30-day change and trend, your net worth, cash, profit/loss, return and largest
 drawdown, the selected stock's 30-day chart with your stop-loss / take-profit levels, your holdings,
-every pending order, a leaderboard of you and the 5 bots (place, net worth, return), the order you
+every pending order, a leaderboard of you and the 5 bots in place order (net worth, return), the order you
 are making, what the buttons do on the current screen, and what the switches are set to.
 
 Screens: the right OLED shows the game, the left OLED your order ticket (and title artwork on the

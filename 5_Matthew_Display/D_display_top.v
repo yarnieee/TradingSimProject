@@ -313,6 +313,7 @@ module D_display_top #(
     wire [`DN_N-1:0]    numbers_zero;
     wire                numbers_lead, numbers_tie;
     wire [17:0]         numbers_ranks;            // places 1-6: you, then bots 0-4
+    wire [17:0]         numbers_order;            // who is 1st..6th
     wire [6:0]          vga_num_f, oled_num_f;
     wire [32:0]         vga_num_rd, oled_num_rd;
     display_numbers display_numbers_inst (
@@ -340,7 +341,7 @@ module D_display_top #(
         .vga_f(vga_num_f), .vga_rd(vga_num_rd),
         .oled_f(oled_num_f), .oled_rd(oled_num_rd),
         .zero(numbers_zero), .lead(numbers_lead), .tie(numbers_tie),
-        .bots_value(bots_value), .ranks(numbers_ranks)
+        .bots_value(bots_value), .ranks(numbers_ranks), .order(numbers_order)
     );
 
 
@@ -373,7 +374,7 @@ module D_display_top #(
         .trade_result_placed(trade_result_placed), .trade_result_code(trade_result_code),
         .order_valid(order_valid), .validation_code(validation_code),
         .order_type(ord_type), .order_brk(ord_brk), .order_dist(ord_dist),
-        .oled_bot_view(bot_view), .bot_sel(bot_sel), .ranks(numbers_ranks), .stock_up(stock_up),
+        .oled_bot_view(bot_view), .bot_sel(bot_sel), .order(numbers_order), .stock_up(stock_up),
         .num_f(vga_num_f), .num_rd(vga_num_rd), .zero(numbers_zero),
         .book_valid(book_valid), .book_side(book_side), .book_stock(book_stock),
         .book_type(book_type), .book_leg(book_leg),

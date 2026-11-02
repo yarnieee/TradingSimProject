@@ -15,8 +15,8 @@
 //   rows 2-7    MARKET: price, 30-day change, trend | YOUR PORTFOLIO
 //   rows 9-19   <stock> LAST 30 DAYS: chart with    | HOLDINGS (rows 9-14)
 //               high / low and SL / TP prices       | PENDING ORDERS (rows 16-25)
-//   rows 20-26  LEADERBOARD: you and the 5 bots,    |
-//               place, net worth and return         |
+//   rows 20-26  LEADERBOARD: you and the 5 bots in  |
+//               place order, net worth and return   |
 //   row 27      the order being made, or the last result
 //   row 28      NOW: which buttons to press on this screen (highlighted bar)
 //   row 29      the switches and what they are set to
@@ -40,7 +40,7 @@ module vga_cells (
     input  [1:0]  order_dist,          // sw[7:6]: 1, 2, 5, 10%
     input         oled_bot_view,       // sw15
     input  [2:0]  bot_sel,             // the bot the OLEDs show in the bot view
-    input  [17:0] ranks,               // places 1-6: you [2:0], bot n [3*n+3 +: 3]
+    input  [17:0] order,               // who is in place p+1 at [3*p +: 3]: 0 you, n+1 bot n
     input  [3:0]  up,                  // stock k at or above its price 30 days ago
     output reg [6:0] num_f,            // the display_numbers field this cell shows
     input  [32:0] num_rd,              // that field from display_numbers' RAM: {negative, 8 digits}
@@ -207,9 +207,10 @@ module vga_cells (
     wire [3:0]  pending = book_valid[0] + book_valid[1] + book_valid[2] + book_valid[3]
                         + book_valid[4] + book_valid[5] + book_valid[6] + book_valid[7];
 
-    // leaderboard rows 21-26: entry 0 you, 1-5 bots 0-4
-    wire [2:0]  ent     = row[2:0] - 3'd5;
-    wire [2:0]  place   = ranks[3*ent +: 3];
+    // leaderboard rows 21-26 in place order, 1st at the top; entry 0 you, 1-5 bots 0-4
+    wire [2:0]  lb_pos  = row[2:0] - 3'd5;                 // rows 21-26 -> 0-5
+    wire [2:0]  place   = lb_pos + 3'd1;
+    wire [2:0]  ent     = order[3*lb_pos +: 3];
     wire        shown   = oled_bot_view ? (ent == bot_sel + 3'd1) : (ent == 3'd0);  // on the OLEDs now
 
     wire in_order = (screen_state == `UI_BUY_STOCK) || (screen_state == `UI_SELL_STOCK) ||

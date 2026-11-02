@@ -425,3 +425,13 @@ show the chosen bot's name and rule and FINAL after the game; GAME OVER shows yo
 finished first. New `tb_bot_squad` and `tb_bot_logbook` (checked to fail on planted bugs);
 `tb_integration` checks the bots, bot choice and that everything stops at game over; all testbenches
 pass. Yosys estimate about 16,900 LUTs (81%). Not yet built in Vivado.
+
+## 2026-11-02: leaderboard rows in place order (branch-douglas-vga-display)
+
+**Asked for:** on the monitor, list the leaderboard in ranking order instead of only changing the
+place numbers.
+
+**Done by the AI:** `display_numbers` also gives `order` (who is 1st to 6th), kept by the same ranker
+as `ranks`; `vga_cells` draws rows 21-26 from it, 1st at the top, with your row still highlighted
+wherever it is. New `tb_vga_leaderboard` (checked to fail on the old fixed order);
+`tb_display_numbers` and `tb_integration` also check `order`. All testbenches pass.

@@ -34,7 +34,7 @@ module tb_display_numbers;
     wire        lead, tie;
     // the five bots' values: $10,000.00, $10,250.00, $9,875.50, $10,250.00, $12,000.00
     wire [159:0] bots = {32'd1_200_000, 32'd1_025_000, 32'd987_550, 32'd1_025_000, 32'd1_000_000};
-    wire [17:0]  ranks;
+    wire [17:0]  ranks, order;
 
     display_numbers dut (
         .clk(clk), .rst(rst), .cash(cash), .portfolio_value(pv),
@@ -50,7 +50,7 @@ module tb_display_numbers;
         .log_price(lpx), .log_day(lday),
         .book_qty({48'd0, 8'd5, 8'd12}), .book_trig({96'd0, 16'd21743, 16'd29704}),
         .ret_bp(-32'sd81), .max_dd_bp(32'd91), .bot_ret_bp(32'sd1579),
-        .bots_value(bots), .ranks(ranks),
+        .bots_value(bots), .ranks(ranks), .order(order),
         .bcd(bcd), .neg(neg),
         .vga_f(vga_f), .vga_rd(vga_rd), .oled_f(oled_f), .oled_rd(oled_rd),
         .zero(zero), .lead(lead), .tie(tie)
@@ -144,6 +144,9 @@ module tb_display_numbers;
         // you $13,079.50 first; bot 4, bots 1 and 3 (a tie: the earlier first), bot 0, bot 2
         if (ranks === {3'd2, 3'd4, 3'd6, 3'd3, 3'd5, 3'd1}) n_pass = n_pass + 1;
         else begin n_fail = n_fail + 1; $display("FAIL: places, got %b", ranks); end
+        // 1st to 6th: you, bot 4, bot 1, bot 3, bot 0, bot 2
+        if (order === {3'd3, 3'd1, 3'd4, 3'd2, 3'd5, 3'd0}) n_pass = n_pass + 1;
+        else begin n_fail = n_fail + 1; $display("FAIL: order, got %b", order); end
         check_ram;
 
         otype = `OT_LMT; qty = 2;
@@ -161,6 +164,8 @@ module tb_display_numbers;
         // you now $9,500.00: last of six
         if (ranks === {3'd1, 3'd3, 3'd5, 3'd2, 3'd4, 3'd6}) n_pass = n_pass + 1;
         else begin n_fail = n_fail + 1; $display("FAIL: places after you fall behind, got %b", ranks); end
+        if (order === {3'd0, 3'd3, 3'd1, 3'd4, 3'd2, 3'd5}) n_pass = n_pass + 1;
+        else begin n_fail = n_fail + 1; $display("FAIL: order after you fall behind, got %b", order); end
         check_ram;
 
         if (n_fail == 0) $display("PASS: tb_display_numbers (%0d checks)", n_pass);

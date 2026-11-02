@@ -11,6 +11,7 @@ set all_tbs {
     tb_chart_renderer
     tb_display_numbers
     tb_vga_screen
+    tb_vga_leaderboard
     tb_portfolio_history
     tb_yian_market
     tb_market_state

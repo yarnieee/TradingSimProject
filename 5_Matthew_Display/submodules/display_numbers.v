@@ -82,6 +82,7 @@ module display_numbers #(
     input  wire signed [31:0] bot_ret_bp,
     input  wire [32*`BOTS-1:0] bots_value,  // every bot's value, bot n at [32*n +: 32] (leaderboard)
     output reg  [17:0] ranks,             // place 1..6 of: you [2:0], bot n [3*n+3 +: 3]
+    output reg  [17:0] order,             // who is in place p+1 at [3*p +: 3]: 0 you, n+1 bot n
     output reg  [`DN_N*32-1:0] bcd,
     output reg  [`DN_N-1:0]    neg,
     // the same fields in RAM, for the screens
@@ -330,6 +331,7 @@ module display_numbers #(
     // ------------------------------------------------------------ places, you and the bots
     // Entry 0 is you, 1..5 the bots. Place = 1 + how many are worth more (ties go
     // to the earlier entry). One comparison a clock, 36 clocks a round.
+    // order is the same list the other way round, for the leaderboard rows.
     function [31:0] entry;
         input [2:0] e;
         begin
@@ -343,9 +345,11 @@ module display_numbers #(
         if (rst) begin
             ri <= 3'd0; rj <= 3'd0; rcnt <= 3'd0;
             ranks <= {3'd6, 3'd5, 3'd4, 3'd3, 3'd2, 3'd1};
+            order <= {3'd5, 3'd4, 3'd3, 3'd2, 3'd1, 3'd0};
         end else begin
             if (rj == 3'd5) begin
                 ranks[3*ri +: 3] <= rcnt + ahead + 3'd1;
+                order[3*(rcnt + ahead) +: 3] <= ri;
                 rcnt <= 3'd0;
                 rj   <= 3'd0;
                 ri   <= (ri == 3'd5) ? 3'd0 : ri + 3'd1;

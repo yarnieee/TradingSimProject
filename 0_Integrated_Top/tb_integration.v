@@ -79,6 +79,16 @@ module tb_integration;
         end
     endfunction
 
+    // order lists the same standing 1st to 6th
+    function order_ok;
+        input [17:0] r, o;
+        integer p;
+        begin
+            order_ok = 1;
+            for (p = 0; p < 6; p = p + 1) if (r[3*o[3*p +: 3] +: 3] != p + 1) order_ok = 0;
+        end
+    endfunction
+
     // one press, held long enough for the debouncer (50 clocks)
     task press;
         input integer b;      // 0 U, 1 D, 2 L, 3 R, 4 C
@@ -231,6 +241,7 @@ module tb_integration;
         check(bad_night == 0, "OVERNIGHT holds nothing during any day");
         check(bad_day == 0, "DAY TRADE holds nothing after any close");
         check(places_ok(dut.matthew_display.numbers_ranks), "the leaderboard places are 1 to 6, each once");
+        check(order_ok(dut.matthew_display.numbers_ranks, dut.matthew_display.numbers_order), "the leaderboard rows go 1st to 6th");
         $display("     bot_squad: %0d trades; values %0d %0d %0d %0d c", n_squad,
                  dut.squad_value[31:0], dut.squad_value[63:32], dut.squad_value[95:64], dut.squad_value[127:96]);
 

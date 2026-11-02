@@ -55,7 +55,7 @@ module tb_integration;
         if (dut.ord_req)    n_ord_req = n_ord_req + 1;
     end
     // bot_squad's trades; after each open / close: OVERNIGHT holds nothing in the day,
-    // DAY TRADE nothing overnight
+    // MOMENTUM (bot 1) never trades at a close
     integer n_squad = 0, n_close = 0, bad_night = 0, bad_day = 0, q;
     always @(posedge clk) if (!dut.sys_reset) begin
         if (dut.squad_trade) n_squad = n_squad + 1;
@@ -68,8 +68,8 @@ module tb_integration;
     // (a day here is 4000 clocks with the close at 3600: look before the next open)
     integer w;
     always @(posedge dut.close_tick) begin
-        for (w = 0; w < 200 && !dut.tick; w = w + 1) @(posedge clk);
-        for (q = 4; q < 8; q = q + 1) if (dut.bots.pos_m[q] != 0) bad_day = bad_day + 1;
+        for (w = 0; w < 200 && !dut.tick; w = w + 1) begin
+            @(posedge clk); if (dut.squad_trade && dut.squad_bot == 2'd1) bad_day = bad_day + 1; end
     end
     // the six places are 1..6, each once
     function places_ok;
@@ -269,7 +269,7 @@ module tb_integration;
         // ---------------- the four bot_squad bots
         check(n_squad > 0 && n_close > 0, "bot_squad's bots trade at the opens and closes");
         check(bad_night == 0, "OVERNIGHT holds nothing during any day");
-        check(bad_day == 0, "DAY TRADE holds nothing after any close");
+        check(bad_day == 0, "MOMENTUM never trades at a close");
         check(places_ok(dut.matthew_display.numbers_ranks), "the leaderboard places are 1 to 6, each once");
         check(order_ok(dut.matthew_display.numbers_ranks, dut.matthew_display.numbers_order), "the leaderboard rows go 1st to 6th");
         $display("     bot_squad: %0d trades; values %0d %0d %0d %0d c", n_squad,

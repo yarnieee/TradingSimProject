@@ -82,24 +82,22 @@ module tb_bot_squad;
         for (q = 0; q < 16; q = q + 1) begin buys = buys + nbuy[q]; sells = sells + nsell[q]; end
         check(nbuy[0] + nbuy[1] + nbuy[2] + nbuy[3] == 0 && nsell[0] + nsell[1] + nsell[2] + nsell[3] == 0,
               "OVERNIGHT does nothing at the first open");
-        check(nbuy[4] == 1 && nbuy[5] == 1 && nbuy[6] == 1 && nbuy[7] == 1, "DAY TRADE buys all four at the open");
+        check(nbuy[4] + nbuy[5] + nbuy[6] + nbuy[7] == 0 && dut.ref_m[5] == 16'd20000,
+              "MOMENTUM: no buy on day 1 (no yesterday yet), remembers today's price");
         check(nbuy[8] == 1 && nbuy[11] == 1 && nbuy[12] == 1 && nbuy[15] == 1, "AVG DOWN and SL/TP buy at the open");
-        check(sells == 0 && buys == 12, "12 buys and no sells at the first open");
-        check(last_px[5] == 16'd20005, "a buy pays the ask (price + 5)");
+        check(sells == 0 && buys == 8, "8 buys and no sells at the first open");
+        check(last_px[9] == 16'd20005, "a buy pays the ask (price + 5)");
         check(dut.cb_m[8] == cost(10000), "cost basis = 20 x ask + the fee, as ledger.v");
         want = 32'd1_000_000 - cost(10000) - cost(20000) - cost(5000) - cost(1000);
-        check(dut.cash_m[1] == want, "DAY TRADE cash = start - the four costs");
+        check(dut.cash_m[2] == want, "AVG DOWN cash = start - the four costs");
         // at the price it paid, a bot is worth its cash + shares x mid price
-        check(value[63:32] == want + 20 * (10000 + 20000 + 5000 + 1000), "net worth = cash + shares x price");
+        check(value[95:64] == want + 20 * (10000 + 20000 + 5000 + 1000), "net worth = cash + shares x price");
 
         // ---------------- day 1 close: same prices
         event_pulse(0);
         check(nbuy[0] == 1 && nbuy[1] == 1 && nbuy[2] == 1 && nbuy[3] == 1, "OVERNIGHT buys all four at the close");
-        check(nsell[4] == 1 && nsell[5] == 1 && nsell[6] == 1 && nsell[7] == 1, "DAY TRADE sells all four at the close");
-        check(last_px[4] == 16'd9995, "a sell gets the bid (price - 5)");
-        check(dut.pos_m[4] == 0 && dut.pos_m[5] == 0 && dut.pos_m[6] == 0 && dut.pos_m[7] == 0,
-              "DAY TRADE holds nothing after the close");
-        check(dut.cash_m[1] == 32'd998_400, "DAY TRADE loses only spread and fees: $10,000.00 - $16.00");
+        check(nbuy[4] + nsell[4] + nbuy[5] + nsell[5] + nbuy[6] + nsell[6] + nbuy[7] + nsell[7] == 0,
+              "MOMENTUM does nothing at the close");
         check(nbuy[8] + nsell[8] + nbuy[12] + nsell[12] == 0, "AVG DOWN and SL/TP do nothing at the close");
 
         // ---------------- day 2 open: 94.00 (-6%), 221.00 (+10.5%), 50.00, 10.60 (+6%)
@@ -111,7 +109,11 @@ module tb_bot_squad;
         want = 32'd1_000_000 - cost(10000) - cost(20000) - cost(5000) - cost(1000)
              + gets(9400) + gets(22100) + gets(5000) + gets(1060);
         check(dut.cash_m[0] == want, "OVERNIGHT cash: bought at day 1's close, sold at day 2's open");
-        check(nbuy[4] == 1 && nbuy[5] == 1 && nbuy[6] == 1 && nbuy[7] == 1, "DAY TRADE buys again at the open");
+        check(last_px[0] == 16'd9395, "a sell gets the bid (price - 5)");
+        // MOMENTUM: stocks 1 and 3 went up once, stock 0 down, stock 2 flat
+        check(nbuy[5] == 0 && nbuy[7] == 0 && dut.adds_m[5] == 2'd1 && dut.adds_m[7] == 2'd1
+              && dut.adds_m[4] == 2'd0 && dut.adds_m[6] == 2'd0,
+              "MOMENTUM: one up day is not enough (MOM_N = 2), up days counted per stock");
         // AVG DOWN: 94.00 <= 100.00 - 5% -> add; 221.00 x 20 at the bid >= cost + 5% -> sell;
         // 50.00: no change; 10.60: 21,100 < 20,200 + 1,011 -> hold
         check(nbuy[8] == 1 && dut.pos_m[8] == 40, "AVG DOWN adds 20 more after a 5% fall");
@@ -133,6 +135,7 @@ module tb_bot_squad;
         check(nbuy[9] == 0 && dut.cash_m[2] == 32'd354_600 && dut.cash_m[2] < cost(22100),
               "AVG DOWN cannot afford to buy back stock 1, so it does not");
         check(nbuy[12] == 1 && nbuy[13] == 1, "SL/TP buys again the day after selling");
+        check(dut.adds_m[7] == 2'd0 && nbuy[7] == 0, "MOMENTUM: a flat day (10.60 again) resets the up-day count");
         event_pulse(0);
 
         // ---------------- days 4, 5: 84.00 (third add), 79.00 (no fourth)
@@ -152,10 +155,38 @@ module tb_bot_squad;
         event_pulse(0);
 
         // ---------------- a price too high to afford: 600.00 x 20 > cash
-        p1 = 16'd60000;
+        // (raised between the open and the close, so OVERNIGHT first sells stock 1 at the
+        // old price; raised at the open, that sale would make it rich enough to buy)
         event_pulse(1);
-        check(nbuy[5] == 0, "DAY TRADE skips a stock it cannot afford");
-        check(nbuy[4] == 1, "... but still buys the ones it can");
+        p1 = 16'd60000;
+        event_pulse(0);
+        check(nbuy[1] == 0, "OVERNIGHT skips a stock it cannot afford");
+        check(nbuy[0] == 1, "... but still buys the ones it can");
+
+        // ---------------- MOMENTUM, stock 3: up, up -> buy; up -> hold; down -> sell
+        p3 = 16'd1100;                                                     // day 7: up once
+        event_pulse(1);
+        check(nbuy[7] == 0 && dut.adds_m[7] == 2'd1, "MOMENTUM: first up day, no buy yet");
+        event_pulse(0);
+        p3 = 16'd1150;                                                     // day 8: up twice
+        event_pulse(1);
+        check(nbuy[7] == 1 && last_px[7] == 16'd1155 && dut.pos_m[7] == 20,
+              "MOMENTUM buys after 2 up days in a row, at the ask");
+        event_pulse(0);
+        check(dut.pos_m[7] == 20 && nsell[7] == 0, "MOMENTUM holds overnight");
+        p3 = 16'd1200;                                                     // day 9: up again
+        event_pulse(1);
+        check(nbuy[7] + nsell[7] == 0 && dut.pos_m[7] == 20, "MOMENTUM keeps holding while the price rises");
+        event_pulse(0);
+        event_pulse(1);                                                    // day 9b: 12.00 again (flat)
+        check(nsell[7] == 0 && dut.pos_m[7] == 20, "MOMENTUM: a flat day is not a down day, keeps holding");
+        event_pulse(0);
+        p3 = 16'd1190;                                                     // day 10: first down day
+        event_pulse(1);
+        check(nsell[7] == 1 && last_px[7] == 16'd1185 && dut.pos_m[7] == 0,
+              "MOMENTUM sells everything on the first down day, at the bid");
+        check(dut.cash_m[1] == 32'd1_000_000 - cost(1150) + gets(1190),
+              "MOMENTUM cash: start - 20 x 11.55 - $1 + 20 x 11.85 - $1");
         event_pulse(0);
 
         // ---------------- run = 0 (game over): no trades, values frozen
@@ -168,7 +199,8 @@ module tb_bot_squad;
         // ---------------- a new game: everyone back to the start
         rst = 1'b1; repeat (3) @(posedge clk); rst = 1'b0; run = 1'b1;
         repeat (100) @(posedge clk); #1;
-        check(value === {4{32'd1_000_000}} && dut.pos_m[8] == 0 && dut.adds_m[8] == 0, "reset: a new game starts flat");
+        check(value === {4{32'd1_000_000}} && dut.pos_m[8] == 0 && dut.adds_m[8] == 0 && dut.ref_m[7] == 0,
+              "reset: a new game starts flat (MOMENTUM forgets yesterday)");
 
         if (n_fail == 0) $display("PASS: tb_bot_squad (%0d checks)", n_pass);
         else             $display("FAIL: tb_bot_squad (%0d failed, %0d passed)", n_fail, n_pass);

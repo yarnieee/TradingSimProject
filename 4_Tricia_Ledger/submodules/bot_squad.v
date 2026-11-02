@@ -5,8 +5,11 @@
 //
 //   bot 0  OVERNIGHT  at the close: buys QTY of every stock it can afford;
 //                     at the next open: sells everything.  Never holds during the day.
-//   bot 1  DAY TRADE  at the open: buys QTY of every stock it can afford;
-//                     at the close: sells everything.  Never holds overnight.
+//   bot 1  MOMENTUM   at the open, per stock: holds none -> buys QTY once the price has
+//                     gone up MOM_N days in a row; holds some -> sells all on the first
+//                     down day.  ref = yesterday's price and adds = up days in a row
+//                     (saturating at 3), both written at every open.  (Replaced DAY TRADE,
+//                     which could only lose: open and close have the same price.)
 //   bot 2  AVG DOWN   at the open, per stock: holds none -> buys QTY.  Holds some ->
 //                     sells all once its value at the bid is K_OUT above what it paid;
 //                     otherwise buys QTY more when the price is K_ADD below its last
@@ -17,7 +20,7 @@
 //
 // The market has one price a day, so "open" (open_tick, the start of a day) and
 // "close" (close_tick, late in the day) see the same price: the overnight bot
-// gains or loses each day's move, the day trader only pays the spread and fees.
+// gains or loses each day's move.
 //
 // Trades work like the player's: buys pay the ask (price + SPREAD) and sells get
 // the bid (price - SPREAD, at least 1), each with a FEE; a buy needs
@@ -39,7 +42,8 @@ module bot_squad #(
     parameter [12:0] K_OUT      = 13'd3280,        // AVG DOWN: sell all 5% above cost
     parameter [1:0]  MAX_ADDS   = 2'd3,
     parameter [12:0] K_TP       = 13'd6560,        // SL / TP: take profit at +10%
-    parameter [12:0] K_SL       = 13'd3280         //          stop loss at -5%
+    parameter [12:0] K_SL       = 13'd3280,        //          stop loss at -5%
+    parameter [1:0]  MOM_N      = 2'd2             // MOMENTUM: up days in a row before a buy (1-3)
 ) (
     input  wire        clk,
     input  wire        rst,                 // new game
@@ -62,7 +66,7 @@ module bot_squad #(
                      S_T_RD  = 4'd2, S_T_M0 = 4'd3, S_T_M1 = 4'd4, S_T_M2 = 4'd5,
                      S_T_DEC = 4'd6, S_T_WR = 4'd7,
                      S_V_RD  = 4'd8, S_V_MUL = 4'd9, S_V_ACC = 4'd10;
-    localparam [1:0] B_NIGHT = 2'd0, B_DAY = 2'd1, B_AVG = 2'd2, B_SLTP = 2'd3;
+    localparam [1:0] B_NIGHT = 2'd0, B_MOM = 2'd1, B_AVG = 2'd2, B_SLTP = 2'd3;
 
     reg  [3:0] state;
     reg  [3:0] i;                         // {bot, stock}
@@ -117,6 +121,10 @@ module bot_squad #(
     wire        tp_hit   = ({1'b0, r_px} >= {1'b0, r_ref} + {1'b0, d1});
     wire        sl_hit   = (r_px <= ((r_ref > d2) ? r_ref - d2 : 16'd0));
     wire        add_hit  = (r_px <= ((r_ref > d1) ? r_ref - d1 : 16'd0));
+    // MOMENTUM: today against yesterday (r_ref), and the up-day streak including today
+    wire        up_day   = (r_px > r_ref) && (r_ref != 16'd0);
+    wire        down_day = (r_px < r_ref);
+    wire [1:0]  streak   = !up_day ? 2'd0 : (r_adds == 2'd3) ? 2'd3 : r_adds + 2'd1;
 
     reg do_buy, do_sell;
     always @(*) begin
@@ -125,8 +133,10 @@ module bot_squad #(
         case (b)
             B_NIGHT: if (at_open) do_sell = held && can_sell;
                      else         do_buy  = !held && can_buy;
-            B_DAY:   if (at_open) do_buy  = !held && can_buy;
-                     else         do_sell = held && can_sell;
+            B_MOM:   if (at_open) begin
+                         if (held) do_sell = down_day && can_sell;
+                         else      do_buy  = (streak >= MOM_N) && can_buy;
+                     end
             B_AVG:   if (at_open) begin
                          if (!held)                                    do_buy  = can_buy;
                          else if ({6'd0, p_sell} >= cb_out)            do_sell = can_sell;
@@ -206,6 +216,10 @@ module bot_squad #(
                         pos_m[i]  <= 10'd0;
                         cb_m[i]   <= 32'd0;
                         adds_m[i] <= 2'd0;
+                    end
+                    if (b == B_MOM && at_open) begin            // MOMENTUM: remember today
+                        ref_m[i]  <= r_px;                      // (overrides the writes above)
+                        adds_m[i] <= streak;
                     end
                     if (do_buy || do_sell) begin
                         trade       <= 1'b1;

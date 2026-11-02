@@ -42,7 +42,7 @@ module bot_squad #(
     parameter [12:0] K_OUT      = 13'd3280,        // AVG DOWN: sell all 5% above cost
     parameter [1:0]  MAX_ADDS   = 2'd3,
     parameter [12:0] K_TP       = 13'd6560,        // SL / TP: take profit at +10%
-    parameter [12:0] K_SL       = 13'd3280,        //          stop loss at -5%
+    parameter [12:0] K_SL       = 13'd1968,        //          stop loss at -3% (1968/65536 = 3.003%)
     parameter [1:0]  MOM_N      = 2'd2             // MOMENTUM: up days in a row before a buy (1-3)
 ) (
     input  wire        clk,

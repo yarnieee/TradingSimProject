@@ -120,8 +120,8 @@ module tb_bot_squad;
         check(dut.cb_m[8] == cost(10000) + cost(9400), "an add adds its cost, fee included");
         check(nsell[9] == 1 && dut.pos_m[9] == 0, "AVG DOWN sells once 5% above what it paid");
         check(nbuy[10] + nsell[10] + nbuy[11] + nsell[11] == 0, "AVG DOWN holds the others");
-        // SL / TP: 94.00 <= 100.00 - 5% -> stop loss; 221.00 >= 200.00 + 10% -> take profit
-        check(nsell[12] == 1 && nsell[13] == 1, "SL/TP: stop loss at -5%, take profit at +10%");
+        // SL / TP: 94.00 <= 100.00 - 3% -> stop loss; 221.00 >= 200.00 + 10% -> take profit
+        check(nsell[12] == 1 && nsell[13] == 1, "SL/TP: stop loss below -3%, take profit at +10%");
         check(nbuy[12] == 0 && nbuy[13] == 0, "SL/TP does not buy back at the same open");
         check(nbuy[14] + nsell[14] + nbuy[15] + nsell[15] == 0, "SL/TP holds the stocks still inside its band");
 
@@ -139,13 +139,16 @@ module tb_bot_squad;
         event_pulse(0);
 
         // ---------------- days 4, 5: 84.00 (third add), 79.00 (no fourth)
-        p0 = 16'd8400;
+        // SL / TP stock 2, entry 50.00: stop at 50.00 - 50.00 x 1968 >> 16 = 50.00 - 1.50 = 48.50
+        p0 = 16'd8400; p2 = 16'd4851;
         event_pulse(1);
         check(nbuy[8] == 1 && dut.pos_m[8] == 80, "AVG DOWN third add");
+        check(nsell[14] == 0 && dut.pos_m[14] == 20, "SL/TP holds at 48.51 (-2.98%, inside the 3% stop)");
         event_pulse(0);
-        p0 = 16'd7900;
+        p0 = 16'd7900; p2 = 16'd4850;
         event_pulse(1);
         check(nbuy[8] == 0 && dut.pos_m[8] == 80, "AVG DOWN stops after 3 adds");
+        check(nsell[14] == 1 && last_px[14] == 16'd4845, "SL/TP stop loss at exactly -3% (48.50), sold at the bid");
         sel = 2'd2; repeat (100) @(posedge clk); #1;
         check(sel_pos[9:0] == 10'd80, "details of the chosen bot: AVG DOWN holds 80 of stock 0");
         want = cost(10000) + cost(9400) + cost(8900) + cost(8400);

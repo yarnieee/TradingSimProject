@@ -7,10 +7,13 @@
 // (A_/B_/C_/D_<description>_top); instance names say whose part it is.
 //
 //   instance         module          owner    does
-//   yian_market      A_top           Yi An    4 stock channels, one trading day every 2 s
+//   yian_market      A_top           Yi An    4 stock channels, one trading day every 5 s
 //   douglas_orders   B_order_top     Douglas  validates and fills orders, order book, ticket page
 //   tricia_portfolio C_portfolio_top Tricia   ledger (cash, positions, ledger_busy), risk metrics,
-//                                             and the bot trader with its own ledger
+//                                             and the moving-average bot with its own ledger
+//   bots             bot_squad       Tricia   four more bots: overnight, day trade, average
+//                                             down, stop-loss / take-profit
+//   bot_log          bot_logbook     Tricia   every bot's recent trades, for the bot view
 //   matthew_display  D_display_top   Matthew  buttons, game screens, 7-seg, both OLEDs
 //
 // Board:
@@ -19,28 +22,39 @@
 //   sw[5:4]       SL/TP for a buy: 00 off, 01 2%, 10 5%, 11 10%     (order_sw[3:2])
 //   sw[7:6]       trigger distance from the price: 1, 2, 5, 10%     (order_sw[5:4])
 //                 (limit buy / stop sell below the price, limit sell / stop buy above)
-//   sw[15] (view_sw) up: bot view (JB the bot against you, JA its last trades); buttons ignored
+//   sw[15] (view_sw) up: bot view (JB a bot against you, JA its last trades); BTNL / BTNR
+//                 choose the bot, the game buttons are ignored
+//   sw[14] (orders_sw) up: the buttons work the left OLED's ORDERS list: BTNU / BTND
+//                 choose a pending order, BTNC cancels it (the game buttons are ignored)
 //   buttons       Matthew's game FSM (title > portfolio > stocks > stock > buy/sell
 //                 > quantity > review > result)
 //   JB (right)    Matthew's game screens
 //   JA (left)     Douglas's order ticket (title artwork on the title screen)
+//   VGA           the whole game on a monitor (1280 x 720): prices, portfolio, chart, orders,
+//                 a leaderboard of you and the 5 bots, what to press, the switch settings
 //   7-seg         Matthew's quantity
 //   led[7:4]      Matthew's screen_state;  led[15] fill;  led[14] reject;  led[11:8] pending orders
 module Integration_Top #(
-    parameter DAY_MAX_COUNT = 199_999_999,      // Yi An: 2 s per trading day
+    parameter DAY_MAX_COUNT = 499_999_999,      // Yi An: 5 s per trading day
     parameter DEBOUNCE_CTR  = 32'd1_999_999,    // Matthew: 20 ms
-    parameter FINAL_TRADING_DAY = 32'd60,      // Game ends after this many days (60 x 2 s = 2 minutes)
-    parameter integer ENABLE_BOT = 1
+    parameter FINAL_TRADING_DAY = 32'd120,     // Game ends after this many days (120 x 5 s = 10 minutes)
+    parameter integer ENABLE_BOT = 1            // Tricia's moving-average bot (0: left out of the build)
 ) (
     input  wire        clk,
     input  wire        rst,
     input  wire [5:0]  order_sw,        // sw[7:2]: order type, SL/TP, trigger distance
     input  wire        view_sw,         // sw[15]: show the bot
+    input  wire        orders_sw,       // sw[14]: the buttons work the left OLED's ORDERS list (cancel)
     input  wire        btnU,
     input  wire        btnD,
     input  wire        btnL,
     input  wire        btnR,
     input  wire        btnC,
+    output wire [3:0]  vgaRed,
+    output wire [3:0]  vgaGreen,
+    output wire [3:0]  vgaBlue,
+    output wire        Hsync,
+    output wire        Vsync,
     output wire [7:0]  JA,
     output wire [7:0]  JB,
     output wire [15:0] led,
@@ -97,6 +111,12 @@ module Integration_Top #(
     wire [15:0] ord_trig;
     wire        ord_placed, res_submit;
     wire [63:0] sl_price, tp_price;
+    wire [7:0]   book_valid, book_side, book_leg;
+    wire [15:0]  book_stock, book_type;
+    wire [63:0]  book_qty;
+    wire [127:0] book_trig;
+    wire signed [31:0] ret_bp, bot_ret_bp;
+    wire [31:0]  max_dd_bp;
     wire        fill, reject;
     // bot
     wire [31:0] bot_cash, bot_equity;
@@ -106,22 +126,50 @@ module Integration_Top #(
     wire [1:0]  bot_last_stock;
     wire [7:0]  bot_last_qty;
     wire [15:0] bot_last_price;
-    wire        bot_trade_event;
+    wire        bot_trade_event;                 // the moving-average bot's fill pulse
     wire [7:0]  bot_signal;
-    reg  [7:0]  bot_trades;                      // the bot's last 5 trades, newest first (built below)
-    reg  [4:0]  bot_log_valid, bot_log_side;
-    reg  [9:0]  bot_log_stock;
-    reg  [79:0] bot_log_price;
-    reg  [39:0] bot_log_day;
+    reg  [7:0]  bot_trades;                      // the moving-average bot's trades so far
+    // bot 0 is the moving-average bot, bots 1-4 are bot_squad's 0-3
+    wire [2:0]   bot_sel;                        // the bot the bot view shows (BTNL / BTNR, in D)
+    wire [127:0] squad_value;
+    wire [31:0]  squad_cash;
+    wire [39:0]  squad_pos;
+    wire [127:0] squad_upnl;
+    wire         squad_trade, squad_side;
+    wire [1:0]   squad_bot, squad_stock;
+    wire [15:0]  squad_price;
+    wire [4:0]   bot_log_valid, bot_log_side;    // the chosen bot's last 5 trades, newest first
+    wire [9:0]   bot_log_stock;
+    wire [79:0]  bot_log_price;
+    wire [39:0]  bot_log_day;
+    // the bot view's numbers: the moving-average bot, or the chosen bot_squad bot
+    wire        show_ma = (bot_sel == 3'd0);
+    wire [1:0]  squad_sel = bot_sel[1:0] - 2'd1;    // bots 1-4 -> bot_squad 0-3
+    wire [31:0] view_cash  = show_ma ? bot_cash   : squad_cash;
+    wire [31:0] view_value = show_ma ? bot_equity : squad_value[32*squad_sel +: 32];
+    wire [9:0]  view_pos0  = show_ma ? bot_pos0 : squad_pos[9:0];
+    wire [9:0]  view_pos1  = show_ma ? bot_pos1 : squad_pos[19:10];
+    wire [9:0]  view_pos2  = show_ma ? bot_pos2 : squad_pos[29:20];
+    wire [9:0]  view_pos3  = show_ma ? bot_pos3 : squad_pos[39:30];
+    wire signed [31:0] view_upnl0 = show_ma ? bot_upnl0 : squad_upnl[31:0];
+    wire signed [31:0] view_upnl1 = show_ma ? bot_upnl1 : squad_upnl[63:32];
+    wire signed [31:0] view_upnl2 = show_ma ? bot_upnl2 : squad_upnl[95:64];
+    wire signed [31:0] view_upnl3 = show_ma ? bot_upnl3 : squad_upnl[127:96];
     // switches, synchronised to clk
     reg  [5:0]  osw_s0, osw;
-    reg         view_s0, bot_view;
+    reg         view_s0, bot_view, ords_s0, ords_sw;
     always @(posedge clk) begin
         osw_s0   <= order_sw;
         osw      <= osw_s0;
         view_s0  <= view_sw;
         bot_view <= view_s0;
+        ords_s0  <= orders_sw;
+        ords_sw  <= ords_s0;
     end
+    // sw14 up (not in the bot view, not on the title): the buttons go to the
+    // left OLED's ORDERS list, U / D choose a pending order, C cancels it
+    wire        orders_view = ords_sw && !bot_view && (screen_state != `UI_TITLE);
+    wire [4:0]  d_btn_pulse;
     wire [2:0]  reject_code;
     wire [15:0] ticket_pixel;
     wire [6:0]  xL;
@@ -132,15 +180,18 @@ module Integration_Top #(
     ) matthew_display (
         .clk(clk), .rst(sys_reset),
         .btnU(btnU), .btnD(btnD), .btnL(btnL), .btnR(btnR), .btnC(btnC),
+        .orders_view(orders_view), .btn_pulse(d_btn_pulse),
         .final_day_reached(final_day_reached),
         .time_remaining(time_remaining),
         .order_fill(fill), .order_reject(reject), .order_reject_code(reject_code),
         .order_placed(ord_placed), .order_from_submit(res_submit),
         .sl_price(sl_price), .tp_price(tp_price),
-        .bot_view(bot_view), .bot_active(ENABLE_BOT != 0), .bot_cash(bot_cash), .bot_value(bot_equity),
-        .bot_pos0(bot_pos0), .bot_pos1(bot_pos1), .bot_pos2(bot_pos2), .bot_pos3(bot_pos3),
-        .bot_upnl0(bot_upnl0), .bot_upnl1(bot_upnl1), .bot_upnl2(bot_upnl2), .bot_upnl3(bot_upnl3),
-        .bot_signal(bot_signal),
+        .bot_view(bot_view), .bot_active(!show_ma || ENABLE_BOT != 0), .bot_sel(bot_sel),
+        .bot_cash(view_cash), .bot_value(view_value),
+        .bot_pos0(view_pos0), .bot_pos1(view_pos1), .bot_pos2(view_pos2), .bot_pos3(view_pos3),
+        .bot_upnl0(view_upnl0), .bot_upnl1(view_upnl1), .bot_upnl2(view_upnl2), .bot_upnl3(view_upnl3),
+        .bots_value({squad_value, bot_equity}),
+        .bot_signal(show_ma ? bot_signal : 8'd0),
         .bot_log_valid(bot_log_valid), .bot_log_side(bot_log_side),
         .bot_log_stock(bot_log_stock), .bot_log_price(bot_log_price), .bot_log_day(bot_log_day),
         .left_pixel(ticket_pixel), .left_x(xL), .left_y(yL),
@@ -159,7 +210,12 @@ module Integration_Top #(
         .portfolio_upnl2(upnl2), .portfolio_upnl3(upnl3),
         .portfolio_samples_30(portfolio_samples_30),
         .ord_req(ord_req), .ord_side(ord_side),
-        .ord_type(ord_type), .ord_trig(ord_trig), .ord_brk(ord_brk), .game_state(game_state),
+        .ord_type(ord_type), .ord_trig(ord_trig), .ord_brk(ord_brk), .ord_dist(osw[5:4]),
+        .ret_bp(ret_bp), .max_dd_bp(max_dd_bp), .bot_ret_bp(bot_ret_bp),
+        .book_valid(book_valid), .book_side(book_side), .book_stock(book_stock),
+        .book_type(book_type), .book_qty(book_qty), .book_trig(book_trig), .book_leg(book_leg),
+        .game_state(game_state),
+        .vga_r(vgaRed), .vga_g(vgaGreen), .vga_b(vgaBlue), .vga_hs(Hsync), .vga_vs(Vsync),
         .JA(JA), .JB(JB), .an(an), .seg(seg)
     );
 
@@ -181,14 +237,27 @@ module Integration_Top #(
     end
     wire [12:0] trig_k    = (osw[5:4] == 2'b00) ? 13'd656  : (osw[5:4] == 2'b01) ? 13'd1312 :
                             (osw[5:4] == 2'b10) ? 13'd3280 : 13'd6560;
-    wire [28:0] trig_prod = sw_px * trig_k;
+    // Worked out over 3 clocks (price, then x k, then -/+), so the multiply is not
+    // in one long path with whatever uses the trigger; it is 30 ns behind the
+    // switches and prices, which change at most every few milliseconds.
+    reg  [15:0] tg_px, tg_px2;
+    reg  [12:0] tg_k;
+    reg  [28:0] trig_prod;
+    reg  [15:0] ord_trig_r;
     wire [15:0] trig_dist = (trig_prod[28:16] == 13'd0) ? 16'd1 : {3'd0, trig_prod[28:16]};
     wire        trig_below = ((ord_type == `OT_LMT) && (ord_side == `SIDE_BUY)) ||
                              ((ord_type == `OT_STP) && (ord_side == `SIDE_SELL));
-    wire [16:0] trig_up   = {1'b0, sw_px} + {1'b0, trig_dist};
-    assign ord_trig = (ord_type == `OT_MKT) ? 16'd0 :
-                      trig_below ? ((sw_px > trig_dist) ? sw_px - trig_dist : 16'd1) :
+    wire [16:0] trig_up   = {1'b0, tg_px2} + {1'b0, trig_dist};
+    always @(posedge clk) begin
+        tg_px      <= sw_px;
+        tg_k       <= trig_k;
+        trig_prod  <= tg_px * tg_k;
+        tg_px2     <= tg_px;
+        ord_trig_r <= (ord_type == `OT_MKT) ? 16'd0 :
+                      trig_below ? ((tg_px2 > trig_dist) ? tg_px2 - trig_dist : 16'd1) :
                                    (trig_up[16] ? 16'hFFFF : trig_up[15:0]);
+    end
+    assign ord_trig = ord_trig_r;
 
     // ================================================================ YI AN: market engine
     // Yi An's A_top asks for "storage/data/AMD_seed.mem". In this repo the files are
@@ -198,8 +267,17 @@ module Integration_Top #(
     // Current prices and history buses for all four stocks are routed through
     // this integration level. The selected-stock chart consumes the matching
     // history bus for any of the four stock selections.
+    // The market stops when the game is over, so prices, charts and net worths
+    // stay at the final day.
+    wire game_over = (screen_state == `UI_GAME_END);
+    // The market (and the day count) starts when the player leaves the title
+    // screen. Yi An's startup_seed takes its random seed then, from a counter
+    // that never stops, so every game has a different market, even the first
+    // one after the board is programmed; and every game gets all its days.
+    reg  market_rst;
+    always @(posedge clk) market_rst <= sys_reset || (screen_state == `UI_TITLE);
     A_top #(.DAY_MAX_COUNT(DAY_MAX_COUNT)) yian_market (
-        .clk(clk), .rst(sys_reset),
+        .clk(clk), .rst(market_rst), .run(!game_over),
         .market_state(market_state),
         .market_event(market_event),
         .amd_ready(amd_ready), .mcd_ready(mcd_ready),
@@ -249,7 +327,7 @@ module Integration_Top #(
     assign all_stocks_ready = amd_ready && mcd_ready && stock2_ready && stock3_ready;
     reg  [31:0] market_date_d;
     always @(posedge clk) begin
-        if (sys_reset) begin
+        if (market_rst) begin
             market_date_d <= 32'd0;
             tick          <= 1'b0;
             trading_day_count <= 32'd0;
@@ -273,8 +351,8 @@ module Integration_Top #(
                              && (trading_day_count == (FINAL_TRADING_DAY - 1'b1));
 
     // ================================================================ TRICIA: portfolio (ledger, risk, bot)
-    wire signed [31:0] realised, pnl, ret_bp, bot_realised, bot_pnl, bot_ret_bp;
-    wire [31:0] equity, max_dd_bp, bot_max_dd_bp;
+    wire signed [31:0] realised, pnl, bot_realised, bot_pnl;
+    wire [31:0] equity, bot_max_dd_bp;
     wire        ledger_busy, ledger_err;
     wire        fill_side;
     wire [1:0]  fill_stock;
@@ -298,28 +376,59 @@ module Integration_Top #(
         .bot_trade_event(bot_trade_event), .bot_signal(bot_signal)
     );
 
-    // The bot reports its most recent trade; the bot screen lists the last 5.
-    // Capture the actual fill pulse, rather than inferring events from a
-    // change in the last-trade fields. Every fill gets exactly one log row.
+    // The moving-average bot's fill pulse (bot_trade_event) comes with its
+    // last-trade fields already updated: every trade is counted and logged once.
+    wire        ma_trade = bot_trade_event;
     always @(posedge clk) begin
         if (sys_reset) begin
-            bot_trades    <= 8'd0;
-            bot_log_valid <= 5'd0;
-            bot_log_side  <= 5'd0;
-            bot_log_stock <= 10'd0;
-            bot_log_price <= 80'd0;
-            bot_log_day   <= 40'd0;
+            bot_trades <= 8'd0;
         end else begin
-            if (bot_trade_event) begin
-                bot_trades    <= bot_trades + 8'd1;
-                bot_log_valid <= {bot_log_valid[3:0], 1'b1};
-                bot_log_side  <= {bot_log_side[3:0], bot_last_side};
-                bot_log_stock <= {bot_log_stock[7:0], bot_last_stock};
-                bot_log_price <= {bot_log_price[63:0], bot_last_price};
-                bot_log_day   <= {bot_log_day[31:0], trading_day_count[7:0]};
-            end
+            if (ma_trade) bot_trades <= bot_trades + 8'd1;
         end
     end
+
+    // ================================================================ TRICIA: bot_squad, four more bots
+    // They trade at the market open (tick, the start of a day) and close: 90% into
+    // the day, at the same price (the market has one price a day).
+    localparam [31:0] CLOSE_AT = (DAY_MAX_COUNT / 10) * 9;
+    reg  [31:0] day_clk;
+    reg         day_on, close_tick;
+    always @(posedge clk) begin
+        close_tick <= 1'b0;
+        if (sys_reset) begin
+            day_on  <= 1'b0;
+            day_clk <= 32'd0;
+        end else if (tick) begin
+            day_on  <= 1'b1;
+            day_clk <= 32'd0;
+        end else if (day_on) begin
+            if (day_clk == CLOSE_AT) begin
+                close_tick <= 1'b1;
+                day_on     <= 1'b0;
+            end else
+                day_clk <= day_clk + 32'd1;
+        end
+    end
+
+    bot_squad bots (
+        .clk(clk), .rst(sys_reset), .run(game_state == `GS_PLAYING),
+        .open_tick(tick), .close_tick(close_tick),
+        .price0(price0), .price1(price1), .price2(price2), .price3(price3),
+        .sel(squad_sel),
+        .value(squad_value), .sel_cash(squad_cash), .sel_pos(squad_pos), .sel_upnl(squad_upnl),
+        .trade(squad_trade), .trade_bot(squad_bot), .trade_stock(squad_stock),
+        .trade_side(squad_side), .trade_price(squad_price)
+    );
+
+    bot_logbook bot_log (
+        .clk(clk), .rst(sys_reset), .day(trading_day_count[7:0]),
+        .a_trade(ma_trade), .a_side(bot_last_side), .a_stock(bot_last_stock), .a_price(bot_last_price),
+        .q_trade(squad_trade), .q_bot(squad_bot), .q_side(squad_side),
+        .q_stock(squad_stock), .q_price(squad_price),
+        .sel(bot_sel),
+        .log_valid(bot_log_valid), .log_side(bot_log_side), .log_stock(bot_log_stock),
+        .log_price(bot_log_price), .log_day(bot_log_day)
+    );
 
     // Portfolio history is sampled on the same simulated trading-day tick
     // that drives the order book. It uses live cash, positions, and prices.
@@ -334,12 +443,13 @@ module Integration_Top #(
     // ================================================================ DOUGLAS: orders, ticket page
     wire [3:0]  pending_count;
     // The left OLED (JA) sits upside down on the board: draw the ticket rotated 180 degrees.
-    B_order_top #(.TICKET_FLIP_180(1)) douglas_orders (
+    B_order_top #(.TICKET_FLIP_180(1), .EMBEDDED(1)) douglas_orders (
         .clk(clk), .sys_reset(sys_reset), .game_state(game_state),
         .price0(price0), .price1(price1), .price2(price2), .price3(price3), .tick(tick),
         .sel_stock(sel_stock),
-        .page_R(`PG_R_PORTFOLIO),        // Matthew owns the buttons: Douglas's own button entry is off
-        .btn_pulse(5'd0),
+        // Matthew owns the buttons, except with sw14 up: then they work the ORDERS list
+        .page_R(orders_view ? `PG_R_TICKET : `PG_R_PORTFOLIO),
+        .btn_pulse(orders_view ? d_btn_pulse : 5'd0),
         .ord_req(ord_req), .ord_side(ord_side), .ord_type(ord_type),
         .ord_qty(quantity), .ord_trig(ord_trig), .ord_brk(ord_brk),
         .cash(cash), .pos0(pos0), .pos1(pos1), .pos2(pos2), .pos3(pos3),
@@ -349,6 +459,8 @@ module Integration_Top #(
         .reject(reject), .reject_code(reject_code), .pending_count(pending_count),
         .ord_placed(ord_placed), .res_submit(res_submit),
         .sl_price(sl_price), .tp_price(tp_price),
+        .book_valid(book_valid), .book_side(book_side), .book_stock(book_stock),
+        .book_type(book_type), .book_qty(book_qty), .book_trig(book_trig), .book_leg(book_leg),
         .ticket_pixel(ticket_pixel)
     );
 

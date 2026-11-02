@@ -1,8 +1,9 @@
 `timescale 1ns / 1ps
 
 // Unit tests for stock's signed price calculation.
-// The function is checked through the stock instance's next_close wire so
-// the test exercises the implementation rather than a duplicate model.
+// The formula is checked through the stock instance's next_close wire.
+// tb_stock_pipeline checks that the hardware, which works the price out over
+// several clocks, gives the same result as this formula.
 module tb_stock_price;
     reg clk = 1'b0;
     reg rst = 1'b0;

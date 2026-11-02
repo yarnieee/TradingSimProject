@@ -5,6 +5,11 @@
 // that the module elaborates.
 module tb_chart_renderer;
 
+    // the chart works its scale out on a clock: give it 100 clocks after a
+    // change to the history, mode or levels (pixel moves need no wait)
+    reg clk = 1'b0;
+    always #5 clk = ~clk;
+
     reg  [6:0]   pixel_x;
     reg  [5:0]   pixel_y;
     reg  [1:0]   chart_mode;
@@ -20,6 +25,7 @@ module tb_chart_renderer;
     integer i;
 
     chart_renderer dut (
+        .clk(clk),
         .pixel_x(pixel_x),
         .pixel_y(pixel_y),
         .chart_mode(chart_mode),
@@ -65,7 +71,7 @@ module tb_chart_renderer;
         stock_samples = 480'd0;
         portfolio_samples = 960'd0;
         live_value = 32'd0;
-        #1;
+        #1000;
         check(!pixel_active, "disabled chart produces no pixels");
 
         // A flat history is a line across the middle (12 above the bottom: y 41).
@@ -75,7 +81,7 @@ module tb_chart_renderer;
         live_value = 32'd1000000;
         pixel_x = 7'd8;
         pixel_y = 6'd41;
-        #1;
+        #1000;
         check(pixel_active, "flat history draws a centre line");
         pixel_y = 6'd30;
         #1;
@@ -84,7 +90,7 @@ module tb_chart_renderer;
         // Sample 3 (column 1, x 9..14) is the maximum; everything else the minimum.
         // range 4608 >> 8 = 18 pixels above the bottom line: y 35.
         set_portfolio_sample(3, 32'd1004608);
-        pixel_x = 7'd5;  pixel_y = 6'd53; #1;
+        pixel_x = 7'd5;  pixel_y = 6'd53; #1000;
         check(pixel_active, "minimum sample sits on the bottom line");
         pixel_x = 7'd11; pixel_y = 6'd35; #1;
         check(pixel_active, "maximum sample drawn 18 pixels up");
@@ -106,14 +112,14 @@ module tb_chart_renderer;
         stock_samples[16*3 +: 16] = 16'd10100;
         sl_price = 16'd9000;                       // below the chart: on the bottom line
         tp_price = 16'd10080;                      // (80 >> 3) = 10 up: y 43
-        pixel_x = 7'd20; pixel_y = 6'd43; #1;      // x[1] = 0: a dash
+        pixel_x = 7'd20; pixel_y = 6'd43; #1000;   // x[1] = 0: a dash
         check(pixel_active && pixel_color == 16'h07E0, "take-profit dashed green at its level");
         pixel_x = 7'd22; #1;                       // x[1] = 1: a gap
         check(!pixel_active, "take-profit line is dashed");
         pixel_x = 7'd40; pixel_y = 6'd53; #1;
         check(pixel_active, "stop-loss below the range sits on the bottom line");
         sl_price = 16'd0; tp_price = 16'd0;
-        pixel_x = 7'd20; pixel_y = 6'd43; #1;
+        pixel_x = 7'd20; pixel_y = 6'd43; #1000;
         check(!pixel_active, "no levels: no dashed lines");
 
         if (fail_count == 0)

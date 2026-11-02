@@ -10,8 +10,16 @@ set all_tbs {
     tb_integration
     tb_chart_renderer
     tb_display_numbers
+    tb_vga_screen
+    tb_vga_leaderboard
+    tb_vga_gameover
+    tb_vga_title
+    tb_portfolio_history
     tb_yian_market
+    tb_market_state
+    tb_history_timeframes
     tb_stock_price
+    tb_stock_pipeline
     tb_normalise_lfsr
     tb_matthew_game_fsm
     tb_ledger
@@ -19,6 +27,8 @@ set all_tbs {
     tb_bot_regression
     tb_bot_portfolio
     tb_price_equivalence
+    tb_bot_squad
+    tb_bot_logbook
     tb_risk_metrics
     tb_seq_divider
     tb_BC_ledger

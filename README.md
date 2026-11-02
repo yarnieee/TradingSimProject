@@ -21,14 +21,25 @@ C Tricia, D Matthew). Still to rename by its owner: `A_top` to `A_market_top`.
 
 ## Open in Vivado
 
-1. Clone to a short path with no spaces:
+This is `branch-team-integration`, the team's working copy (with the VGA monitor, merged from
+`branch-douglas-vga-display`).
+
+1. Clone this branch to a short path with no spaces:
    ```
    git clone -b branch-team-integration https://github.com/yarnieee/TradingSimProject.git C:/EE2026/TradingSimProject
+   ```
+   Already have a clone? In it:
+   ```
+   git fetch
+   git checkout branch-team-integration
+   git pull
    ```
 2. Open Vivado 2025.2 and type in the Tcl Console:
    ```
    source C:/EE2026/TradingSimProject/0_Integrated_Top/create_integration_project.tcl
    ```
+   The project is made in `C:/EE2026/Integration_vivado` (next to the clone), replacing any
+   project already there. To put it elsewhere, first type `set proj_dir C:/EE2026/other_folder`.
 3. Generate Bitstream, then program the board.
 
 After a `git pull`, run step 2 again.
@@ -50,10 +61,17 @@ Each test prints `PASS` or `FAIL`.
 | sw[3:2] | order type: `00` market, `01` limit, `10` stop |
 | sw[5:4] | stop-loss / take-profit for a buy: `00` off, `01` 2%, `10` 5%, `11` 10% |
 | sw[7:6] | trigger distance from the price: `00` 1%, `01` 2%, `10` 5%, `11` 10% |
-| sw[15] | view: down = you (the game), up = the bot (buttons do nothing while up) |
+| sw[14] | up = your pending orders on the left OLED: BTNU / BTND choose one, BTNC cancels it (the game buttons do nothing) |
+| sw[15] | view: down = you (the game), up = the bots (BTNL / BTNR choose which bot; the game buttons do nothing) |
+
+**VGA monitor** (plug a monitor into the Basys3 VGA port): shows everything at once in widescreen
+1280 x 720 (fills a 24" monitor), updated live: the four stocks with their 30-day change and trend, your net worth, cash, profit/loss, return and largest
+drawdown, the selected stock's 30-day chart with your stop-loss / take-profit levels, your holdings,
+every pending order, a leaderboard of you and the 5 bots in place order (net worth, return), the order you
+are making, what the buttons do on the current screen, and what the switches are set to.
 
 Screens: the right OLED shows the game, the left OLED your order ticket (and title artwork on the
-title screen). The 7-seg shows the quantity being set; LEDs flash on a fill (led 15) or a
+title screen; the monitor shows both title pictures). The 7-seg shows the quantity being set; LEDs flash on a fill (led 15) or a
 reject (led 14) and show pending orders (led 11-8).
 
 **Buying or selling**
@@ -72,10 +90,29 @@ reject (led 14) and show pending orders (led 11-8).
   are placed; when one fills the other is cancelled. They show as dashed red / green lines on the
   stock's chart.
 
-**Bot view (sw[15] up)**: the right OLED shows the bot's value against yours and its holdings, the
-left its last trades. Tricia's bot trades every day on its own ledger: it buys 20 shares when a price
-is above its 8-day average, and sells them when it falls below.
+**Bots**: five bots play against you, each with its own $10,000. All trade 20 shares at a time with
+the same spread and fee as you. The market has one price a day, so a bot's "open" is the start of
+the day and its "close" is 4.5 s in, at the same price.
 
-**Days**: a game is 60 trading days of 2 seconds each, about 2 minutes (`FINAL_TRADING_DAY` in
-`Integration_Top`). The header shows the days left (`D57`, red in the last 5) and a yellow bar along
-its bottom edge fills as the game goes on. After the last day the GAME OVER screen shows your result.
+| Bot | Rule |
+|---|---|
+| MA BOT (Tricia's) | buys when a price is above its 8-day average, sells when it falls below |
+| OVERNIGHT | buys at the close, sells everything at the next open |
+| DAY TRADE | buys at the open, sells everything at the close (so it only pays spread and fees) |
+| AVG DOWN | buys, then buys more each time the price is 5% below its last buy (up to 3 times); sells all at 5% above what it paid |
+| SL / TP | buys, then sells at +10% (take profit) or -5% (stop loss); buys again the next day |
+
+**Bot view (sw[15] up)**: BTNL / BTNR choose a bot. The right OLED shows its value against yours and
+its holdings, the left its last 5 trades and its rule. The monitor's leaderboard marks it with `>`.
+
+**Cancelling an order**: flip sw[14] up. The left OLED lists the pending orders; BTNU / BTND move
+the cursor, BTNC cancels that order (and its linked stop-loss / take-profit leg). Flip it down to
+play on. Orders can be cancelled, not edited: cancel and place a new one.
+
+**Days**: a game is 120 trading days of 5 seconds each, 10 minutes (`FINAL_TRADING_DAY` and
+`DAY_MAX_COUNT` in `Integration_Top`). The header shows the days left (`D117`, red in the last 5) and a yellow bar along
+its bottom edge fills as the game goes on. The market starts when you press START, with a new
+random seed taken at that moment, so every game has a different market. After the last day the market stops, the GAME OVER screen
+shows your result, your place among you and the bots, and who finished first; the bot view says FINAL.
+The monitor flashes a big GAME OVER for about 3 s, then shows the final results: 1st to 6th with
+name, net worth, profit / loss and return, and where you finished.

@@ -30,7 +30,7 @@ module tb_yian_market;
         .AMD_VOLATILITY(10), .MCD_VOLATILITY(8),
         .NVDA_VOLATILITY(14), .GME_VOLATILITY(20)
     ) dut (
-        .clk(clk), .rst(rst), .market_state(market_state),
+        .clk(clk), .rst(rst), .run(1'b1), .market_state(market_state),
         .amd_ready(amd_ready), .mcd_ready(mcd_ready),
         .amd_current_close(amd_close), .amd_current_volume(), .amd_current_date(amd_date),
         .mcd_current_close(mcd_close), .mcd_current_volume(), .mcd_current_date(mcd_date),

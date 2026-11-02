@@ -307,3 +307,183 @@ modules are unchanged. `Integration_Top` now instantiates `C_portfolio_top` (led
 instead of `ledger`; a small log there keeps the bot's last 5 trades from her last-trade outputs.
 `display_numbers` / `D_display_top` take her per-stock P/L (`upnl`) instead of cost basis. All
 testbenches pass, including hers.
+
+## 2026-10-31: VGA monitor and a 10-minute game (branch-douglas-vga-display)
+
+**Asked for:** show the whole game and how to use the board on a VGA monitor (OLEDs unchanged);
+make the game 10 minutes with 5-second days.
+
+**Done by the AI:** `5_Matthew_Display/submodules/vga_screen.v` (640 x 480 @ 60 Hz from the 100 MHz
+clock, character RAM in one block RAM filled by a background writer, chart with a sequential divider,
+progress bar, 4-clock pixel pipeline) and `vga_cells.v` (the content of every cell: market, portfolio,
+chart, holdings, pending orders, bot vs you, the order line, "NOW" help, switch settings);
+`tb_vga_screen` (timing and pixels). `B_order_top` exposes its 8 book slots; `display_numbers` gains
+book, return and drawdown fields. `Integration_Top`/`Integration.xdc`: VGA pins (checked against the
+Basys3 master XDC) and a multicycle constraint for the writer. Day 5 s, game 120 days; OLED day
+counters now 3 digits. All testbenches pass; frames recorded from the VGA pins in simulation were
+rebuilt into images to check the layout. Not yet built in Vivado or tried on a monitor.
+
+## 2026-10-31: cleaner VGA layout (branch-douglas-vga-display)
+
+**Asked for:** the VGA screen looked messy; make it cleaner and clearer.
+
+**Done by the AI:** `vga_cells.v` re-laid out as two panels with header bars (MARKET / YOUR
+PORTFOLIO, chart / HOLDINGS, YOU VS BOT / PENDING ORDERS), one colour rule (labels grey, values
+white, gains green, losses red, yellow for the selection), pending orders list only real orders,
+unheld stocks show a dash, "NOW" help on its own bar, switches on one line. `vga_screen.v`: two new
+palette colours and a wider chart (10 px a day, filling the left panel). All testbenches pass;
+frames re-recorded from the VGA pins to check the layout. Not yet tried on a monitor.
+
+## 2026-10-31: VGA at 1280 x 720 for a 24" monitor (branch-douglas-vga-display)
+
+**Asked for:** the monitor picture looked small; make it bigger and more detailed for a 24" monitor
+without making it confusing.
+
+**Done by the AI:** VGA moved from 640 x 480 to widescreen 1280 x 720 at 60 Hz. New
+`5_Matthew_Display/submodules/vga_clock.v` (74.25 MHz pixel clock from one MMCM primitive, no IP).
+`vga_screen.v`: 71 x 30 text cells with the font drawn 3x, character RAM written at 100 MHz and read
+at the pixel clock, larger chart (30 days x 16 px). `vga_cells.v` re-laid out for the wider screen,
+adding each stock's 30-day change, the chart's high / low prices, SL / TP levels under the chart,
+you vs the bot with returns, full order names in pending orders, and button names (BTNC, BTNL...)
+in the NOW bar. `display_numbers.v`: fields for the 30-day changes and the chart high / low (field
+index widened to 7 bits in `text_layer.v` and the tb). `Integration.xdc`: the pixel clock is
+unrelated to the 100 MHz clock. `tb_vga_screen` rewritten for the new timing; all testbenches pass
+and frames recorded from the VGA pins were rebuilt into images. Not yet built in Vivado or tried on
+a monitor.
+
+## 2026-11-01: market price worked out over several clocks (branch-douglas-vga-display)
+
+**Asked for:** fix Yi An's part of the timing failure. Matthew's Vivado build missed timing at
+100 MHz (WNS -39.978 ns), worst path from a stock's LFSR to `current_close`.
+
+**Done by the AI:** `2_YiAn_Market_Engine/submodules/stock.v`: the next close and date are no longer
+computed in one clock. After `day_tick` the stock does one small step per clock (offset x volatility,
+/ 50 as an exact multiply-and-shift, x previous close, / 100 one bit per clock, clamp, date) and
+updates close, date, calendar and history together 30 clocks later. Same result as
+`calculate_next_close`, which is kept as the reference. All four stocks still change on the same
+clock, so `Integration_Top` is unchanged. New `tb_stock_pipeline` (3,000 days against the formula and
+a reference calendar; checked to fail on planted bugs), added to `run_all_tests.tcl`. All testbenches
+pass. Yosys estimate per stock: about 990 -> 290 LUTs, logic depth 47 -> 10 LUT levels. Timing not
+yet re-checked in Vivado.
+
+## 2026-11-01: ROMs moved into block RAM (branch-douglas-vga-display)
+
+**Asked for:** move whatever can be moved into RAM, to save LUTs.
+
+**Done by the AI:** `title_art_renderer.v`: the two title images are read on the clock (new `clk`
+port, connected in `D_display_top.v`) and marked `rom_style = "block"`, so they sit in block RAM.
+The 10 ns read is far inside the 160 ns the OLED driver allows between a pixel's index changing and
+the pixel being sent. `stock.v`: the seed records are read on the clock the same way, and history
+loading waits one clock for each read. A one-off check against the previous `stock.v` gave the same
+history, close and date for all four seed files. All testbenches pass. Yosys estimate: title art
+about 1,550 -> 30 LUTs (2 block RAMs), each stock about 410 -> 260 LUTs (1 block RAM). Not yet
+built in Vivado.
+
+## 2026-11-01: OLED chart heights kept in a table (branch-douglas-vga-display)
+
+**Asked for:** keep moving logic into RAM / storage to save LUTs.
+
+**Done by the AI:** `chart_renderer.v` worked out the chart's min, max, scale and every column height
+again for each pixel. A small scanner on `clk` now does this once per pass (about 40 clocks) and keeps
+the 15 heights and the SL / TP rows in a table; the pixel logic only looks them up. `clk` added to
+`chart_renderer` and `OLED_Renderer` (connected in `D_display_top.v`); `tb_chart_renderer` waits for
+the scanner after changing the history. A one-off comparison against the previous `chart_renderer`
+(600 random charts in all three modes, every pixel) gave identical pictures. Yosys estimate:
+about 1,670 -> 750 LUTs. Not yet built in Vivado.
+
+## 2026-11-01: screen numbers read from RAM, one formatter per screen (branch-douglas-vga-display)
+
+**Asked for:** keep moving storage into RAM to save LUTs.
+
+**Done by the AI:** `display_numbers.v` also writes every field into two RAM copies: LUT RAM read
+without a clock for the VGA writer, and block RAM read on `clk` for the right OLED. It also keeps
+`zero` flags per field and `lead` / `tie` for player vs bot. `vga_cells.v` and `text_layer.v`
+now work out which single field a cell shows, read it by number, and format it with one `num_ch`
+for the whole screen, instead of a copy of `num_ch` for every place a number appears. The `bcd` bus
+stays for `bot_log_page` and the tests; synthesis removes the parts nobody reads. Wiring through
+`vga_screen.v`, `OLED_Renderer.v` and `D_display_top.v`. One-off comparisons against the previous
+`vga_cells` (400 random states, every cell) and `text_layer` (3,000 random states, every screen and
+cell) gave identical characters and colours; both comparisons were checked to catch planted
+mistakes. `tb_display_numbers` checks the RAM copies and flags; all testbenches pass.
+
+## 2026-11-02: four more bots, the bot view and leaderboard, game-over fixes (branch-douglas-vga-display)
+
+**Asked for:** create the 4 bots from Tricia's to-do list within the LUT budget, keep Tricia's
+moving-average bot as a fifth, show all the bots on the screens; and from testing: bot results on the
+GAME OVER screen, trading still going after game over, and no sign of game over in the bot view.
+
+**Done by the AI:** New `4_Tricia_Ledger/submodules/bot_squad.v`: OVERNIGHT, DAY TRADE, AVG DOWN and
+SL / TP in one engine that visits each bot and stock in turn, with their cash, shares, cost and
+reference prices in small RAMs (open = the day tick, close = 90% into the day, same price, as agreed).
+New `bot_logbook.v`: every bot's recent trades. `Integration_Top.v`: close tick, both modules, the
+chosen bot's numbers to the screens, the market stopped at game over (new `run` input on `A_top`),
+and the trigger price worked out over 3 clocks (Matthew's timing report: worst path). `D_display_top`:
+BTNL / BTNR choose the bot in the bot view. `display_numbers`: leaderboard fields, places 1-6, and a
+4-clock settle before a field's value is taken (multicycle in `Integration.xdc`). Screens: VGA
+leaderboard (rows 20-26) with SL / TP labels moved beside the chart; OLED bot view and trade page
+show the chosen bot's name and rule and FINAL after the game; GAME OVER shows your place and who
+finished first. New `tb_bot_squad` and `tb_bot_logbook` (checked to fail on planted bugs);
+`tb_integration` checks the bots, bot choice and that everything stops at game over; all testbenches
+pass. Yosys estimate about 16,900 LUTs (81%). Not yet built in Vivado.
+
+## 2026-11-02: leaderboard rows in place order (branch-douglas-vga-display)
+
+**Asked for:** on the monitor, list the leaderboard in ranking order instead of only changing the
+place numbers.
+
+**Done by the AI:** `display_numbers` also gives `order` (who is 1st to 6th), kept by the same ranker
+as `ranks`; `vga_cells` draws rows 21-26 from it, 1st at the top, with your row still highlighted
+wherever it is. New `tb_vga_leaderboard` (checked to fail on the old fixed order);
+`tb_display_numbers` and `tb_integration` also check `order`. All testbenches pass.
+
+## 2026-11-02: GAME OVER screen on the monitor (branch-douglas-vga-display)
+
+**Asked for:** at game over, flash GAME OVER on the monitor, then show the results of you and all
+the bots and the ranking.
+
+**Done by the AI:** `vga_cells`: at game over, rows 2-27 show a big GAME OVER (5 x 7 letters, one
+cell a dot) that flashes, then GAME OVER at the top with FINAL RESULTS below: 1st to 6th with place,
+name, net worth, profit / loss and return %, your row highlighted, and "YOU WIN!" or your place and
+the winner. `vga_screen`: the flash timer (about 3 s, then results) and the chart hidden at game
+over. New `tb_vga_gameover` (checked to fail on planted bugs); all testbenches pass. Yosys: VGA
+block 2,640 -> 2,955 LUTs.
+
+## 2026-11-02: a new market every game; cancelling orders with sw14 (branch-douglas-vga-display)
+
+**Asked for:** check the market varies between games; the reset fix in the VGA branch; make the left
+OLED's SUBMIT / ORDERS buttons usable: sw14 to cancel pending orders.
+
+**Done by the AI:** Found that Yi An's seed is taken 16 clocks after reset, so the first game after
+programming always had the same market, and that the market and day count ran on the title screen
+(days lost there; a 10-minute wait meant the game never ended). `Integration_Top` now holds the market
+in reset on the title screen, so the seed and day count start at START. sw14 (new top port
+`orders_sw`, pin T1): the buttons go to the order ticket's ORDERS list (U / D choose, C cancels)
+instead of the game; `order_entry` gets an orders-only mode, `B_order_top` an `EMBEDDED` parameter
+(ticket shows "SW14 UP: ORDERS" instead of the unusable buttons, no field highlighted); the VGA NOW
+bar explains the controls. `tb_integration`: the market waits on the title, a second game gets a new
+seed and different prices, and sw14 cancels an order with the game ignoring the buttons (checked to
+fail with sw14 not blocking the game); the DAY TRADE check now looks before the next open (it read
+just after it). All testbenches pass.
+
+## 2026-11-02: title screen on the monitor; left OLED title address (branch-douglas-vga-display)
+
+**Asked for:** the same start screen on the monitor (enough RAM?); the left OLED's title picture
+does not show clearly.
+
+**Done by the AI:** `vga_screen`: on the title screen the two OLED title pictures side by side, each
+pixel 6 x 6 (x 64..1215, y 72..455), from their own block RAM copy read on the pixel clock (+2
+RAMB36, about +100 LUTs); `vga_cells`: PRESS BTNC TO START under them. `D_display_top`: the left
+OLED's rotated title address is now 6143 - pixel_index (the same pixel, checked for all 6144) instead
+of a divide, remainder and multiply. New `tb_vga_title` checks every pixel of three picture rows
+(checked to fail with the pictures one pixel off); all testbenches pass.
+
+## 2026-11-02: branch-douglas-vga-display merged into branch-team-integration
+
+**Asked for:** merge the VGA branch into the team branch as the working copy, with Matthew's
+`eaed80b`, keeping the VGA branch; README steps for the team branch.
+
+**Done by the AI:** Merged; three conflicts resolved. `Integration_Top.v`: 120 days of 5 s (the
+tested game), Matthew's `ENABLE_BOT` kept, his `bot_trade_event` fill pulse now counts and logs the
+moving-average bot's trades. `run_all_tests.tcl`: both branches' new tests. `bot_log_page.v`: the
+chosen bot's rule on row 6 (five bots) rather than the moving-average bot's cash. README: clone and
+Vivado steps for `branch-team-integration`. All 30 testbenches pass. Not yet built in Vivado.

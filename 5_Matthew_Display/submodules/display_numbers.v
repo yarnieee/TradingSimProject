@@ -6,12 +6,24 @@
 //
 // One field at a time (list in trading_defs.vh, DN_*): work out the value,
 // then convert it to 8 BCD digits with a shift-and-add-3 converter (32 clocks).
-// All fields refresh about every 1,500 clocks (15 us), so the screens always
+// All fields refresh about every 3,000 clocks (30 us), so the screens always
 // read finished digits from registers: no dividers in the pixel logic.
+// A field's value is taken 4 clocks after the field number changes (load_v), so
+// its arithmetic (order total = price x quantity, ...) has 4 clocks to settle;
+// Integration.xdc gives load_v / cur_neg that multicycle allowance.
 // Values above 99,999,999 show as 99999999.
 //
 // bcd[32*f +: 32] is field f, digit 0 (ones) in bits [3:0].
 // neg[f] is 1 when field f is negative (P/L and price change only).
+//
+// The screens read the fields from RAM, one field at a time by its number,
+// each from its own copy (word {negative, 8 digits}):
+//   vga_f -> vga_rd     LUT RAM, read without a clock (the VGA writer)
+//   oled_f -> oled_rd   block RAM, read on clk (the right OLED; a pixel is
+//                       sent at least 160 ns after its index changes)
+// zero[f] says field f is 0; lead / tie compare the player's and the bot's
+// net worth as shown. Anything that reads only these leaves the bcd bus
+// unused, and synthesis removes the unused part of it.
 module display_numbers #(
     parameter [31:0] START_CASH = 32'd1_000_000,   // cents
     parameter [15:0] SPREAD     = 16'd5,           // cents, as in B_order_top
@@ -37,6 +49,11 @@ module display_numbers #(
     // the order on screen
     input  wire [1:0]  sel_stock,
     input  wire [15:0] sel_ref_price,     // selected stock's price 30 days ago
+    input  wire [479:0] sel_samples,      // selected stock, 30 days, oldest first (chart high / low)
+    input  wire [15:0] ref_price0,        // each stock's price 30 days ago
+    input  wire [15:0] ref_price1,
+    input  wire [15:0] ref_price2,
+    input  wire [15:0] ref_price3,
     input  wire [13:0] quantity,
     input  wire [31:0] days_left,
     input  wire        sell,              // 0 buy, 1 sell
@@ -57,17 +74,41 @@ module display_numbers #(
     input  wire signed [31:0] bot_upnl3,
     input  wire [79:0] log_price,         // bot log, newest first
     input  wire [39:0] log_day,
+    // order book (VGA order list) and Tricia's risk figures
+    input  wire [63:0]  book_qty,
+    input  wire [127:0] book_trig,
+    input  wire signed [31:0] ret_bp,
+    input  wire [31:0]  max_dd_bp,
+    input  wire signed [31:0] bot_ret_bp,
+    input  wire [32*`BOTS-1:0] bots_value,  // every bot's value, bot n at [32*n +: 32] (leaderboard)
+    output reg  [17:0] ranks,             // place 1..6 of: you [2:0], bot n [3*n+3 +: 3]
+    output reg  [17:0] order,             // who is in place p+1 at [3*p +: 3]: 0 you, n+1 bot n
     output reg  [`DN_N*32-1:0] bcd,
-    output reg  [`DN_N-1:0]    neg
+    output reg  [`DN_N-1:0]    neg,
+    // the same fields in RAM, for the screens
+    input  wire [6:0]  vga_f,
+    output wire [32:0] vga_rd,
+    input  wire [6:0]  oled_f,
+    output reg  [32:0] oled_rd,
+    output reg  [`DN_N-1:0]    zero,
+    output wire        lead,              // player's net worth above the bot's
+    output wire        tie
 );
     localparam [31:0] MAX_SHOWN = 32'd99_999_999;
 
-    reg  [5:0] idx;
+    reg  [6:0] idx;
 
     // ------------------------------------------------------------ which stock / log entry
-    reg [2:0] k;               // stock 0-3 or log entry 0-4 of this field
+    reg [2:0] k;               // stock 0-3, log entry 0-4 or bot 0-4 of this field
     always @* begin
-        if      (idx >= `DN_LOGDAY0) k = idx - `DN_LOGDAY0;
+        if      (idx >= `DN_LBPNL0)  k = idx - `DN_LBPNL0;
+        else if (idx >= `DN_LBNET0)  k = idx - `DN_LBNET0;
+        else if (idx >= `DN_CHI)     k = 3'd0;
+        else if (idx >= `DN_CHG0)    k = idx - `DN_CHG0;
+        else if (idx >= `DN_RET)     k = 3'd0;
+        else if (idx >= `DN_SLT0)    k = idx - `DN_SLT0;
+        else if (idx >= `DN_SLQ0)    k = idx - `DN_SLQ0;
+        else if (idx >= `DN_LOGDAY0) k = idx - `DN_LOGDAY0;
         else if (idx >= `DN_LOGPX0)  k = idx - `DN_LOGPX0;
         else if (idx >= `DN_BPNL0)   k = idx - `DN_BPNL0;
         else if (idx >= `DN_BPOS0)   k = idx - `DN_BPOS0;
@@ -77,16 +118,38 @@ module display_numbers #(
     end
     wire bot = (idx >= `DN_BPOS0) && (idx < `DN_LOGPX0);
 
-    reg [15:0] px_k;
+    wire [31:0] lb_k = bots_value[32*k +: 32];
+
+    reg [15:0] px_k, ref_k;
     reg [9:0]  pos_k;
     reg signed [31:0] upnl_k;
     always @* begin
         case (k[1:0])
-            2'd0:    begin px_k = price0; pos_k = bot ? bot_pos0 : pos0; upnl_k = bot ? bot_upnl0 : upnl0; end
-            2'd1:    begin px_k = price1; pos_k = bot ? bot_pos1 : pos1; upnl_k = bot ? bot_upnl1 : upnl1; end
-            2'd2:    begin px_k = price2; pos_k = bot ? bot_pos2 : pos2; upnl_k = bot ? bot_upnl2 : upnl2; end
-            default: begin px_k = price3; pos_k = bot ? bot_pos3 : pos3; upnl_k = bot ? bot_upnl3 : upnl3; end
+            2'd0:    begin px_k = price0; ref_k = ref_price0; pos_k = bot ? bot_pos0 : pos0; upnl_k = bot ? bot_upnl0 : upnl0; end
+            2'd1:    begin px_k = price1; ref_k = ref_price1; pos_k = bot ? bot_pos1 : pos1; upnl_k = bot ? bot_upnl1 : upnl1; end
+            2'd2:    begin px_k = price2; ref_k = ref_price2; pos_k = bot ? bot_pos2 : pos2; upnl_k = bot ? bot_upnl2 : upnl2; end
+            default: begin px_k = price3; ref_k = ref_price3; pos_k = bot ? bot_pos3 : pos3; upnl_k = bot ? bot_upnl3 : upnl3; end
         endcase
+    end
+
+    // highest and lowest of the selected stock's 30 days: one sample a clock, kept between scans
+    reg  [4:0]  sc;
+    reg  [15:0] run_hi, run_lo, chart_hi, chart_lo;
+    wire [15:0] smp = sel_samples[16*sc +: 16];
+    always @(posedge clk) begin
+        if (rst) begin
+            sc <= 5'd0; run_hi <= 16'd0; run_lo <= 16'hFFFF; chart_hi <= 16'd0; chart_lo <= 16'd0;
+        end else if (sc == 5'd29) begin
+            chart_hi <= (smp > run_hi) ? smp : run_hi;
+            chart_lo <= (smp < run_lo) ? smp : run_lo;
+            run_hi   <= 16'd0;
+            run_lo   <= 16'hFFFF;
+            sc       <= 5'd0;
+        end else begin
+            if (smp > run_hi) run_hi <= smp;
+            if (smp < run_lo) run_lo <= smp;
+            sc <= sc + 5'd1;
+        end
     end
 
     reg [15:0] sel_px;
@@ -141,8 +204,30 @@ module display_numbers #(
                 val_neg = bot_value < START_CASH;
                 val     = val_neg ? START_CASH - bot_value : bot_value - START_CASH;
             end
+            `DN_RET: begin
+                val_neg = ret_bp < 0;
+                val     = val_neg ? -ret_bp : ret_bp;
+            end
+            `DN_MAXDD:  val = max_dd_bp;
+            `DN_BRET: begin
+                val_neg = bot_ret_bp < 0;
+                val     = val_neg ? -bot_ret_bp : bot_ret_bp;
+            end
+            `DN_CHI:    val = {16'd0, chart_hi};
+            `DN_CLO:    val = {16'd0, chart_lo};
             default: begin
-                if (idx >= `DN_LOGDAY0)      val = {24'd0, log_day[8*k +: 8]};
+                if (idx >= `DN_LBPNL0) begin                                             // bot k: value - start
+                    val_neg = lb_k < START_CASH;
+                    val     = val_neg ? START_CASH - lb_k : lb_k - START_CASH;
+                end
+                else if (idx >= `DN_LBNET0)       val = lb_k;                            // bot k: value
+                else if (idx >= `DN_CHG0) begin                                          // 30-day change of stock k
+                    val_neg = px_k < ref_k;
+                    val     = val_neg ? ref_k - px_k : px_k - ref_k;
+                end
+                else if (idx >= `DN_SLT0)         val = {16'd0, book_trig[16*k +: 16]};
+                else if (idx >= `DN_SLQ0)    val = {24'd0, book_qty[8*k +: 8]};
+                else if (idx >= `DN_LOGDAY0) val = {24'd0, log_day[8*k +: 8]};
                 else if (idx >= `DN_LOGPX0)  val = {16'd0, log_price[16*k +: 16]};
                 else if ((idx >= `DN_BPNL0) || (idx >= `DN_PNL0 && idx < `DN_CHG)) begin   // P/L of stock k
                     val_neg = upnl_k < 0;
@@ -161,6 +246,9 @@ module display_numbers #(
     reg [5:0]  step;         // 0..32
     reg        cur_neg;
     reg        busy;
+    reg [2:0]  settle;       // clocks since the field number changed
+    reg [31:0] load_v;       // the field's value, taken at settle 3
+    reg [31:0] net_shown, bnet_shown;    // player's and bot's net worth, as last converted
 
     // add 3 to every digit that is 5 or more (before each shift)
     function [31:0] add3;
@@ -177,30 +265,104 @@ module display_numbers #(
 
     always @(posedge clk) begin
         if (rst) begin
-            idx     <= 6'd0;
+            idx     <= 7'd0;
             bin     <= 32'd0;
             acc     <= 32'd0;
             step    <= 6'd0;
             cur_neg <= 1'b0;
             busy    <= 1'b0;
+            settle  <= 3'd0;
+            load_v  <= 32'd0;
             bcd     <= {(`DN_N*32){1'b0}};
             neg     <= {`DN_N{1'b0}};
+            zero    <= {`DN_N{1'b1}};
+            net_shown  <= 32'd0;
+            bnet_shown <= 32'd0;
         end else if (!busy) begin
-            bin     <= (val > MAX_SHOWN) ? MAX_SHOWN : val;
-            cur_neg <= val_neg;
-            acc     <= 32'd0;
-            step    <= 6'd0;
-            busy    <= 1'b1;
+            settle <= settle + 3'd1;
+            if (settle == 3'd3) begin
+                load_v  <= (val > MAX_SHOWN) ? MAX_SHOWN : val;
+                cur_neg <= val_neg;
+            end
+            if (settle == 3'd4) begin
+                bin    <= load_v;
+                acc    <= 32'd0;
+                step   <= 6'd0;
+                busy   <= 1'b1;
+                settle <= 3'd0;
+            end
         end else if (step != 6'd32) begin
             {acc, bin} <= {acc_adj, bin} << 1;
             step       <= step + 6'd1;
         end else begin
             bcd[32*idx +: 32] <= acc;
             neg[idx]          <= cur_neg && (acc != 32'd0);
-            idx               <= (idx == `DN_N - 1) ? 6'd0 : idx + 6'd1;
+            zero[idx]         <= (acc == 32'd0);
+            if (idx == `DN_NET)  net_shown  <= acc;
+            if (idx == `DN_BNET) bnet_shown <= acc;
+            idx               <= (idx == `DN_N - 1) ? 7'd0 : idx + 7'd1;
             busy              <= 1'b0;
         end
     end
+
+    // ------------------------------------------------------------ the fields in RAM
+    wire        wr_field = busy && (step == 6'd32);
+    wire [32:0] wr_word  = {cur_neg && (acc != 32'd0), acc};
+
+    (* ram_style = "distributed" *) reg [32:0] vga_ram  [0:127];
+    (* ram_style = "block" *)       reg [32:0] oled_ram [0:127];
+    integer r;
+    initial begin
+        for (r = 0; r < 128; r = r + 1) begin
+            vga_ram[r]  = 33'd0;
+            oled_ram[r] = 33'd0;
+        end
+        oled_rd = 33'd0;
+    end
+    always @(posedge clk) begin
+        if (wr_field) begin
+            vga_ram[idx]  <= wr_word;
+            oled_ram[idx] <= wr_word;
+        end
+        oled_rd <= oled_ram[oled_f];
+    end
+    assign vga_rd = vga_ram[vga_f];
+
+    // ------------------------------------------------------------ places, you and the bots
+    // Entry 0 is you, 1..5 the bots. Place = 1 + how many are worth more (ties go
+    // to the earlier entry). One comparison a clock, 36 clocks a round.
+    // order is the same list the other way round, for the leaderboard rows.
+    function [31:0] entry;
+        input [2:0] e;
+        begin
+            entry = (e == 3'd0) ? portfolio_value : bots_value[32*(e - 3'd1) +: 32];
+        end
+    endfunction
+    reg  [2:0] ri, rj, rcnt;
+    wire [31:0] v_i = entry(ri), v_j = entry(rj);
+    wire        ahead = (v_j > v_i) || ((v_j == v_i) && (rj < ri));
+    always @(posedge clk) begin
+        if (rst) begin
+            ri <= 3'd0; rj <= 3'd0; rcnt <= 3'd0;
+            ranks <= {3'd6, 3'd5, 3'd4, 3'd3, 3'd2, 3'd1};
+            order <= {3'd5, 3'd4, 3'd3, 3'd2, 3'd1, 3'd0};
+        end else begin
+            if (rj == 3'd5) begin
+                ranks[3*ri +: 3] <= rcnt + ahead + 3'd1;
+                order[3*(rcnt + ahead) +: 3] <= ri;
+                rcnt <= 3'd0;
+                rj   <= 3'd0;
+                ri   <= (ri == 3'd5) ? 3'd0 : ri + 3'd1;
+            end else begin
+                rcnt <= rcnt + ahead;
+                rj   <= rj + 3'd1;
+            end
+        end
+    end
+
+    // net worth as shown (packed BCD compares like the number it holds)
+    assign lead = (net_shown > bnet_shown);
+    assign tie  = (net_shown == bnet_shown);
 endmodule
 
 `default_nettype wire

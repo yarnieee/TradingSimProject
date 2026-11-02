@@ -24,6 +24,8 @@
 //                 (limit buy / stop sell below the price, limit sell / stop buy above)
 //   sw[15] (view_sw) up: bot view (JB a bot against you, JA its last trades); BTNL / BTNR
 //                 choose the bot, the game buttons are ignored
+//   sw[14] (orders_sw) up: the buttons work the left OLED's ORDERS list: BTNU / BTND
+//                 choose a pending order, BTNC cancels it (the game buttons are ignored)
 //   buttons       Matthew's game FSM (title > portfolio > stocks > stock > buy/sell
 //                 > quantity > review > result)
 //   JB (right)    Matthew's game screens
@@ -41,6 +43,7 @@ module Integration_Top #(
     input  wire        rst,
     input  wire [5:0]  order_sw,        // sw[7:2]: order type, SL/TP, trigger distance
     input  wire        view_sw,         // sw[15]: show the bot
+    input  wire        orders_sw,       // sw[14]: the buttons work the left OLED's ORDERS list (cancel)
     input  wire        btnU,
     input  wire        btnD,
     input  wire        btnL,
@@ -151,13 +154,19 @@ module Integration_Top #(
     wire signed [31:0] view_upnl3 = show_ma ? bot_upnl3 : squad_upnl[127:96];
     // switches, synchronised to clk
     reg  [5:0]  osw_s0, osw;
-    reg         view_s0, bot_view;
+    reg         view_s0, bot_view, ords_s0, ords_sw;
     always @(posedge clk) begin
         osw_s0   <= order_sw;
         osw      <= osw_s0;
         view_s0  <= view_sw;
         bot_view <= view_s0;
+        ords_s0  <= orders_sw;
+        ords_sw  <= ords_s0;
     end
+    // sw14 up (not in the bot view, not on the title): the buttons go to the
+    // left OLED's ORDERS list, U / D choose a pending order, C cancels it
+    wire        orders_view = ords_sw && !bot_view && (screen_state != `UI_TITLE);
+    wire [4:0]  d_btn_pulse;
     wire [2:0]  reject_code;
     wire [15:0] ticket_pixel;
     wire [6:0]  xL;
@@ -168,6 +177,7 @@ module Integration_Top #(
     ) matthew_display (
         .clk(clk), .rst(sys_reset),
         .btnU(btnU), .btnD(btnD), .btnL(btnL), .btnR(btnR), .btnC(btnC),
+        .orders_view(orders_view), .btn_pulse(d_btn_pulse),
         .final_day_reached(final_day_reached),
         .time_remaining(time_remaining),
         .order_fill(fill), .order_reject(reject), .order_reject_code(reject_code),
@@ -257,8 +267,14 @@ module Integration_Top #(
     // The market stops when the game is over, so prices, charts and net worths
     // stay at the final day.
     wire game_over = (screen_state == `UI_GAME_END);
+    // The market (and the day count) starts when the player leaves the title
+    // screen. Yi An's startup_seed takes its random seed then, from a counter
+    // that never stops, so every game has a different market, even the first
+    // one after the board is programmed; and every game gets all its days.
+    reg  market_rst;
+    always @(posedge clk) market_rst <= sys_reset || (screen_state == `UI_TITLE);
     A_top #(.DAY_MAX_COUNT(DAY_MAX_COUNT)) yian_market (
-        .clk(clk), .rst(sys_reset), .run(!game_over),
+        .clk(clk), .rst(market_rst), .run(!game_over),
         .market_state(market_state),
         .market_event(market_event),
         .amd_ready(amd_ready), .mcd_ready(mcd_ready),
@@ -308,7 +324,7 @@ module Integration_Top #(
     assign all_stocks_ready = amd_ready && mcd_ready && stock2_ready && stock3_ready;
     reg  [31:0] market_date_d;
     always @(posedge clk) begin
-        if (sys_reset) begin
+        if (market_rst) begin
             market_date_d <= 32'd0;
             tick          <= 1'b0;
             trading_day_count <= 32'd0;
@@ -428,12 +444,13 @@ module Integration_Top #(
     // ================================================================ DOUGLAS: orders, ticket page
     wire [3:0]  pending_count;
     // The left OLED (JA) sits upside down on the board: draw the ticket rotated 180 degrees.
-    B_order_top #(.TICKET_FLIP_180(1)) douglas_orders (
+    B_order_top #(.TICKET_FLIP_180(1), .EMBEDDED(1)) douglas_orders (
         .clk(clk), .sys_reset(sys_reset), .game_state(game_state),
         .price0(price0), .price1(price1), .price2(price2), .price3(price3), .tick(tick),
         .sel_stock(sel_stock),
-        .page_R(`PG_R_PORTFOLIO),        // Matthew owns the buttons: Douglas's own button entry is off
-        .btn_pulse(5'd0),
+        // Matthew owns the buttons, except with sw14 up: then they work the ORDERS list
+        .page_R(orders_view ? `PG_R_TICKET : `PG_R_PORTFOLIO),
+        .btn_pulse(orders_view ? d_btn_pulse : 5'd0),
         .ord_req(ord_req), .ord_side(ord_side), .ord_type(ord_type),
         .ord_qty(quantity), .ord_trig(ord_trig), .ord_brk(ord_brk),
         .cash(cash), .pos0(pos0), .pos1(pos1), .pos2(pos2), .pos3(pos3),

@@ -41,6 +41,7 @@ module vga_cells (
     input  [1:0]  order_brk,
     input  [1:0]  order_dist,          // sw[7:6]: 1, 2, 5, 10%
     input         oled_bot_view,       // sw15
+    input         orders_view,         // sw14: the buttons are on the left OLED's ORDERS list
     input  [2:0]  bot_sel,             // the bot the OLEDs show in the bot view
     input  [17:0] order,               // who is in place p+1 at [3*p +: 3]: 0 you, n+1 bot n
     input         go_blink,            // game over: the big GAME OVER is lit now
@@ -577,6 +578,8 @@ module vga_cells (
             else if (col >= 7'd5 && col <= 7'd69 && oled_bot_view &&
                      screen_state != `UI_TITLE && screen_state != `UI_GAME_END)
                 ch = s64("BTNL / BTNR  CHOOSE THE BOT ON THE OLEDS    SW15 DOWN  PLAY     ", col - 7'd5);
+            else if (col >= 7'd5 && col <= 7'd69 && orders_view)
+                ch = s64("BTNU / BTND  CHOOSE AN ORDER (LEFT OLED)   BTNC  CANCEL IT      ", col - 7'd5);
             else if (col >= 7'd5 && col <= 7'd69) begin
                 case (screen_state)
                     `UI_TITLE:        ch = s64("PRESS BTNC TO START                                             ", col - 7'd5);

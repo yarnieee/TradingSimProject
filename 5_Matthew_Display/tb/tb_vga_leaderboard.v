@@ -18,7 +18,7 @@ module tb_vga_leaderboard;
         .trade_side(1'b0), .trade_result_success(1'b0), .trade_result_placed(1'b0),
         .trade_result_code(3'd0), .order_valid(1'b1), .validation_code(3'd0),
         .order_type(`OT_MKT), .order_brk(`BRK_OFF), .order_dist(2'd0),
-        .oled_bot_view(1'b0), .bot_sel(3'd0), .order(order),
+        .oled_bot_view(1'b0), .orders_view(1'b0), .bot_sel(3'd0), .order(order),
         .go_blink(1'b0), .go_results(1'b0), .up(4'd0),
         .num_f(num_f), .num_rd(33'd0), .zero({`DN_N{1'b1}}),
         .book_valid(8'd0), .book_side(8'd0), .book_stock(16'd0), .book_type(16'd0), .book_leg(8'd0),

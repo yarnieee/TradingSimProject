@@ -15,13 +15,14 @@ module tb_integration;
     reg  btnU = 0, btnD = 0, btnL = 0, btnR = 0, btnC = 0;
     reg  [5:0] order_sw = 6'd0;     // sw[7:2]: type, SL/TP, trigger distance
     reg  view_sw = 0;               // sw[15]: bot view
+    reg  orders_sw = 0;             // sw[14]: the ORDERS list on the left OLED
     wire [7:0]  JA, JB, seg;
     wire [15:0] led;
     wire [3:0]  an;
 
     localparam DAY = 4000;
     Integration_Top #(.DAY_MAX_COUNT(DAY), .DEBOUNCE_CTR(32'd50)) dut (
-        .clk(clk), .rst(rst), .order_sw(order_sw), .view_sw(view_sw),
+        .clk(clk), .rst(rst), .order_sw(order_sw), .view_sw(view_sw), .orders_sw(orders_sw),
         .btnU(btnU), .btnD(btnD), .btnL(btnL), .btnR(btnR), .btnC(btnC),
         .JA(JA), .JB(JB), .led(led), .an(an), .seg(seg)
     );
@@ -64,8 +65,10 @@ module tb_integration;
         repeat (400) @(posedge clk);
         for (q = 0; q < 4; q = q + 1) if (dut.bots.pos_m[q] != 0) bad_night = bad_night + 1;
     end
+    // (a day here is 4000 clocks with the close at 3600: look before the next open)
+    integer w;
     always @(posedge dut.close_tick) begin
-        repeat (400) @(posedge clk);
+        for (w = 0; w < 200 && !dut.tick; w = w + 1) @(posedge clk);
         for (q = 4; q < 8; q = q + 1) if (dut.bots.pos_m[q] != 0) bad_day = bad_day + 1;
     end
     // the six places are 1..6, each once
@@ -124,11 +127,23 @@ module tb_integration;
 
     integer cash0, f0, r0, o0;
     reg [15:0] p0;
+    reg [31:0] seed1;
+    reg [63:0] px1;
+    integer    t_new;
+    reg [3:0]  m0;
 
     initial begin
         repeat (10) @(posedge clk);
         rst = 0;
+        // ---------------- title: the market waits for the player
+        repeat (2 * DAY + 1234) @(posedge clk);
+        check(n_tick == 0 && dut.trading_day_count == 0 && !dut.amd_ready,
+              "the market does not start on the title screen");
+        press(C);
+        check(dut.screen_state == S_PORTFOLIO, "Matthew: title -> portfolio");
+        check(dut.time_remaining == 120, "the game starts with all its days");
         wait (dut.amd_ready && dut.mcd_ready && dut.stock2_ready && dut.stock3_ready);
+        seed1 = dut.yian_market.startup_random_seed;
         repeat (DAY + 100) @(posedge clk);              // one day ticks over
         check(dut.price0 != 0 && dut.price1 != 0 && dut.price2 != 0 && dut.price3 != 0,
               "Yi An: all four stocks have prices (if not: a seed file was not found)");
@@ -149,9 +164,7 @@ module tb_integration;
             || dut.price2 < 100 || dut.price3 < 100)
             $display("WARN: Yi An's prices look wrong (pinned at $655.35 or near 0): see stock.v, calculate_next_close");
 
-        // ---------------- title -> portfolio
-        press(C);
-        check(dut.screen_state == S_PORTFOLIO, "Matthew: title -> portfolio");
+        px1 = {dut.price0, dut.price1, dut.price2, dut.price3};   // after the first day
 
         // ---------------- buy 3 AMD
         cash0 = dut.cash; f0 = n_fill; o0 = n_ord_req; p0 = dut.price0;
@@ -207,6 +220,23 @@ module tb_integration;
         order_sw = 6'd0;
         press(C);
 
+        // ---------------- sw14 up: the left OLED's ORDERS list; BTNC cancels the chosen order
+        check(dut.douglas_orders.e_focus == 3'd7, "the ticket shows no button focus in the full game");
+        orders_sw = 1;
+        repeat (5) @(posedge clk);
+        check(dut.douglas_orders.e_focus == 3'd4, "sw14 up: the left OLED shows the ORDERS list");
+        m0 = dut.matthew_display.menu_selection;
+        press(D); press(L); press(R); press(U);     // cursor down, left / right ignored, back up to the order
+        check(dut.douglas_orders.e_focus == 3'd4 && dut.douglas_orders.e_ord_sel == 3'd0,
+              "sw14 up: BTNU / BTND move the cursor, BTNL / BTNR do nothing");
+        press(C);
+        check(dut.pending_count == 4'd0, "sw14 up: BTNC cancels the chosen pending order");
+        check(dut.screen_state == S_PORTFOLIO && dut.matthew_display.menu_selection == m0,
+              "sw14 up: the game ignores the buttons");
+        orders_sw = 0;
+        repeat (5) @(posedge clk);
+        check(dut.douglas_orders.e_focus == 3'd7, "sw14 down: the left OLED shows the ticket again");
+
         // ---------------- Tricia's bot trades on its own; sw[15] shows it, buttons ignored there
         repeat (6 * DAY) @(posedge clk);               // a few more trading days
         check(dut.tricia_portfolio.bot_err == 1'b0, "Tricia: the bot's ledger never rejected a bot fill");
@@ -259,6 +289,17 @@ module tb_integration;
             check(n_squad == s0 && dut.bot_trades == b0, "game over: no bot trades any more");
             check(dut.time_remaining == 0, "game over: no days left");
         end
+
+        // ---------------- a new game (sw0 up, down), started at another time: another market
+        @(negedge clk); rst = 1; repeat (10) @(posedge clk); rst = 0;
+        repeat (DAY / 3 + 777) @(posedge clk);
+        press(C);
+        wait (dut.amd_ready && dut.mcd_ready && dut.stock2_ready && dut.stock3_ready);
+        check(dut.yian_market.startup_random_seed != seed1, "a new game gets a new random seed");
+        t_new = n_tick;
+        while (n_tick == t_new) @(posedge clk);
+        repeat (100) @(posedge clk);
+        check({dut.price0, dut.price1, dut.price2, dut.price3} != px1, "and a different market (prices after day 1)");
 
         check(n_err == 0, "Tricia's ledger never rejected a fill from Douglas");
         $display("     cash %0d c, AMD position %0d, realised %0d c, %0d fills, %0d rejects",

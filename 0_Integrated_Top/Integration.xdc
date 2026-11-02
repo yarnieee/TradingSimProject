@@ -17,6 +17,8 @@ set_property -dict { PACKAGE_PIN W14   IOSTANDARD LVCMOS33 } [get_ports {order_s
 set_property -dict { PACKAGE_PIN W13   IOSTANDARD LVCMOS33 } [get_ports {order_sw[5]}]
 ## Bot view: sw[15] (top port view_sw)
 set_property -dict { PACKAGE_PIN R2    IOSTANDARD LVCMOS33 } [get_ports view_sw]
+## Pending orders on the left OLED (cancel): sw[14] (top port orders_sw)
+set_property -dict { PACKAGE_PIN T1    IOSTANDARD LVCMOS33 } [get_ports orders_sw]
 
 ## LEDs
 set_property -dict { PACKAGE_PIN U16   IOSTANDARD LVCMOS33 } [get_ports {led[0]}]

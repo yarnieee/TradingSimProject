@@ -78,7 +78,9 @@ module B_order_top #(
     parameter QTY_INIT        = 1,             // [ASSUMPTION]
     parameter TRIG_STEP       = 5,             // cents per notch [ASSUMPTION]
     parameter REJ_SHOW_CYCLES = 200_000_000,   // 2 s at 100 MHz
-    parameter TICKET_FLIP_180 = 0              // 1: ticket page drawn rotated 180 degrees (upside-down OLED)
+    parameter TICKET_FLIP_180 = 0,             // 1: ticket page drawn rotated 180 degrees (upside-down OLED)
+    parameter EMBEDDED        = 0              // 1: in the full game, where Matthew's screens make the orders:
+                                               //    the buttons (page_R = PG_R_TICKET, sw14) only work the ORDERS list
 ) (
     input  wire        clk,
     input  wire        sys_reset,
@@ -142,6 +144,7 @@ module B_order_top #(
     // ------------------------------------------------------------ decode Matthew's signals
     wire game_live       = (game_state == `GS_PLAYING);
     wire ticket_active   = (page_R == `PG_R_TICKET);
+    wire orders_only     = EMBEDDED && ticket_active;
     wire key_center      = btn_pulse[`BTN_C];
     wire key_up          = btn_pulse[`BTN_U];
     wire key_left        = btn_pulse[`BTN_L];
@@ -183,8 +186,8 @@ module B_order_top #(
     wire        cancel_req;
     wire [2:0]  cancel_idx;
 
-    order_entry #(.QTY_INIT(QTY_INIT), .TRIG_STEP(TRIG_STEP)) u_entry (
-        .clk(clk), .sys_reset(sys_reset), .ticket_active(ticket_active),
+    order_entry #(.QTY_INIT(QTY_INIT), .TRIG_STEP(TRIG_STEP), .FOCUS_IDLE(EMBEDDED ? 3'd7 : 3'd0)) u_entry (
+        .clk(clk), .sys_reset(sys_reset), .ticket_active(ticket_active), .orders_only(orders_only),
         .sel_stock(sel_stock), .tk_price(tk_price),
         .key_up(key_up), .key_down(key_down), .key_left(key_left),
         .key_right(key_right), .key_center(key_center),
@@ -284,7 +287,7 @@ module B_order_top #(
     end
 
     // ------------------------------------------------------------ screen
-    ticket_screen #(.REJ_SHOW_CYCLES(REJ_SHOW_CYCLES), .FLIP_180(TICKET_FLIP_180)) u_screen (
+    ticket_screen #(.REJ_SHOW_CYCLES(REJ_SHOW_CYCLES), .FLIP_180(TICKET_FLIP_180), .EMBEDDED(EMBEDDED)) u_screen (
         .clk(clk), .sys_reset(sys_reset), .pix_x(xR), .pix_y(yR),
         .stock(e_stock), .bid(tk_bid), .ask(tk_ask),
         .side(e_side), .otype(e_type), .qty(e_qty), .trig(e_trig), .brk(e_brk),

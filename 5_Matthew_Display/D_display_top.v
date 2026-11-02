@@ -45,6 +45,8 @@ module D_display_top #(
     input  wire [63:0] tp_price,
     // bot (sw1 shows it)
     input  wire        bot_view,
+    input  wire        orders_view,       // sw14: the buttons work the left OLED's ORDERS list instead
+    output wire [4:0]  btn_pulse,         // debounced presses, bits per BTN_* (for that list)
     input  wire        bot_active,        // 0 until the bot's strategy exists: "NO BOT YET"
     output reg  [2:0]  bot_sel,           // the bot the bot view shows (its numbers come in on bot_*)
     input  wire [32*`BOTS-1:0] bots_value, // every bot's value, for the leaderboard
@@ -172,7 +174,9 @@ module D_display_top #(
     wire fsm_fill   = (order_fill && order_from_submit) || order_placed;
     wire fsm_reject = order_reject && order_from_submit;
     // the buttons are ignored in the bot view, where BTNL / BTNR choose the bot
-    wire buttons_on = !bot_view;
+    // and while sw14 has them on the left OLED's ORDERS list
+    wire buttons_on = !bot_view && !orders_view;
+    assign btn_pulse = {btnD_p, btnR_p, btnL_p, btnU_p, btnC_p};
     always @(posedge clk) begin
         if (rst)
             bot_sel <= 3'd0;
@@ -374,7 +378,7 @@ module D_display_top #(
         .trade_result_placed(trade_result_placed), .trade_result_code(trade_result_code),
         .order_valid(order_valid), .validation_code(validation_code),
         .order_type(ord_type), .order_brk(ord_brk), .order_dist(ord_dist),
-        .oled_bot_view(bot_view), .bot_sel(bot_sel), .order(numbers_order), .stock_up(stock_up),
+        .oled_bot_view(bot_view), .orders_view(orders_view), .bot_sel(bot_sel), .order(numbers_order), .stock_up(stock_up),
         .num_f(vga_num_f), .num_rd(vga_num_rd), .zero(numbers_zero),
         .book_valid(book_valid), .book_side(book_side), .book_stock(book_stock),
         .book_type(book_type), .book_leg(book_leg),

@@ -22,17 +22,22 @@
 //   SUBMIT                                 center: submit
 //   ORDERS  up/down: move the cursor       center: cancel that pending order
 //
+// orders_only (sw14 in the full game): only the ORDERS list, focus held there,
+// left / right ignored; afterwards the focus goes back to FOCUS_IDLE.
+//
 // stock follows Matthew's sel_stock whenever that changes, and can then be
 // changed on the ticket. trig is re-centred on the market when stock changes,
 // and once after reset as soon as the stock's price is non-zero. [ASSUMPTION]
 // qty is clamped to 1..255, trig to 0..65535 (0 is caught by RJ_BAD_TRIG).
 module order_entry #(
     parameter QTY_INIT  = 1,     // [ASSUMPTION]
-    parameter TRIG_STEP = 5      // cents per press [ASSUMPTION]
+    parameter TRIG_STEP = 5,     // cents per press [ASSUMPTION]
+    parameter [2:0] FOCUS_IDLE = 3'd0  // focus after reset / orders_only (0 QTY; 7 none)
 ) (
     input  wire        clk,
     input  wire        sys_reset,
     input  wire        ticket_active,
+    input  wire        orders_only,
     input  wire [1:0]  sel_stock,      // Matthew's selected stock
     input  wire [15:0] tk_price,       // mid price of the ticket's stock
     input  wire        key_up,
@@ -140,8 +145,8 @@ module order_entry #(
     endfunction
 
     // ------------------------------------------------------------ decode
-    wire k_left   = ticket_active && key_left;
-    wire k_right  = ticket_active && !key_left && key_right;
+    wire k_left   = ticket_active && !orders_only && key_left;
+    wire k_right  = ticket_active && !orders_only && !key_left && key_right;
     wire k_up     = ticket_active && !key_left && !key_right && key_up;
     wire k_down   = ticket_active && !key_left && !key_right && !key_up && key_down;
     wire k_center = ticket_active && !key_left && !key_right && !key_up && !key_down && key_center;
@@ -154,6 +159,7 @@ module order_entry #(
     reg [1:0] prev_sel;
     reg [1:0] prev_stock;
     reg       trig_loaded;
+    reg       orders_was;
 
     always @(posedge clk) begin
         if (sys_reset) begin
@@ -164,13 +170,17 @@ module order_entry #(
             trig        <= 16'd0;
             brk         <= `BRK_OFF;
             ord_sel     <= 3'd0;
-            focus       <= F_QTY;
+            focus       <= FOCUS_IDLE;
+            orders_was  <= 1'b0;
             prev_sel    <= sel_stock;
             prev_stock  <= sel_stock;
             trig_loaded <= 1'b0;
         end else begin
             prev_sel   <= sel_stock;
             prev_stock <= stock;
+            orders_was <= orders_only;
+            if (orders_only)     focus <= F_ORD;
+            else if (orders_was) focus <= FOCUS_IDLE;
 
             if (ext_load) begin
                 stock <= sel_stock;

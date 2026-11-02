@@ -58,6 +58,7 @@ Each test prints `PASS` or `FAIL`.
 | sw[3:2] | order type: `00` market, `01` limit, `10` stop |
 | sw[5:4] | stop-loss / take-profit for a buy: `00` off, `01` 2%, `10` 5%, `11` 10% |
 | sw[7:6] | trigger distance from the price: `00` 1%, `01` 2%, `10` 5%, `11` 10% |
+| sw[14] | up = your pending orders on the left OLED: BTNU / BTND choose one, BTNC cancels it (the game buttons do nothing) |
 | sw[15] | view: down = you (the game), up = the bots (BTNL / BTNR choose which bot; the game buttons do nothing) |
 
 **VGA monitor** (plug a monitor into the Basys3 VGA port): shows everything at once in widescreen
@@ -101,9 +102,14 @@ the day and its "close" is 4.5 s in, at the same price.
 **Bot view (sw[15] up)**: BTNL / BTNR choose a bot. The right OLED shows its value against yours and
 its holdings, the left its last 5 trades and its rule. The monitor's leaderboard marks it with `>`.
 
+**Cancelling an order**: flip sw[14] up. The left OLED lists the pending orders; BTNU / BTND move
+the cursor, BTNC cancels that order (and its linked stop-loss / take-profit leg). Flip it down to
+play on. Orders can be cancelled, not edited: cancel and place a new one.
+
 **Days**: a game is 120 trading days of 5 seconds each, 10 minutes (`FINAL_TRADING_DAY` and
 `DAY_MAX_COUNT` in `Integration_Top`). The header shows the days left (`D117`, red in the last 5) and a yellow bar along
-its bottom edge fills as the game goes on. After the last day the market stops, the GAME OVER screen
+its bottom edge fills as the game goes on. The market starts when you press START, with a new
+random seed taken at that moment, so every game has a different market. After the last day the market stops, the GAME OVER screen
 shows your result, your place among you and the bots, and who finished first; the bot view says FINAL.
 The monitor flashes a big GAME OVER for about 3 s, then shows the final results: 1st to 6th with
 name, net worth, profit / loss and return, and where you finished.

@@ -447,3 +447,20 @@ name, net worth, profit / loss and return %, your row highlighted, and "YOU WIN!
 the winner. `vga_screen`: the flash timer (about 3 s, then results) and the chart hidden at game
 over. New `tb_vga_gameover` (checked to fail on planted bugs); all testbenches pass. Yosys: VGA
 block 2,640 -> 2,955 LUTs.
+
+## 2026-11-02: a new market every game; cancelling orders with sw14 (branch-douglas-vga-display)
+
+**Asked for:** check the market varies between games; the reset fix in the VGA branch; make the left
+OLED's SUBMIT / ORDERS buttons usable: sw14 to cancel pending orders.
+
+**Done by the AI:** Found that Yi An's seed is taken 16 clocks after reset, so the first game after
+programming always had the same market, and that the market and day count ran on the title screen
+(days lost there; a 10-minute wait meant the game never ended). `Integration_Top` now holds the market
+in reset on the title screen, so the seed and day count start at START. sw14 (new top port
+`orders_sw`, pin T1): the buttons go to the order ticket's ORDERS list (U / D choose, C cancels)
+instead of the game; `order_entry` gets an orders-only mode, `B_order_top` an `EMBEDDED` parameter
+(ticket shows "SW14 UP: ORDERS" instead of the unusable buttons, no field highlighted); the VGA NOW
+bar explains the controls. `tb_integration`: the market waits on the title, a second game gets a new
+seed and different prices, and sw14 cancels an order with the game ignoring the buttons (checked to
+fail with sw14 not blocking the game); the DAY TRADE check now looks before the next open (it read
+just after it). All testbenches pass.

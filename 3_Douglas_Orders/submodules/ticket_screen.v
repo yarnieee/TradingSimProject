@@ -12,7 +12,7 @@
 //   row 3   BUY  QTY       12       BUY/SELL (green/red); centre on QTY toggles it
 //   row 4   MKT  TRG   305.10       order type; trigger grey for MKT
 //   row 5   SL/TP  5%   OPEN 2      stop-loss/take-profit; pending orders
-//   row 6   SUBMIT    ORDERS        buttons
+//   row 6   SUBMIT    ORDERS        buttons (EMBEDDED: " SW14 UP: ORDERS")
 // The focused field is black on yellow.
 //
 // ORDERS view (ORDERS focused): five book slots at a time, scrolling with the
@@ -25,7 +25,8 @@
 // displayed values round-robin, about 250 clocks for a full pass.
 module ticket_screen #(
     parameter REJ_SHOW_CYCLES = 200_000_000,   // 2 s at 100 MHz
-    parameter FLIP_180        = 0              // 1: rotate the page 180 degrees (OLED mounted upside down)
+    parameter FLIP_180        = 0,             // 1: rotate the page 180 degrees (OLED mounted upside down)
+    parameter EMBEDDED        = 0              // 1: full game: row 6 says how to get to ORDERS (sw14), no buttons
 ) (
     input  wire        clk,
     input  wire        sys_reset,
@@ -367,7 +368,10 @@ module ticket_screen #(
                     else if (brk == `BRK_OFF && col >= 4'd6 && col <= 4'd8) fg = GREY;
                 end
                 3'd6: begin                                         // SUBMIT    ORDERS
-                    if (col <= 4'd6) begin
+                    if (EMBEDDED) begin                             //  SW14 UP: ORDERS
+                        ch = str_ch(" SW14 UP: ORDERS", col);
+                        fg = GREY;
+                    end else if (col <= 4'd6) begin
                         ch = str_ch(" SUBMIT         ", col);
                         if (focus == F_SUB) begin bg = YELLOW; fg = BLACK; end
                         else bg = BTN;

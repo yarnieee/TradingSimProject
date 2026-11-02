@@ -20,7 +20,11 @@
 //                as dashed lines, dotted lines at the high and low
 // Pixel path (pixel clock, pipelined): counters -> RAM address -> RAM data ->
 // font + graphics -> colour; the syncs are delayed to match.
-module vga_screen (
+// GAME OVER: the big GAME OVER flashes for about 3 s (36 steps of 2^GO_STEP
+// clocks), then the final results show; the chart is hidden.
+module vga_screen #(
+    parameter GO_STEP = 23              // 2^23 clocks = 84 ms
+) (
     input  wire        clk,             // 100 MHz: character writer
     input  wire        rst,
     input  wire        pclk,            // 74.25 MHz: picture
@@ -106,6 +110,26 @@ module vga_screen (
     always @(posedge clk)  if (wr_we) cram[wr_addr] <= wr_cell;
     always @(posedge pclk) rd_data <= cram[rd_addr];
 
+    // ------------------------------------------------------------ game over: flash, then results
+    reg  [GO_STEP-1:0] go_div;
+    reg  [5:0]         go_t;
+    always @(posedge clk) begin
+        if (rst || screen_state != `UI_GAME_END) begin
+            go_div <= {GO_STEP{1'b0}};
+            go_t   <= 6'd0;
+        end else begin
+            go_div <= go_div + 1'b1;
+            if (&go_div && go_t != 6'd36) go_t <= go_t + 6'd1;
+        end
+    end
+    wire go_results = (go_t == 6'd36);
+    wire go_blink   = !go_t[2];                    // on 4 steps, off 4 steps
+    // to the pixel clock, to hide the chart
+    reg        go_c;
+    reg  [1:0] go_p;
+    always @(posedge clk)  go_c <= (screen_state == `UI_GAME_END);
+    always @(posedge pclk) go_p <= {go_p[0], go_c};
+
     // ------------------------------------------------------------ writer: one cell every 4 clocks
     reg  [4:0] wr_row;
     reg  [6:0] wr_col;
@@ -121,6 +145,7 @@ module vga_screen (
         .order_valid(order_valid), .validation_code(validation_code),
         .order_type(order_type), .order_brk(order_brk), .order_dist(order_dist),
         .oled_bot_view(oled_bot_view), .up(stock_up), .num_f(num_f), .num_rd(num_rd), .zero(zero), .bot_sel(bot_sel), .order(order),
+        .go_blink(go_blink), .go_results(go_results),
         .book_valid(book_valid), .book_side(book_side), .book_stock(book_stock),
         .book_type(book_type), .book_leg(book_leg),
         .ch(c_ch), .fg(c_fg), .bg(c_bg)
@@ -281,7 +306,7 @@ module vga_screen (
                         .pixel_on(glyph));
 
     // chart area: x 18..497, y 240..479 (rows 10-19); lines at y = 468 - height (252 = high, 468 = low)
-    wire       in_chart = (p_h >= 11'd18) && (p_h <= 11'd497) && (p_v >= 10'd240) && (p_v <= 10'd479);
+    wire       in_chart = !go_p[1] && (p_h >= 11'd18) && (p_h <= 11'd497) && (p_v >= 10'd240) && (p_v <= 10'd479);
     wire [9:0] y_cur = 10'd468 - {2'd0, p_hc};
     wire [9:0] y_prv = 10'd468 - {2'd0, p_hp};
     wire [9:0] y_sl  = 10'd468 - {2'd0, h_tab[30]};

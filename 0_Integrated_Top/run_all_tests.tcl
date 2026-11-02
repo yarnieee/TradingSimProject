@@ -12,6 +12,7 @@ set all_tbs {
     tb_display_numbers
     tb_vga_screen
     tb_vga_leaderboard
+    tb_vga_gameover
     tb_portfolio_history
     tb_yian_market
     tb_market_state

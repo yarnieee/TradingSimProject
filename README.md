@@ -105,3 +105,5 @@ its holdings, the left its last 5 trades and its rule. The monitor's leaderboard
 `DAY_MAX_COUNT` in `Integration_Top`). The header shows the days left (`D117`, red in the last 5) and a yellow bar along
 its bottom edge fills as the game goes on. After the last day the market stops, the GAME OVER screen
 shows your result, your place among you and the bots, and who finished first; the bot view says FINAL.
+The monitor flashes a big GAME OVER for about 3 s, then shows the final results: 1st to 6th with
+name, net worth, profit / loss and return, and where you finished.

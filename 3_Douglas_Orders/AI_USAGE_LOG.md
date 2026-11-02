@@ -435,3 +435,15 @@ place numbers.
 as `ranks`; `vga_cells` draws rows 21-26 from it, 1st at the top, with your row still highlighted
 wherever it is. New `tb_vga_leaderboard` (checked to fail on the old fixed order);
 `tb_display_numbers` and `tb_integration` also check `order`. All testbenches pass.
+
+## 2026-11-02: GAME OVER screen on the monitor (branch-douglas-vga-display)
+
+**Asked for:** at game over, flash GAME OVER on the monitor, then show the results of you and all
+the bots and the ranking.
+
+**Done by the AI:** `vga_cells`: at game over, rows 2-27 show a big GAME OVER (5 x 7 letters, one
+cell a dot) that flashes, then GAME OVER at the top with FINAL RESULTS below: 1st to 6th with place,
+name, net worth, profit / loss and return %, your row highlighted, and "YOU WIN!" or your place and
+the winner. `vga_screen`: the flash timer (about 3 s, then results) and the chart hidden at game
+over. New `tb_vga_gameover` (checked to fail on planted bugs); all testbenches pass. Yosys: VGA
+block 2,640 -> 2,955 LUTs.

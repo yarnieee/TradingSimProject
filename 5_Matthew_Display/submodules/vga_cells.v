@@ -20,6 +20,8 @@
 //   row 27      the order being made, or the last result
 //   row 28      NOW: which buttons to press on this screen (highlighted bar)
 //   row 29      the switches and what they are set to
+// GAME OVER (rows 2-27 instead): a big flashing GAME OVER for a few seconds,
+// then GAME OVER at the top and the final results, 1st to 6th, below it.
 //
 // Colours: labels grey, values white, gains / buys green, losses / sells red,
 // yellow only for what is selected or needs attention.
@@ -41,6 +43,8 @@ module vga_cells (
     input         oled_bot_view,       // sw15
     input  [2:0]  bot_sel,             // the bot the OLEDs show in the bot view
     input  [17:0] order,               // who is in place p+1 at [3*p +: 3]: 0 you, n+1 bot n
+    input         go_blink,            // game over: the big GAME OVER is lit now
+    input         go_results,          // game over: show the final results
     input  [3:0]  up,                  // stock k at or above its price 30 days ago
     output reg [6:0] num_f,            // the display_numbers field this cell shows
     input  [32:0] num_rd,              // that field from display_numbers' RAM: {negative, 8 digits}
@@ -140,6 +144,31 @@ module vga_cells (
         end
     endfunction
 
+    function [52:0] big_row;               // row r of a big GAME OVER: 5 x 7 letters, one cell a dot
+        input [2:0] r;
+        begin
+            case (r)
+                3'd0: big_row = 53'b01110001110010001011111000000001110010001011111011110;
+                3'd1: big_row = 53'b10001010001011011010000000000010001010001010000010001;
+                3'd2: big_row = 53'b10000010001010101010000000000010001010001010000010001;
+                3'd3: big_row = 53'b10111011111010101011110000000010001010001011110011110;
+                3'd4: big_row = 53'b10001010001010001010000000000010001010001010000010100;
+                3'd5: big_row = 53'b10001010001010001010000000000010001001010010000010010;
+                default: big_row = 53'b01111010001010001011111000000001110000100011111010001;
+            endcase
+        end
+    endfunction
+
+    function [7:0] place_ch;               // 1ST .. 6TH in 3 cells
+        input [2:0] p;                     // 0..5
+        input [6:0] c;
+        reg [143:0] t;
+        begin
+            t = "1ST2ND3RD4TH5TH6TH";
+            place_ch = (c > 7'd2) ? " " : t[143 - 24*p - 8*c -: 8];
+        end
+    endfunction
+
     function [7:0] reason_ch;              // why an order is / was rejected
         input [2:0] code;
         input [6:0] c;
@@ -213,6 +242,19 @@ module vga_cells (
     wire [2:0]  ent     = order[3*lb_pos +: 3];
     wire        shown   = oled_bot_view ? (ent == bot_sel + 3'd1) : (ent == 3'd0);  // on the OLEDs now
 
+    // game over: results rows 14-19 in place order; where you finished
+    wire        go      = (screen_state == `UI_GAME_END);
+    wire [2:0]  go_pos  = row[2:0] - 3'd6;                 // rows 14-19 -> 0-5
+    wire [2:0]  go_ent  = order[3*go_pos +: 3];
+    wire [2:0]  you_pos = (order[2:0]   == 3'd0) ? 3'd0 : (order[5:3]   == 3'd0) ? 3'd1 :
+                          (order[8:6]   == 3'd0) ? 3'd2 : (order[11:9]  == 3'd0) ? 3'd3 :
+                          (order[14:12] == 3'd0) ? 3'd4 : 3'd5;
+    // the big GAME OVER: cols 9-61, rows 11-17 while it flashes, rows 3-9 above the results
+    wire [4:0]  big_r   = row - (go_results ? 5'd3 : 5'd11);
+    wire [6:0]  big_c   = col - 7'd9;
+    wire [52:0] big_bits = big_row(big_r[2:0]);
+    wire        big_on  = (big_r <= 5'd6) && (col >= 7'd9) && (col <= 7'd61) && big_bits[7'd52 - big_c];
+
     wire in_order = (screen_state == `UI_BUY_STOCK) || (screen_state == `UI_SELL_STOCK) ||
                     (screen_state == `UI_QUANTITY)  || (screen_state == `UI_ORDER_REVIEW);
     // a limit buy / stop sell waits below the price, a limit sell / stop buy above it
@@ -234,6 +276,13 @@ module vga_cells (
         num_f = `DN_CASH; d_sgn = 1'b0; d_sh8 = 1'b0; d_dp2 = 1'b1; d_prefix = "$"; d_w = 7'd1; d_p = 7'd0;
         if (row == 5'd0) begin                                                    // days left
             num_f = `DN_DAYS; d_dp2 = 1'b0; d_prefix = 8'd0; d_w = 7'd3; d_p = col - 7'd67;
+        end else if (go) begin                                                    // final results
+            if (col <= 7'd39)      begin num_f = (go_ent == 3'd0) ? `DN_NET : `DN_LBNET0 + go_ent - 7'd1; d_w = 7'd11; d_p = col - 7'd28; end
+            else begin
+                num_f = (go_ent == 3'd0) ? `DN_NETPNL : `DN_LBPNL0 + go_ent - 7'd1; d_sgn = 1'b1;
+                if (col <= 7'd54)  begin d_w = 7'd12; d_p = col - 7'd42; end
+                else               begin d_sh8 = 1'b1; d_prefix = 8'd0; d_w = 7'd7; d_p = col - 7'd57; end
+            end
         end else if (row == 5'd27) begin                                          // the order
             if (col <= 7'd9)       begin num_f = `DN_QTY;    d_dp2 = 1'b0; d_prefix = 8'd0; d_w = 7'd4; d_p = col - 7'd6; end
             else if (col <= 7'd34) begin num_f = `DN_ORDPX;  d_w = 7'd9;  d_p = col - 7'd26; end
@@ -293,6 +342,44 @@ module vga_cells (
             else if (col >= 7'd67 && col <= 7'd69) begin
                 ch = num_char;
                 fg = (num_v[31:4] == 28'd0 && num_v[3:0] <= 4'd5) ? K_RED : K_YELLOW;
+            end
+        end
+
+        // ------------------------------------------------------------ GAME OVER (rows 2-27)
+        else if (go && row >= 5'd2 && row <= 5'd27) begin
+            if (big_on) begin
+                if (go_results || go_blink) bg = K_RED;
+            end
+            else if (!go_results) ;
+            else if (row == 5'd11) begin
+                if (col >= 7'd29 && col <= 7'd41) begin ch = s16("FINAL RESULTS   ", col - 7'd29); fg = K_YELLOW; end
+            end
+            else if (row == 5'd13) begin    //   PLACE   NAME             NET WORTH   PROFIT / LOSS     RETURN
+                fg = K_GREY; bg = K_NAVY;
+                if (col >= 7'd6 && col <= 7'd10)       ch = s16("PLACE           ", col - 7'd6);
+                else if (col >= 7'd14 && col <= 7'd17) ch = s16("NAME            ", col - 7'd14);
+                else if (col >= 7'd30 && col <= 7'd38) ch = s16("NET WORTH       ", col - 7'd30);
+                else if (col >= 7'd41 && col <= 7'd53) ch = s16("PROFIT / LOSS   ", col - 7'd41);
+                else if (col >= 7'd59 && col <= 7'd64) ch = s16("RETURN          ", col - 7'd59);
+            end
+            else if (row >= 5'd14 && row <= 5'd19) begin   //  1ST  OVERNIGHT   $10123.45   +$123.45   +1.23%
+                if (go_ent == 3'd0) bg = K_ROW;
+                if (col >= 7'd6 && col <= 7'd8)        begin ch = place_ch(go_pos, col - 7'd6); fg = (go_pos == 3'd0) ? K_YELLOW : K_WHITE; end
+                else if (col >= 7'd14 && col <= 7'd24) begin ch = bot_name(go_ent) >> (8 * (7'd24 - col)); fg = (go_ent == 3'd0) ? K_CYAN : K_WHITE; end
+                else if (col >= 7'd28 && col <= 7'd38) ch = num_char;
+                else if (col >= 7'd42 && col <= 7'd53) begin ch = num_char; fg = num_zero ? K_WHITE : num_neg ? K_RED : K_GREEN; end
+                else if (col >= 7'd57 && col <= 7'd63) begin ch = num_char; fg = num_zero ? K_WHITE : num_neg ? K_RED : K_GREEN; end
+                else if (col == 7'd64)                 ch = "%";
+            end
+            else if (row == 5'd21) begin    // YOU WIN!  YOU BEAT ALL 5 BOTS  /  YOU FINISHED 3RD OF 6    WINNER: OVERNIGHT
+                if (you_pos == 3'd0) begin
+                    if (col >= 7'd6 && col <= 7'd34) begin ch = s64("YOU WIN!   YOU BEAT ALL 5 BOTS                                  ", col - 7'd6); fg = K_GREEN; end
+                end
+                else if (col >= 7'd6 && col <= 7'd18)  ch = s16("YOU FINISHED    ", col - 7'd6);
+                else if (col >= 7'd19 && col <= 7'd21) begin ch = place_ch(you_pos, col - 7'd19); fg = K_YELLOW; end
+                else if (col >= 7'd22 && col <= 7'd26) ch = s16(" OF 6           ", col - 7'd22);
+                else if (col >= 7'd31 && col <= 7'd37) begin ch = s16("WINNER:         ", col - 7'd31); fg = K_GREY; end
+                else if (col >= 7'd39 && col <= 7'd49) begin ch = bot_name(order[2:0]) >> (8 * (7'd49 - col)); fg = K_YELLOW; end
             end
         end
 

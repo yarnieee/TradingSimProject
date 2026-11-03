@@ -17,7 +17,8 @@
 //                    cash or shares; the order type and SL/TP set on the switches,
 //                    or a warning if the order would be rejected; BACK / QTY / NEXT
 //   QUANTITY         the quantity in big digits, the digit being changed in yellow
-//   ORDER_REVIEW     the order, its type and SL/TP, and its total; SEND
+//   ORDER_REVIEW     the order, its type and SL/TP, and its total; C sends it,
+//                    any other button goes back
 //   TRADE_RESULT     FILLED, PLACED (in the book) or REJECTED in big letters, and why
 //   GAME_END         net worth in big digits, the final profit/loss, your place
 //                    among you and the 5 bots, and who finished first
@@ -489,9 +490,9 @@ module text_layer (
                             end
                         end
                         3'd6: begin
-                            if (screen_state == `UI_ORDER_REVIEW) begin //   C: SEND ORDER
-                                ch = str_ch(" C: SEND ORDER  ", col);
-                                if (col <= 4'd14) begin bg = YELLOW; fg = BLACK; end
+                            if (screen_state == `UI_ORDER_REVIEW) begin // C:SEND ELSE:BACK
+                                ch = str_ch("C:SEND ELSE:BACK", col);
+                                if (col <= 4'd5) begin bg = YELLOW; fg = BLACK; end
                             end else begin                              //  BACK   QTY  NEXT
                                 ch = str_ch(" BACK  QTY  NEXT", col);
                                 b  = bar_button(col);

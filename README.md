@@ -79,7 +79,7 @@ reject (led 14) and show pending orders (led 11-8).
 1. From HOME, go to MARKET, pick a stock, then BUY or SELL.
 2. QTY: set the quantity (U/D change a digit, L/R move between digits, C to finish).
 3. Set the switches for the order type (the BUY / SELL screen shows what they say).
-4. NEXT, check the review screen, C to send.
+4. NEXT, check the review screen, C to send (any other button goes back).
 5. The result says FILLED (market orders), PLACED (limit / stop orders, now waiting in the book)
    or REJECTED and why.
 

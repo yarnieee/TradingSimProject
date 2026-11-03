@@ -563,3 +563,13 @@ SL / TP rows and heights: the order book's 8-slot SL / TP search -> chart scalin
 `B_order_top.v` registers the per-stock levels, `D_display_top.v` the selected stock's pair, and
 `chart_renderer.v` gives each scanned point 3 registered steps. `tb_chart_renderer` now waits 300
 clocks for the slower scan. All 30 testbenches pass; to be confirmed by the next Vivado build.
+
+## 2026-11-03: order review screen: any other button goes back
+
+**Asked for:** on the review screen (SEND), pressing any button other than BTNC should go back.
+
+**Done by the AI:** `game_fsm.v`: on UI_ORDER_REVIEW, U / D / L / R return to the BUY or SELL screen
+the order came from, with the cursor on NEXT (BTNC reviews again); BTNC still sends. Hints updated on
+the monitor's NOW bar and the right OLED ("C:SEND ELSE:BACK"), README step 4. `tb_matthew_game_fsm`:
+8 new checks (each button, buy and sell), failing on the old FSM and a planted bug. All 30
+testbenches pass.

@@ -304,6 +304,15 @@ module game_fsm (
                         next_trade_result_success = 1'b0;
                         next_state = `UI_TRADE_RESULT;
                     end
+                end else if (btnU || btnD || btnL || btnR) begin
+                    // any other button: back to the BUY / SELL screen, on NEXT
+                    if (trade_side == RETURN_BUY) begin
+                        next_state = `UI_BUY_STOCK;
+                        next_buy_cursor = 2;
+                    end else begin
+                        next_state = `UI_SELL_STOCK;
+                        next_sell_cursor = 2;
+                    end
                 end
             end
 

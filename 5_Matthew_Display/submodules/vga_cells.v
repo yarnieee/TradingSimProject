@@ -599,7 +599,7 @@ module vga_cells (
                     `UI_BUY_STOCK,
                     `UI_SELL_STOCK:   ch = s64("BTNL / BTNR  CHOOSE BACK, QTY OR NEXT       BTNC  SELECT        ", col - 7'd5);
                     `UI_QUANTITY:     ch = s64("BTNU / BTND  CHANGE DIGIT    BTNL / BTNR  MOVE    BTNC  DONE    ", col - 7'd5);
-                    `UI_ORDER_REVIEW: ch = s64("CHECK THE ORDER    ANY OTHER BUTTON  GO BACKBTNC  SEND IT       ", col - 7'd5);
+                    `UI_ORDER_REVIEW: ch = s64("BTNU / BTND / BTNL / BTNR  GO BACK          BTNC  SEND IT       ", col - 7'd5);
                     `UI_ORDER_RESULT: ch = s64("SENDING THE ORDER...                                            ", col - 7'd5);
                     `UI_TRADE_RESULT: ch = s64("BTNC  CONTINUE                                                  ", col - 7'd5);
                     `UI_GAME_END:     ch = s64("GAME OVER        SW0 UP THEN DOWN  START A NEW GAME             ", col - 7'd5);

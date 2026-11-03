@@ -50,7 +50,7 @@ add_list constrs_1 [list "$here/Integration.xdc"]
 # Every tb/ folder. Pick one with right-click > Set as Top under Simulation
 # Sources, or run them all with   source <repo>/0_Integrated_Top/run_all_tests.tcl
 add_list sim_1 [list "$here/tb_integration.v"]
-foreach person {2_YiAn_Market_Engine 3_Douglas_Orders 4_Tricia_Ledger 5_Matthew_Display} {
+foreach person {1_Shared_Modules 2_YiAn_Market_Engine 3_Douglas_Orders 4_Tricia_Ledger 5_Matthew_Display} {
     add_list sim_1 [glob "$repo/$person/tb/*.v"]
 }
 set_property include_dirs $incdirs [get_filesets sim_1]

@@ -4,11 +4,13 @@
 // tb_vga_leaderboard: the VGA leaderboard rows (21-26) list you and the bots in
 // place order, 1st at the top: each row shows its place, the right net worth
 // field and name, and your row keeps its highlight wherever it is.
-// Also the market rows (3-7): price, 30-day change in $ and in %.
+// Also the market rows (3-7): price, 30-day change in $ and in %; and on every
+// screen, the NOW bar (row 28) leaves a space before its BTNC part.
 module tb_vga_leaderboard;
     reg  [4:0]  row = 5'd0;
     reg  [6:0]  col = 7'd0;
     reg  [17:0] order;
+    reg  [3:0]  scr = `UI_PORTFOLIO;
     reg  [7:0]  c1;                      // the second letter of a name
     wire [6:0]  num_f;
     wire [7:0]  ch;
@@ -21,7 +23,7 @@ module tb_vga_leaderboard;
 
     vga_cells dut (
         .row(row), .col(col),
-        .screen_state(`UI_PORTFOLIO), .menu_selection(4'd0), .selected_stock(3'd0),
+        .screen_state(scr), .menu_selection(4'd0), .selected_stock(3'd0),
         .trade_side(1'b0), .trade_result_success(1'b0), .trade_result_placed(1'b0),
         .trade_result_code(3'd0), .order_valid(1'b1), .validation_code(3'd0),
         .order_type(`OT_MKT), .order_brk(`BRK_OFF), .order_dist(2'd0),
@@ -91,6 +93,20 @@ module tb_vga_leaderboard;
         board({3'd5, 3'd4, 3'd3, 3'd2, 3'd1, 3'd0});   // you 1st, then bots 0..4
         board({3'd0, 3'd3, 3'd1, 3'd4, 3'd2, 3'd5});   // bot 4 1st ... you 6th
         board({3'd3, 3'd1, 3'd5, 3'd0, 3'd4, 3'd2});   // bot 1 1st, you 3rd
+        // NOW bar: on every screen, "BTNC" at bar column 44 has a space before it
+        for (e = 0; e < 16; e = e + 1) begin
+            scr = e; p = e;
+            left_text(5'd28, 48, 51);                   // bar column j is cell 5 + j: 44..47
+            if (txt[32:1] == "BTNC") begin
+                row = 5'd28; col = 7'd48; #1;           // bar column 43
+                check(ch == " ", "NOW bar: a space before BTNC");
+            end
+        end
+        scr = `UI_ORDER_REVIEW; p = 0;
+        left_text(5'd28, 4, 37);
+        check(txt == "BTNU / BTND / BTNL / BTNR  GO BACK", "review NOW bar: the go-back buttons");
+        scr = `UI_PORTFOLIO;
+
         if (n_fail == 0) $display("PASS: tb_vga_leaderboard (%0d checks)", n_pass);
         else             $display("FAIL: tb_vga_leaderboard (%0d failed, %0d passed)", n_fail, n_pass);
         $finish;

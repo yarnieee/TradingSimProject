@@ -619,3 +619,15 @@ testbenches pass. About 310 LUTs (yosys estimate) and 3 DSPs. Not yet built in V
 
 **Done by the AI:** main fast-forwarded to the sound branch, README clone steps back to `main`;
 branch-team-integration moved to the same commit.
+
+## 2026-11-03: buttons sticky / unresponsive; review screen NOW bar spacing
+
+**Asked for:** check why the buttons feel sticky and unresponsive; the review screen's NOW bar ran
+"GO BACK" into "BTNC SEND IT".
+
+**Done by the AI:** `1_Shared_Modules/debouncer.v` only ignored bounce after a press: a press held
+longer than the 20 ms lock bounced on release into a second press (the new `tb_debouncer`: the old
+one gave 2 presses for one, 9 for three), and the button went unsynchronised into three flip-flops.
+Now the button is synchronised and every change, press or release, is passed on at once and then
+ignored for 20 ms. The review NOW bar reads "BTNU / BTND / BTNL / BTNR  GO BACK ... BTNC  SEND IT";
+`tb_vga_leaderboard` checks every screen's NOW bar has a space before BTNC. All 33 testbenches pass.

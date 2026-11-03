@@ -8,6 +8,7 @@
 
 set all_tbs {
     tb_integration
+    tb_debouncer
     tb_chart_renderer
     tb_display_numbers
     tb_vga_screen

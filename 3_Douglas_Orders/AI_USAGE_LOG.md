@@ -598,7 +598,7 @@ over the whole screen (one block-RAM picture instead of the OLEDs' two; colour 1
 second). `tb_vga_title` checks every pixel of five screen lines and the blink; it fails on planted
 bugs (no blink, wrong row stride, wrong scale). All 31 testbenches pass.
 
-## 2026-11-03: sound effects on JXADC (branch douglas-sound)
+## 2026-11-03: sound effects on JXADC (branch branch-douglas-sound)
 
 **Asked for:** a speaker on the JXADC port: a feedback sound when moving, a rising / falling sound
 for quantity up / down, a woosh when an order is sent and a market-style bell when it fills, and a
@@ -608,7 +608,7 @@ game-end sound; on a new branch from main.
 woosh > up / down > click; a fill during the woosh rings after it); sw13 mutes. `sound_synth.v`
 plays segment lists with two tone voices and a filtered-noise voice, PWM on JXADC pin 1 (pins 2 and
 4 for a Pmod AMP2). `Integration_Top.v`, `Integration.xdc` (J3, L3, N2, sw13 U1), README (clone
-`douglas-sound`, sound table). `tb_sound` (21 checks: each sound, pitch by zero crossings, lengths,
+`branch-douglas-sound`, sound table). `tb_sound` (21 checks: each sound, pitch by zero crossings, lengths,
 order, priorities, mute; writes the samples, `tb/sound_to_wav.py` makes .wav files) fails on
 planted bugs; `tb_integration` checks click, blips, woosh then bell, and the game-end tune. All 32
 testbenches pass. About 310 LUTs (yosys estimate) and 3 DSPs. Not yet built in Vivado.

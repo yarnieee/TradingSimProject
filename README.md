@@ -21,18 +21,18 @@ C Tricia, D Matthew). Still to rename by its owner: `A_top` to `A_market_top`.
 
 ## Open in Vivado
 
-This is `douglas-sound`: `main` plus sound effects on the JXADC port (not yet merged into `main`).
+This is `branch-douglas-sound`: `main` plus sound effects on the JXADC port (not yet merged into `main`).
 `main` is the team's tested copy; work goes into a branch first and is merged into `main` once its
 tests pass.
 
 1. Clone this branch to a short path with no spaces:
    ```
-   git clone -b douglas-sound https://github.com/yarnieee/TradingSimProject.git C:/EE2026/TradingSimProject
+   git clone -b branch-douglas-sound https://github.com/yarnieee/TradingSimProject.git C:/EE2026/TradingSimProject
    ```
    Already have a clone? In it:
    ```
    git fetch
-   git checkout douglas-sound
+   git checkout branch-douglas-sound
    git pull
    ```
    (Back to `main` later: `git checkout main`, then `git pull`.)

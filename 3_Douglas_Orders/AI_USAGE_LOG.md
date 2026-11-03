@@ -539,3 +539,15 @@ fields `DN_PCT0..3` (`trading_defs.vh`). `vga_cells.v`: market rows show price, 
 the cap and sign in `tb_display_numbers`; the market row text in `tb_vga_leaderboard`; all three bar
 colours in `tb_vga_screen`; the colour against the days left over a whole game in `tb_integration`.
 Each fails on planted bugs. All 30 testbenches pass.
+
+## 2026-11-03: 30-day % shown one stock off on the board
+
+**Asked for:** on the board each market row's % disagreed with its $ change (photo).
+
+**Done by the AI:** The photo showed each row with the next stock's %; simulation showed the right
+rows, and the build failed timing. The % had its own stock counter reading the four prices and
+30-day prices straight from the stock histories in one clock. Now a % field is worked out like the
+$ change: same stock selection and the same 4-clock load (value packed as {price 30 days ago,
+|change|}), then 30 division steps before the BCD conversion. `tb_display_numbers` passes and fails
+on planted bugs; a random check (1,200 cases) and a full-design dump of the monitor's market rows
+match. All 30 testbenches pass. To be confirmed on the board.

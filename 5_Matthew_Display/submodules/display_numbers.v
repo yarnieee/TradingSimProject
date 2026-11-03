@@ -153,56 +153,6 @@ module display_numbers #(
         end
     end
 
-    // each stock's 30-day change in %, as basis points: |price - price 30 days
-    // ago| x 10000 / price 30 days ago, worked out for one stock at a time
-    // (33 clocks: difference, x 10000, 30 restoring-division steps, store) and
-    // kept between rounds; 999.99% at most
-    reg  [1:0]  pk;                            // stock being worked out
-    reg  [5:0]  pstep;
-    reg  [15:0] p_diff, p_ref;
-    reg         p_neg;
-    reg  [29:0] p_q;                           // the dividend, shifted into the quotient
-    reg  [15:0] p_rem;
-    reg  [16:0] pct_bp  [0:3];
-    reg         pct_neg [0:3];
-    reg  [15:0] p_px, p_px_ref;
-    always @* begin
-        case (pk)
-            2'd0:    begin p_px = price0; p_px_ref = ref_price0; end
-            2'd1:    begin p_px = price1; p_px_ref = ref_price1; end
-            2'd2:    begin p_px = price2; p_px_ref = ref_price2; end
-            default: begin p_px = price3; p_px_ref = ref_price3; end
-        endcase
-    end
-    wire [16:0] p_rem_sh = {p_rem, p_q[29]};
-    wire        p_fits   = (p_rem_sh >= {1'b0, p_ref});
-    always @(posedge clk) begin
-        if (rst) begin
-            pk <= 2'd0; pstep <= 6'd0;
-            pct_bp[0] <= 17'd0; pct_bp[1] <= 17'd0; pct_bp[2] <= 17'd0; pct_bp[3] <= 17'd0;
-            pct_neg[0] <= 1'b0; pct_neg[1] <= 1'b0; pct_neg[2] <= 1'b0; pct_neg[3] <= 1'b0;
-        end else begin
-            pstep <= pstep + 6'd1;
-            if (pstep == 6'd0) begin
-                p_neg  <= p_px < p_px_ref;
-                p_diff <= (p_px < p_px_ref) ? p_px_ref - p_px : p_px - p_px_ref;
-                p_ref  <= p_px_ref;
-            end else if (pstep == 6'd1) begin
-                p_q   <= p_diff * 14'd10000;
-                p_rem <= 16'd0;
-            end else if (pstep <= 6'd31) begin
-                p_rem <= p_fits ? p_rem_sh - {1'b0, p_ref} : p_rem_sh[15:0];
-                p_q   <= {p_q[28:0], p_fits};
-            end else begin
-                pct_bp[pk]  <= (p_ref == 16'd0) ? 17'd0 :
-                               (p_q > 30'd99999) ? 17'd99999 : p_q[16:0];
-                pct_neg[pk] <= p_neg && (p_ref != 16'd0);
-                pk    <= pk + 2'd1;
-                pstep <= 6'd0;
-            end
-        end
-    end
-
     reg [15:0] sel_px;
     always @* begin
         case (sel_stock)
@@ -267,9 +217,9 @@ module display_numbers #(
             `DN_CHI:    val = {16'd0, chart_hi};
             `DN_CLO:    val = {16'd0, chart_lo};
             default: begin
-                if (idx >= `DN_PCT0) begin                                               // 30-day % of stock k
-                    val_neg = pct_neg[k[1:0]];
-                    val     = {15'd0, pct_bp[k[1:0]]};
+                if (idx >= `DN_PCT0) begin                                               // 30-day % of stock k:
+                    val_neg = px_k < ref_k;                                              // {price 30 days ago,
+                    val     = {ref_k, val_neg ? ref_k - px_k : px_k - ref_k};            //  |change|}, divided below
                 end
                 else if (idx >= `DN_LBPNL0) begin                                        // bot k: value - start
                     val_neg = lb_k < START_CASH;
@@ -305,6 +255,18 @@ module display_numbers #(
     reg [31:0] load_v;       // the field's value, taken at settle 3
     reg [31:0] net_shown, bnet_shown;    // player's and bot's net worth, as last converted
 
+    // a 30-day % field (DN_PCT0..3) is divided before it is converted:
+    // |change| x 10000 / price 30 days ago, 30 restoring-division steps, at most
+    // 999.99%. It uses the same stock (k) and the same load as the $ change.
+    wire        is_pct = (idx >= `DN_PCT0);
+    reg         dv;                      // dividing
+    reg  [4:0]  dcnt;
+    reg  [15:0] d_ref;
+    reg  [29:0] dq;                      // the dividend, shifted into the quotient
+    reg  [15:0] drem;
+    wire [16:0] drem_sh = {drem, dq[29]};
+    wire        d_fits  = (drem_sh >= {1'b0, d_ref});
+
     // add 3 to every digit that is 5 or more (before each shift)
     function [31:0] add3;
         input [31:0] d;
@@ -328,23 +290,44 @@ module display_numbers #(
             busy    <= 1'b0;
             settle  <= 3'd0;
             load_v  <= 32'd0;
+            dv      <= 1'b0;
             bcd     <= {(`DN_N*32){1'b0}};
             neg     <= {`DN_N{1'b0}};
             zero    <= {`DN_N{1'b1}};
             net_shown  <= 32'd0;
             bnet_shown <= 32'd0;
+        end else if (dv) begin
+            if (dcnt != 5'd30) begin
+                drem <= d_fits ? drem_sh - {1'b0, d_ref} : drem_sh[15:0];
+                dq   <= {dq[28:0], d_fits};
+                dcnt <= dcnt + 5'd1;
+            end else begin
+                bin  <= (d_ref == 16'd0) ? 32'd0 : (dq > 30'd99999) ? 32'd99999 : {2'd0, dq};
+                acc  <= 32'd0;
+                step <= 6'd0;
+                busy <= 1'b1;
+                dv   <= 1'b0;
+            end
         end else if (!busy) begin
             settle <= settle + 3'd1;
             if (settle == 3'd3) begin
-                load_v  <= (val > MAX_SHOWN) ? MAX_SHOWN : val;
+                load_v  <= (val > MAX_SHOWN && !is_pct) ? MAX_SHOWN : val;
                 cur_neg <= val_neg;
             end
             if (settle == 3'd4) begin
-                bin    <= load_v;
-                acc    <= 32'd0;
-                step   <= 6'd0;
-                busy   <= 1'b1;
                 settle <= 3'd0;
+                if (is_pct) begin
+                    d_ref <= load_v[31:16];
+                    dq    <= load_v[15:0] * 14'd10000;
+                    drem  <= 16'd0;
+                    dcnt  <= 5'd0;
+                    dv    <= 1'b1;
+                end else begin
+                    bin  <= load_v;
+                    acc  <= 32'd0;
+                    step <= 6'd0;
+                    busy <= 1'b1;
+                end
             end
         end else if (step != 6'd32) begin
             {acc, bin} <= {acc_adj, bin} << 1;

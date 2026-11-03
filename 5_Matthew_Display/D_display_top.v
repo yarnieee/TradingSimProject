@@ -365,19 +365,17 @@ module D_display_top #(
     always @(posedge clk)
         bar_level <= (time_remaining <= 32'd10) ? 2'd3 : (time_remaining <= 32'd60) ? 2'd1 : 2'd0;
 
-    // game progress bar: days gone / all days, as 0..96 pixels (registered)
-    wire [31:0] days_gone = (time_remaining < FINAL_TRADING_DAY) ? FINAL_TRADING_DAY - time_remaining : 32'd0;
-    reg  [6:0]  progress_w;
-    reg  [10:0] vga_progress_w;               // the monitor's bar is 1242 px wide
-    always @(posedge clk) begin
-        if (rst) begin
-            progress_w     <= 7'd0;
-            vga_progress_w <= 11'd0;
-        end else begin
-            progress_w     <= (FINAL_TRADING_DAY == 0) ? 7'd0  : (days_gone * 32'd96)   / FINAL_TRADING_DAY;
-            vga_progress_w <= (FINAL_TRADING_DAY == 0) ? 11'd0 : (days_gone * 32'd1242) / FINAL_TRADING_DAY;
-        end
-    end
+    // game progress bar: days gone / all days, as 0..96 pixels (right OLED) and
+    // 0..1242 pixels (monitor), each worked out one bit a clock (progress_width)
+    reg  [31:0] days_gone;
+    always @(posedge clk)
+        days_gone <= (time_remaining < FINAL_TRADING_DAY) ? FINAL_TRADING_DAY - time_remaining : 32'd0;
+    wire [6:0]  progress_w;
+    wire [10:0] vga_progress_w;
+    progress_width #(.DAYS(FINAL_TRADING_DAY), .WIDTH(96),   .W(7))  progress_oled (
+        .clk(clk), .rst(rst), .days_gone(days_gone), .width(progress_w));
+    progress_width #(.DAYS(FINAL_TRADING_DAY), .WIDTH(1242), .W(11)) progress_vga (
+        .clk(clk), .rst(rst), .days_gone(days_gone), .width(vga_progress_w));
 
     // each stock against its price 30 days ago (oldest sample), for green/red
     wire [3:0] stock_up = {price3 >= stock3_samples_30[15:0], price2 >= stock2_samples_30[15:0],

@@ -573,3 +573,14 @@ the order came from, with the cursor on NEXT (BTNC reviews again); BTNC still se
 the monitor's NOW bar and the right OLED ("C:SEND ELSE:BACK"), README step 4. `tb_matthew_game_fsm`:
 8 new checks (each button, buy and sell), failing on the old FSM and a planted bug. All 30
 testbenches pass.
+
+## 2026-11-03: timing fixes from the second board build (WNS -2.588 ns, 427 endpoints)
+
+**Asked for:** fix the timing failures in Douglas's build of cff2479.
+
+**Done by the AI:** All 10 reported paths were the monitor's progress bar width (days gone x 1242 /
+120 in one clock): new `progress_width.v` works both bars out one bit a clock; `tb_progress_width`
+checks every day 0..120 (fails on planted bugs). `tight_setup_hold_pins.txt` named exec_engine's
+reject_code / pair_pend: a VAL state now registers order_validate's answer. `risk_metrics.v`: the
+MAC's product is registered before it is added (an extra MAC_END clock). All 31 testbenches pass.
+To be confirmed by the next Vivado build.

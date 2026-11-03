@@ -54,7 +54,7 @@ module risk_metrics #(
     output reg  [31:0] max_dd_bp,
     output reg         mtm_done                           // 1-clock pulse when everything is fresh
 );
-    localparam IDLE = 3'd0, MAC = 3'd1, FIN = 3'd2, DIV_RET = 3'd3, DIV_DD = 3'd4;
+    localparam IDLE = 3'd0, MAC = 3'd1, FIN = 3'd2, DIV_RET = 3'd3, DIV_DD = 3'd4, MAC_END = 3'd5;
     reg [2:0] state;
     reg [1:0] i;                         // which stock we are adding (0..3)
 
@@ -64,9 +64,14 @@ module risk_metrics #(
     reg [31:0] cb_l [0:3];
     reg [31:0] acc;                      // running equity total
 
-    // one shared multiplier: position x price for stock i
+    // one shared multiplier: position x price for stock i, registered (m_*); the
+    // clock after, that product is added to the total and gives the stock's P/L
     wire [25:0]        value_i = q_l[i] * p_l[i];
-    wire signed [32:0] upnl_i  = $signed({7'd0, value_i}) - $signed({1'b0, cb_l[i]});
+    reg  [25:0]        m_val;
+    reg  [31:0]        m_cb;
+    reg  [1:0]         m_i;
+    reg                m_v;                // m_* hold a product to add this clock
+    wire signed [32:0] upnl_i  = $signed({7'd0, m_val}) - $signed({1'b0, m_cb});
 
     // |pnl| and its sign
     wire        neg     = pnl[31];
@@ -114,11 +119,22 @@ module risk_metrics #(
             pnl       <= 0;
             ret_bp    <= 0;
             upnl0 <= 0; upnl1 <= 0; upnl2 <= 0; upnl3 <= 0;
+            m_v       <= 1'b0;
             peak      <= START_CASH;
             dd_bp     <= 0;
             max_dd_bp <= 0;
             div_sel   <= 1'b0;
         end else begin
+            m_v <= (state == MAC);
+            if (m_v) begin
+                acc <= acc + m_val;
+                case (m_i)
+                    2'd0: upnl0 <= upnl_i[31:0];
+                    2'd1: upnl1 <= upnl_i[31:0];
+                    2'd2: upnl2 <= upnl_i[31:0];
+                    2'd3: upnl3 <= upnl_i[31:0];
+                endcase
+            end
             case (state)
             IDLE: if (tick) begin
                 p_l[0]  <= price0; p_l[1]  <= price1; p_l[2]  <= price2; p_l[3]  <= price3;
@@ -129,17 +145,15 @@ module risk_metrics #(
                 state   <= MAC;
             end
 
-            MAC: begin                           // 4 clocks: one stock per clock
-                acc <= acc + value_i;
-                case (i)
-                    2'd0: upnl0 <= upnl_i[31:0];
-                    2'd1: upnl1 <= upnl_i[31:0];
-                    2'd2: upnl2 <= upnl_i[31:0];
-                    2'd3: upnl3 <= upnl_i[31:0];
-                endcase
+            MAC: begin                           // 4 clocks: one product per clock
+                m_val <= value_i;
+                m_cb  <= cb_l[i];
+                m_i   <= i;
                 i <= i + 1'b1;
-                if (i == 2'd3) state <= FIN;
+                if (i == 2'd3) state <= MAC_END;
             end
+
+            MAC_END: state <= FIN;               // the last product is added this clock
 
             FIN: begin
                 equity    <= acc;

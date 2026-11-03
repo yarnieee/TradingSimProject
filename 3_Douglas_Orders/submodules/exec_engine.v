@@ -5,11 +5,13 @@
 // exec_engine: the single arbiter between
 //   - submits from order_entry (priority), held in a one-deep buffer, and
 //   - trigger requests from order_book.
-// Every job goes IDLE -> CHECK -> EVAL -> POST -> (PAIR) -> IDLE:
+// Every job goes IDLE -> CHECK -> VAL -> EVAL -> POST -> (PAIR) -> IDLE:
 //   CHECK  wait for !ledger_busy (Tricia's ledger has settled the last fill), then latch the
 //          execution price: ask for BUY, bid for SELL. A book job keeps the
 //          price the book latched when the trigger was seen.
-//   EVAL   run order_validate on the latched job, then exactly one of:
+//   VAL    run order_validate on the latched job and register its answer (so the
+//          checks and the actions below are not one long path in one clock)
+//   EVAL   on that answer, exactly one of:
 //            MKT submit ok   -> pulse fill
 //            LMT/STP submit  -> pulse ins (into order_book) and placed
 //            book job ok     -> pulse fill, ack the book
@@ -89,7 +91,8 @@ module exec_engine #(
                ST_CHECK = 3'd1,
                ST_EVAL  = 3'd2,
                ST_POST  = 3'd3,
-               ST_PAIR  = 3'd4;
+               ST_PAIR  = 3'd4,
+               ST_VAL   = 3'd5;
 
     localparam [15:0] FEE16 = FEE;
 
@@ -156,6 +159,8 @@ module exec_engine #(
 
     wire       v_ok;
     wire [2:0] v_code;
+    reg        v_ok_r;                 // order_validate's answer, registered in VAL
+    reg  [2:0] v_code_r;
     order_validate #(.FEE(FEE), .POS_MAX(POS_MAX)) u_validate (
         .game_live   (game_live),
         .mkt_open    (cand_mid != 16'd0),
@@ -272,13 +277,19 @@ module exec_engine #(
                     if (!ledger_busy) begin
                         if (!cand_book)
                             cand_px <= (cand_side == `SIDE_SELL) ? cand_bid : cand_ask;
-                        state <= ST_EVAL;
+                        state <= ST_VAL;
                     end
+                end
+
+                ST_VAL: begin
+                    v_ok_r   <= v_ok;
+                    v_code_r <= v_code;
+                    state    <= ST_EVAL;
                 end
 
                 ST_EVAL: begin
                     res_submit <= !cand_book;
-                    if (v_ok) begin
+                    if (v_ok_r) begin
                         if (cand_book || cand_type == `OT_MKT) begin
                             fill       <= 1'b1;
                             fill_stock <= cand_stock;
@@ -293,7 +304,7 @@ module exec_engine #(
                         end
                     end else begin
                         reject      <= 1'b1;
-                        reject_code <= cand_book ? `RJ_TRIG_FAIL : v_code;
+                        reject_code <= cand_book ? `RJ_TRIG_FAIL : v_code_r;
                     end
                     if (cand_book)
                         trq_ack <= 1'b1;

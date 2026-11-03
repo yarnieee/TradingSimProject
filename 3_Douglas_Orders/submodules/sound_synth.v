@@ -59,15 +59,20 @@ module sound_synth #(
     endfunction
 
     reg  [3:0]  si;                      // segment playing
-    wire [SEGW-1:0] s = seg(si);
+    // the segment's settings, registered (they change only between segments, and
+    // the next sample is at least 16 clocks away); its start volumes come straight
+    // from the table, as they are loaded the first tick after si changes
+    reg  [SEGW-1:0] s;
+    wire [SEGW-1:0] s_now = seg(si);
+    always @(posedge clk) s <= s_now;
     wire [15:0] s_incA = s[SEGW-1 -: 16];
     wire [15:0] s_incB = s[SEGW-17 -: 16];
     wire        s_sq   = s[SEGW-33];
     wire        s_nz   = s[SEGW-34];
     wire        s_last = s[SEGW-35];
-    wire [7:0]  s_vA   = s[39:32];
+    wire [7:0]  s_vA   = s_now[39:32];
     wire [3:0]  s_kA   = s[31:28];
-    wire [7:0]  s_vB   = s[27:20];
+    wire [7:0]  s_vB   = s_now[27:20];
     wire [3:0]  s_kB   = s[19:16];
     wire [15:0] s_len  = s[15:0];
 

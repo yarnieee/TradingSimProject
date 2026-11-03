@@ -137,6 +137,11 @@ module game_fsm (
                     endcase
                 end
 
+                // the selected stock follows the cursor while it is on a ticker, so
+                // the charts and prices show the stock being pointed at
+                if (next_stocks_cursor >= 2 && next_stocks_cursor <= 5)
+                    next_selected_stock = next_stocks_cursor - 2;
+
                 if (btnC) begin
                     if (stocks_cursor == 0) begin
                         next_state = `UI_PORTFOLIO;

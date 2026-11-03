@@ -645,3 +645,15 @@ picture rows 146 down every other 2^5 frames. `tb_vga_title` checks five lines, 
 button not blinking and the button blinking; fails on planted bugs (no blink; blink starting at row
 140). Our `title_screen/` and `title_screen.mem` removed; `tb_vga_controls` added to the test list;
 README. All 34 testbenches pass. Not yet on main.
+
+## 2026-11-03: chart follows the ticker cursor; sound synth's segment settings registered
+
+**Asked for:** Tricia's board test of branch-team-integration: the graph did not change when moving
+through the tickers; right OLED trouble (maybe power); timing.
+
+**Done by the AI:** `game_fsm.v` changed the selected stock only on BTNC, so on the MARKET screen the
+monitor's chart stayed on the old stock while the cursor moved. The selected stock now follows the
+cursor while it is on a ticker (`tb_matthew_game_fsm`: 4 new checks, fail on the old FSM).
+`sound_synth.v`: the segment table's output is registered, so it is not in the same clock as the
+fades (every sample of every sound unchanged). All 34 testbenches pass. Right OLED and timing wait
+for the board and Vivado reports.

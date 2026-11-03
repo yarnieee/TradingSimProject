@@ -83,6 +83,14 @@ module tb_matthew_game_fsm;
         press(BL); press(BC);
         check(screen_state == PORTFOLIO, "stocks: L selects back, C returns to portfolio");
         press(BR); press(BC);
+        press(BD);
+        check(screen_state == STOCKS && selected_stock == 0, "stocks: the cursor on AMD selects it (the charts follow)");
+        press(BD); press(BD);
+        check(selected_stock == 2, "stocks: D, D moves the selection to NVDA");
+        press(BD); press(BD);
+        check(selected_stock == 3, "stocks: GME, and D past the last ticker keeps it");
+        press(BU); press(BU); press(BU); press(BU);
+        check(selected_stock == 0 && menu_selection == 4'd1, "stocks: U back to the header keeps the last ticker (AMD)");
         press(BD); press(BC);
         check(screen_state == SPECIFIC && selected_stock == 0,
               "stocks --D, C--> AMD screen with stock code 0");

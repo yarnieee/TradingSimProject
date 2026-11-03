@@ -38,42 +38,65 @@ module tb_portfolio_history;
         end
     endtask
 
+    // portfolio_value is registered: it follows its inputs 4 clocks later
+    task settle; begin repeat (6) @(posedge clk); #1; end endtask
+
     initial begin
         #12;
         rst = 0;
-        #4;
+        settle;
         check(portfolio_value == 32'd1000,
               "cash-only portfolio value is available after reset");
         check(portfolio_samples[31:0] == 32'd1000
               && portfolio_samples[959:928] == 32'd1000,
               "history initializes flat across its full range");
 
+        // a fill first (cash 1000 -> 1100), so the history has distinct values
+        cash = 32'd1100;
+        settle;
+        // a new trading day: prices move and tick pulses on the next clock (as at the top)
+        @(negedge clk);
         pos0 = 10'd2; price0 = 16'd10;
         pos1 = 10'd3; price1 = 16'd20;
         pos2 = 10'd4; price2 = 16'd30;
         pos3 = 10'd5; price3 = 16'd40;
-        #1;
-        check(portfolio_value == 32'd1400,
-              "portfolio value includes all four stock positions");
-
         @(negedge clk);
         tick = 1;
         @(negedge clk);
         tick = 0;
-        #1;
-        check(portfolio_samples[959:928] == 32'd1400,
+        settle;
+        check(portfolio_value == 32'd1500,
+              "portfolio value includes all four stock positions");
+        check(portfolio_samples[959:928] == 32'd1500,
               "new portfolio value is stored at the newest history index");
+        check(portfolio_samples[927:896] == 32'd1100 && portfolio_samples[895:864] == 32'd1000,
+              "one new day adds one sample, with the new prices");
         check(portfolio_samples[31:0] == 32'd1000,
               "oldest history value remains after one tick");
 
         // A fill can change cash/positions between market-day ticks.  The
         // newest history point must follow that live valuation immediately.
         cash = 32'd900;
-        #1;
-        @(posedge clk);
-        #1;
-        check(portfolio_samples[959:928] == 32'd1300,
+        settle;
+        check(portfolio_samples[959:928] == 32'd1300
+              && portfolio_samples[927:896] == 32'd1500,
               "history captures a live valuation change without a market tick");
+
+        // a day on which nothing changes still adds its one sample
+        @(negedge clk); tick = 1; @(negedge clk); tick = 0;
+        repeat (12) @(posedge clk); #1;
+        check(portfolio_samples[959:928] == 32'd1300 && portfolio_samples[927:896] == 32'd1300
+              && portfolio_samples[895:864] == 32'd1500,
+              "an unchanged day adds one sample of the same value");
+
+        // largest values: 1023 shares at $655.34 in every stock, plus cash
+        @(negedge clk);
+        cash = 32'd5000;
+        pos0 = 10'd1023; pos1 = 10'd1023; pos2 = 10'd1023; pos3 = 10'd1023;
+        price0 = 16'd65534; price1 = 16'd65534; price2 = 16'd65534; price3 = 16'd65534;
+        settle;
+        check(portfolio_value == 32'd5000 + 4 * 32'd1023 * 32'd65534,
+              "largest holdings value without overflow");
 
         if (n_fail == 0)
             $display("PASS: tb_portfolio_history (%0d checks)", n_pass);

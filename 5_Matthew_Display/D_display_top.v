@@ -217,12 +217,14 @@ module D_display_top #(
     );
 
     assign sel_stock = selected_stock[1:0];
-    wire [479:0] selected_samples_30 = (selected_stock == 3'd0) ?
-                                       stock0_samples_30 :
-                                       (selected_stock == 3'd1) ?
-                                       stock1_samples_30 :
-                                       (selected_stock == 3'd2) ?
-                                       stock2_samples_30 : stock3_samples_30;
+    // the selected stock's 30 days, registered: the charts, the chart high / low
+    // and the 30-day reference price start from flip-flops, not from the four
+    // stocks' histories through this mux (one clock later is never visible)
+    reg  [479:0] selected_samples_30;
+    always @(posedge clk)
+        selected_samples_30 <= (selected_stock == 3'd0) ? stock0_samples_30 :
+                               (selected_stock == 3'd1) ? stock1_samples_30 :
+                               (selected_stock == 3'd2) ? stock2_samples_30 : stock3_samples_30;
 
     wire selected_ready = (selected_stock == 3'd0) ? stock_ready0 :
                           (selected_stock == 3'd1) ? stock_ready1 :

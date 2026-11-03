@@ -120,14 +120,14 @@ set_clock_groups -asynchronous -group [get_clocks sys_clk_pin] -group [get_clock
 
 ## The VGA screen writer gives each character cell 4 clocks: the cell's content
 ## (vga_cells) is only captured into wr_cell every fourth clock.
-set_multicycle_path -setup 4 -to [get_cells -hierarchical -filter {NAME =~ *vga_screen_inst/wr_cell_reg*}]
-set_multicycle_path -hold 3  -to [get_cells -hierarchical -filter {NAME =~ *vga_screen_inst/wr_cell_reg*}]
+set_multicycle_path -setup 4 -to [get_cells -hierarchical -filter {NAME =~ *vga_screen_inst/wr_cell_reg* && IS_SEQUENTIAL}]
+set_multicycle_path -hold 3  -to [get_cells -hierarchical -filter {NAME =~ *vga_screen_inst/wr_cell_reg* && IS_SEQUENTIAL}]
 
 ## display_numbers takes a field's value (load_v, cur_neg) 4 clocks after the field
 ## number changes, so the value's arithmetic (e.g. order total = price x quantity)
 ## has 4 clocks. A price that changes inside those 4 clocks can give one field a
 ## wrong value until its next refresh, 30 us later: never visible.
-set_multicycle_path -setup 4 -to [get_cells -hierarchical -filter {NAME =~ *display_numbers_inst/load_v_reg*}]
-set_multicycle_path -hold 3  -to [get_cells -hierarchical -filter {NAME =~ *display_numbers_inst/load_v_reg*}]
-set_multicycle_path -setup 4 -to [get_cells -hierarchical -filter {NAME =~ *display_numbers_inst/cur_neg_reg*}]
-set_multicycle_path -hold 3  -to [get_cells -hierarchical -filter {NAME =~ *display_numbers_inst/cur_neg_reg*}]
+set_multicycle_path -setup 4 -to [get_cells -hierarchical -filter {NAME =~ *display_numbers_inst/load_v_reg* && IS_SEQUENTIAL}]
+set_multicycle_path -hold 3  -to [get_cells -hierarchical -filter {NAME =~ *display_numbers_inst/load_v_reg* && IS_SEQUENTIAL}]
+set_multicycle_path -setup 4 -to [get_cells -hierarchical -filter {NAME =~ *display_numbers_inst/cur_neg_reg* && IS_SEQUENTIAL}]
+set_multicycle_path -hold 3  -to [get_cells -hierarchical -filter {NAME =~ *display_numbers_inst/cur_neg_reg* && IS_SEQUENTIAL}]

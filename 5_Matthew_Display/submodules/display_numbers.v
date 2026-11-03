@@ -330,29 +330,43 @@ module display_numbers #(
 
     // ------------------------------------------------------------ places, you and the bots
     // Entry 0 is you, 1..5 the bots. Place = 1 + how many are worth more (ties go
-    // to the earlier entry). One comparison a clock, 36 clocks a round.
+    // to the earlier entry). Each round first copies all six values (snap), then
+    // makes one comparison a clock (36 clocks) on those copies, and publishes
+    // ranks and order together at the start of the next round: the comparisons
+    // only see registers, and the screens never see a half-finished ranking.
     // order is the same list the other way round, for the leaderboard rows.
-    function [31:0] entry;
-        input [2:0] e;
-        begin
-            entry = (e == 3'd0) ? portfolio_value : bots_value[32*(e - 3'd1) +: 32];
-        end
-    endfunction
-    reg  [2:0] ri, rj, rcnt;
-    wire [31:0] v_i = entry(ri), v_j = entry(rj);
+    reg  [31:0] snap [0:5];
+    reg  [2:0]  ri, rj, rcnt;
+    reg         r_load;                     // this clock: publish the last round, copy the values
+    reg  [17:0] ranks_n, order_n;           // the round being worked out
+    wire [31:0] v_i = snap[ri], v_j = snap[rj];
     wire        ahead = (v_j > v_i) || ((v_j == v_i) && (rj < ri));
     always @(posedge clk) begin
         if (rst) begin
             ri <= 3'd0; rj <= 3'd0; rcnt <= 3'd0;
-            ranks <= {3'd6, 3'd5, 3'd4, 3'd3, 3'd2, 3'd1};
-            order <= {3'd5, 3'd4, 3'd3, 3'd2, 3'd1, 3'd0};
+            r_load  <= 1'b1;
+            ranks   <= {3'd6, 3'd5, 3'd4, 3'd3, 3'd2, 3'd1};
+            order   <= {3'd5, 3'd4, 3'd3, 3'd2, 3'd1, 3'd0};
+            ranks_n <= {3'd6, 3'd5, 3'd4, 3'd3, 3'd2, 3'd1};
+            order_n <= {3'd5, 3'd4, 3'd3, 3'd2, 3'd1, 3'd0};
+        end else if (r_load) begin
+            ranks   <= ranks_n;
+            order   <= order_n;
+            snap[0] <= portfolio_value;
+            snap[1] <= bots_value[31:0];
+            snap[2] <= bots_value[63:32];
+            snap[3] <= bots_value[95:64];
+            snap[4] <= bots_value[127:96];
+            snap[5] <= bots_value[159:128];
+            r_load  <= 1'b0;
         end else begin
             if (rj == 3'd5) begin
-                ranks[3*ri +: 3] <= rcnt + ahead + 3'd1;
-                order[3*(rcnt + ahead) +: 3] <= ri;
+                ranks_n[3*ri +: 3] <= rcnt + ahead + 3'd1;
+                order_n[3*(rcnt + ahead) +: 3] <= ri;
                 rcnt <= 3'd0;
                 rj   <= 3'd0;
                 ri   <= (ri == 3'd5) ? 3'd0 : ri + 3'd1;
+                if (ri == 3'd5) r_load <= 1'b1;
             end else begin
                 rcnt <= rcnt + ahead;
                 rj   <= rj + 3'd1;

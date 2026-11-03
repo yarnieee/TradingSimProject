@@ -509,3 +509,19 @@ share the first). Removed `bot_difficulty.v` and its checks. All 30 testbenches 
 checks that at game over return = P/L / $100 and drawdown = (peak - net worth) / peak, with max
 drawdown the largest (54 checks; both fail with the divider off). All 30 testbenches pass. Tricia's
 Vivado build estimated about +460 LUTs.
+
+## 2026-11-03: timing fixes for Tricia's build (WNS -8.2 ns)
+
+**Asked for:** address the failing timing in Tricia's Vivado build (worst paths: display_numbers
+order_reg, stock2_inst, portfolio_history total_value multiply) on branch-team-integration.
+
+**Done by the AI:** The ranker compared portfolio_value straight out of portfolio_history's four
+multiplies and adds, so the worst two paths were one chain. `portfolio_history.v`: net worth worked
+out in registered steps (4 clocks); a tick stores exactly one sample per day. `display_numbers.v`:
+the ranker copies the six values at the start of each round and publishes ranks and order together
+(the old one showed half-finished rankings while values changed). `D_display_top.v`: the selected
+stock's 30 samples registered (charts, high / low and reference prices no longer start from the
+stocks' histories through a mux). `risk_metrics.v`: drawdown numerator registered (the divider is now
+on). `Integration.xdc`: multicycle filters match registers only. New checks in
+`tb_portfolio_history` and `tb_display_numbers`, each failing on planted bugs or the old code. All 30
+testbenches pass. Not yet confirmed in Vivado.

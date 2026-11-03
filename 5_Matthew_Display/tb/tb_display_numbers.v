@@ -97,6 +97,18 @@ module tb_display_numbers;
         begin repeat (`DN_N * 40) @(posedge clk); #1; end
     endtask
 
+    // on every clock, ranks and order are one ranking: places 1..6, and the entry
+    // order puts in place p is the one whose place is p
+    integer bad_rank = 0, k, e2;
+    reg     rank_ok;
+    always @(posedge clk) if (!rst) begin
+        rank_ok = 1'b1;
+        for (e2 = 0; e2 < 6; e2 = e2 + 1)
+            if (ranks[3*e2 +: 3] < 3'd1 || ranks[3*e2 +: 3] > 3'd6 ||
+                order[3*(ranks[3*e2 +: 3] - 1) +: 3] != e2) rank_ok = 1'b0;
+        if (!rank_ok) bad_rank = bad_rank + 1;
+    end
+
     initial begin
         repeat (3) @(posedge clk); rst = 0;
         refresh;
@@ -167,6 +179,16 @@ module tb_display_numbers;
         if (order === {3'd0, 3'd3, 3'd1, 3'd4, 3'd2, 3'd5}) n_pass = n_pass + 1;
         else begin n_fail = n_fail + 1; $display("FAIL: order after you fall behind, got %b", order); end
         check_ram;
+
+        // your value keeps changing in the middle of rounds (here every 7 clocks,
+        // above and below the bots): the published places stay a whole ranking
+        for (k = 0; k < 400; k = k + 1) begin
+            pv = 32'd900_000 + ((k * 37) % 23) * 32'd10_000;
+            repeat (7) @(posedge clk);
+        end
+        #1;
+        if (bad_rank == 0) n_pass = n_pass + 1;
+        else begin n_fail = n_fail + 1; $display("FAIL: ranks / order mixed rounds on %0d clocks", bad_rank); end
 
         if (n_fail == 0) $display("PASS: tb_display_numbers (%0d checks)", n_pass);
         else             $display("FAIL: tb_display_numbers (%0d failed, %0d passed)", n_fail, n_pass);

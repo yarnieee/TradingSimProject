@@ -73,7 +73,15 @@ module risk_metrics #(
     wire [31:0] pnl_abs = neg ? -pnl : pnl;
 
     // drawdown numerator: (peak - equity) * 10000   (peak >= equity always)
-    wire [47:0] dd_num = {16'd0, peak - equity} * 48'd10000;
+    // Registered in two steps (difference, then product): peak and equity are
+    // set in FIN and the drawdown job starts only after the return job's 48+
+    // clocks, so dd_num is long settled by then.
+    reg  [31:0] dd_diff;
+    reg  [47:0] dd_num;
+    always @(posedge clk) begin
+        dd_diff <= peak - equity;
+        dd_num  <= {16'd0, dd_diff} * 48'd10000;
+    end
 
     // ---- one shared divider, two jobs ----
     reg         div_sel;                 // 0 = return job, 1 = drawdown job

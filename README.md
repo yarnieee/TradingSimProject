@@ -21,17 +21,17 @@ C Tricia, D Matthew). Still to rename by its owner: `A_top` to `A_market_top`.
 
 ## Open in Vivado
 
-This is `branch-team-integration`, the team's working copy (with the VGA monitor, merged from
-`branch-douglas-vga-display`).
+`main` is the team's tested copy. Work goes into `branch-team-integration` first and is merged
+into `main` once its tests pass.
 
-1. Clone this branch to a short path with no spaces:
+1. Clone `main` to a short path with no spaces:
    ```
-   git clone -b branch-team-integration https://github.com/yarnieee/TradingSimProject.git C:/EE2026/TradingSimProject
+   git clone https://github.com/yarnieee/TradingSimProject.git C:/EE2026/TradingSimProject
    ```
    Already have a clone? In it:
    ```
    git fetch
-   git checkout branch-team-integration
+   git checkout main
    git pull
    ```
 2. Open Vivado 2025.2 and type in the Tcl Console:

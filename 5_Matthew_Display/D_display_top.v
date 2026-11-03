@@ -238,27 +238,31 @@ module D_display_top #(
     wire [15:0] selected_ask = selected_ask_full[16] ? 16'hFFFF : selected_ask_full[15:0];
     // a market buy pays the ask; a limit / stop buy is checked at its trigger (as B does)
     wire [15:0] buy_price    = (ord_type == `OT_MKT) ? selected_ask : ord_trig;
-    wire [31:0] buy_notional = {16'd0, buy_price} * {18'd0, quantity};
+    // registered steps (price x quantity, then the checks): the selected price,
+    // the multiply and the cash compare do not have to fit in one clock, and the
+    // result is 2 clocks behind the switches and buttons, which is never seen
+    reg  [31:0] buy_notional;
+    always @(posedge clk) buy_notional <= {16'd0, buy_price} * {18'd0, quantity};
     wire [32:0] buy_total = {1'b0, buy_notional} + 33'd100;
 
     // Validate before the order-review screen can submit to B_order_top.
     // The ask and fee match B_order_top's parameters. (A full order book is
     // only known to B: that order is rejected there.)
-    always @(*) begin
-        order_valid = 1'b1;
-        validation_code = `RJ_NONE;
+    always @(posedge clk) begin
+        order_valid     <= 1'b1;
+        validation_code <= `RJ_NONE;
         if (!selected_ready) begin
-            order_valid = 1'b0;
-            validation_code = `RJ_NOT_LIVE;
+            order_valid     <= 1'b0;
+            validation_code <= `RJ_NOT_LIVE;
         end else if ((quantity == 14'd0) || (quantity > 14'd255)) begin
-            order_valid = 1'b0;
-            validation_code = `RJ_BAD_QTY;
+            order_valid     <= 1'b0;
+            validation_code <= `RJ_BAD_QTY;
         end else if (!trade_side && (buy_total > {1'b0, portfolio_cash})) begin
-            order_valid = 1'b0;
-            validation_code = `RJ_NO_CASH;
+            order_valid     <= 1'b0;
+            validation_code <= `RJ_NO_CASH;
         end else if (trade_side && (quantity > selected_position)) begin
-            order_valid = 1'b0;
-            validation_code = `RJ_NO_POS;
+            order_valid     <= 1'b0;
+            validation_code <= `RJ_NO_POS;
         end
     end
 
@@ -311,8 +315,12 @@ module D_display_top #(
 
     // ================================================================ numbers on the right OLED
     // the selected stock's stop-loss / take-profit levels
-    wire [15:0] sel_sl = sl_price[16*selected_stock[1:0] +: 16];
-    wire [15:0] sel_tp = tp_price[16*selected_stock[1:0] +: 16];
+    // the selected stock's SL / TP levels (registered: the charts' scaling starts from flip-flops)
+    reg  [15:0] sel_sl, sel_tp;
+    always @(posedge clk) begin
+        sel_sl <= sl_price[16*selected_stock[1:0] +: 16];
+        sel_tp <= tp_price[16*selected_stock[1:0] +: 16];
+    end
 
     wire [`DN_N*32-1:0] numbers_bcd;
     wire [`DN_N-1:0]    numbers_neg;

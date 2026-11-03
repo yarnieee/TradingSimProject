@@ -551,3 +551,15 @@ $ change: same stock selection and the same 4-clock load (value packed as {price
 |change|}), then 30 division steps before the BCD conversion. `tb_display_numbers` passes and fails
 on planted bugs; a random check (1,200 cases) and a full-design dump of the monitor's market rows
 match. All 30 testbenches pass. To be confirmed on the board.
+
+## 2026-11-03: timing fixes from the board build's report (WNS -3.884 ns, 470 endpoints)
+
+**Asked for:** fix the remaining timing failures, from Douglas's routed timing report.
+
+**Done by the AI:** The report's worst paths were two groups. (1) game_fsm's trade result: selected
+stock -> price -> ask -> price x quantity (DSP) -> cash compare in one clock: `D_display_top.v` now
+registers the order total and the order checks (2 clocks, at button speed). (2) the OLED chart's
+SL / TP rows and heights: the order book's 8-slot SL / TP search -> chart scaling in one clock:
+`B_order_top.v` registers the per-stock levels, `D_display_top.v` the selected stock's pair, and
+`chart_renderer.v` gives each scanned point 3 registered steps. `tb_chart_renderer` now waits 300
+clocks for the slower scan. All 30 testbenches pass; to be confirmed by the next Vivado build.

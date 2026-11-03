@@ -275,15 +275,22 @@ module B_order_top #(
     );
 
     // ------------------------------------------------------------ SL/TP levels per stock (for the chart)
+    // Worked out from the book's eight slots, then registered (one clock later),
+    // so the screens' chart scaling starts from flip-flops.
     integer k;
+    reg [63:0] sl_now, tp_now;
     always @* begin
-        sl_price = 64'd0;
-        tp_price = 64'd0;
+        sl_now = 64'd0;
+        tp_now = 64'd0;
         for (k = 0; k < 8; k = k + 1)
             if (bk_leg[k]) begin
-                if (bk_type[2*k +: 2] == `OT_STP) sl_price[16*bk_stock[2*k +: 2] +: 16] = bk_trig[16*k +: 16];
-                else                              tp_price[16*bk_stock[2*k +: 2] +: 16] = bk_trig[16*k +: 16];
+                if (bk_type[2*k +: 2] == `OT_STP) sl_now[16*bk_stock[2*k +: 2] +: 16] = bk_trig[16*k +: 16];
+                else                              tp_now[16*bk_stock[2*k +: 2] +: 16] = bk_trig[16*k +: 16];
             end
+    end
+    always @(posedge clk) begin
+        sl_price <= sl_now;
+        tp_price <= tp_now;
     end
 
     // ------------------------------------------------------------ screen

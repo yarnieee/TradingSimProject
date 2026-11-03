@@ -12,7 +12,8 @@
 // a level outside the chart's range sits on the bottom or top edge.
 //
 // The scale does not depend on the pixel, so a small scanner works it out on
-// clk, one point per clock (about 40 clocks, over and over), and keeps each
+// clk, one point per 3 clocks (value, value - low, then the height: about 120
+// clocks, over and over, each step from registers), and keeps each
 // column's height in a table. The pixel logic only looks heights up. The
 // table follows the history within a microsecond; the OLED takes a pixel
 // every 160 ns and a whole frame takes milliseconds.
@@ -75,15 +76,25 @@ module chart_renderer (
             if ((rng >> s) <= 32'd24) sh_fit = s;
     end
 
+    // each point takes 3 clocks (ph 0, 1, 2): sv_r <= the point, ab_r <= it
+    // minus the low, then the pass below uses the registered values
+    reg  [1:0]  ph;
+    reg  [31:0] sv_r, ab_r;
+    always @(posedge clk) begin
+        ph   <= (ph == 2'd2) ? 2'd0 : ph + 2'd1;
+        sv_r <= sv;
+        if (ph == 2'd1) ab_r <= sv_r - lo;
+    end
+
     // a height is kept to 6 bits and then capped at 24 (as the per-pixel
     // version did; only matters for a range too big for any shift)
-    wire [31:0] above   = sv - lo;
+    wire [31:0] above   = ab_r;
     wire [31:0] h_full  = above >> sh;
     wire [5:0]  h_6     = h_full[5:0];
     wire [4:0]  h_of_sv = (rng == 0) ? 5'd12 : (h_6 > 6'd24) ? 5'd24 : h_6[4:0];
 
     // y of a price level on this chart (clamped to the plot)
-    wire [5:0]  level_of_sv = (sv <= lo)           ? BASE :
+    wire [5:0]  level_of_sv = (sv_r <= lo)         ? BASE :
                               (above > rng)        ? BASE - 6'd24 :
                               (rng == 0)           ? BASE - 6'd12 :
                               (h_full > 32'd24)    ? BASE - 6'd24 : BASE - h_full[5:0];
@@ -104,6 +115,9 @@ module chart_renderer (
         y_sl_new = BASE;
         y_tp_new = BASE;
         up      = 1'b1;
+        ph      = 2'd0;
+        sv_r    = 32'd0;
+        ab_r    = 32'd0;
         for (k = 0; k < 15; k = k + 1) begin
             h_new[k] = 5'd12;
             h_tab[k] = 5'd12;
@@ -111,20 +125,20 @@ module chart_renderer (
     end
 
     always @(posedge clk) begin
-        case (sc_pass)
+        if (ph == 2'd2) case (sc_pass)
             2'd0: begin                                   // min / max
                 if (sc_i == 5'd0) begin
-                    run_min <= sv;
-                    run_max <= sv;
-                    first_v <= sv;
+                    run_min <= sv_r;
+                    run_max <= sv_r;
+                    first_v <= sv_r;
                 end else begin
-                    if (sv < run_min) run_min <= sv;
-                    if (sv > run_max) run_max <= sv;
+                    if (sv_r < run_min) run_min <= sv_r;
+                    if (sv_r > run_max) run_max <= sv_r;
                 end
                 if (sc_i == 5'd14) begin
-                    lo      <= (sv < run_min) ? sv : run_min;
-                    rng     <= ((sv > run_max) ? sv : run_max) - ((sv < run_min) ? sv : run_min);
-                    up      <= (sv >= first_v);           // newest at or above oldest
+                    lo      <= (sv_r < run_min) ? sv_r : run_min;
+                    rng     <= ((sv_r > run_max) ? sv_r : run_max) - ((sv_r < run_min) ? sv_r : run_min);
+                    up      <= (sv_r >= first_v);           // newest at or above oldest
                     sc_i    <= 5'd0;
                     sc_pass <= 2'd3;
                 end else

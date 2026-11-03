@@ -21,15 +21,17 @@
 //                as dashed lines, dotted lines at the high and low
 // Pixel path (pixel clock, pipelined): counters -> RAM address -> RAM data ->
 // font + graphics -> colour; the syncs are delayed to match.
-// Title screen: one 320 x 180 picture (Bull vs Bear and the five bots, PRESS
-// START blinking), each pixel 4 x 4 over the whole screen, from block RAM read
-// on the pixel clock; text, bar and chart are hidden under it.
-// title_screen/make_title_screen.py draws it and writes title_screen.mem.
+// Title screen: one 320 x 180 picture (Tricia's title_art_vga.mem: Bull vs Bear
+// and the five bots, 16 colours, its own palette), each pixel 4 x 4 over the
+// whole screen, from block RAM read on the pixel clock; text, bar and chart are
+// hidden under it. PRESS BTNC TO START (picture rows 146 down) blinks. The OLEDs
+// keep their own title pictures (title_art_renderer).
 // GAME OVER: the big GAME OVER flashes for about 3 s (36 steps of 2^GO_STEP
 // clocks), then the final results show; the chart is hidden.
 module vga_screen #(
     parameter GO_STEP = 23,             // 2^23 clocks = 84 ms
-    parameter TITLE_BLINK = 5           // PRESS START: 2^5 frames on, 2^5 off (about 1 s a blink)
+    parameter TITLE_BLINK = 5,          // PRESS START: 2^5 frames on, 2^5 off (about 1 s a blink)
+    parameter [7:0] TITLE_BTN_ROW = 8'd146  // the picture's PRESS BTNC TO START: rows 146 down
 ) (
     input  wire        clk,             // 100 MHz: character writer
     input  wire        rst,
@@ -273,25 +275,23 @@ module vga_screen #(
     end
 
     // ------------------------------------------------------------ title screen
-    // One 320 x 180 picture (5_Matthew_Display/title_screen), each pixel 4 x 4,
-    // filling the screen, in its own 16 colours. Colour 15 (PRESS START) blinks:
-    // bright for 2^TITLE_BLINK frames, then the button's colour.
+    // One 320 x 180 picture (title_art_vga.mem), each pixel 4 x 4, filling the
+    // screen, in its own 16 colours. PRESS BTNC TO START blinks: shown for
+    // 2^TITLE_BLINK frames, then rows TITLE_BTN_ROW down show the background.
     // tx / ty: the picture pixel of (h, v), txs / tys count its 4 screen pixels,
     // t_row: ty x 320, so the address needs no multiply.
     (* rom_style = "block" *) reg [3:0] title_pic [0:57599];
-    initial $readmemh("title_screen.mem", title_pic);
+    initial $readmemh("title_art_vga.mem", title_pic);
     reg  [5:0] t_frame;                        // frames, for the blink
     wire       t_blink = !t_frame[TITLE_BLINK];
-    function [11:0] title_rgb;                 // keep in step with make_title_screen.py
+    function [11:0] title_rgb;                 // the title picture's 16 colours, 4 bits each
         input [3:0] c;
-        input       on;
         begin
             case (c)
-                4'h0: title_rgb = 12'h112; 4'h1: title_rgb = 12'h224; 4'h2: title_rgb = 12'h349; 4'h3: title_rgb = 12'hFFF;
-                4'h4: title_rgb = 12'hAAB; 4'h5: title_rgb = 12'h000; 4'h6: title_rgb = 12'hFD2; 4'h7: title_rgb = 12'hF82;
-                4'h8: title_rgb = 12'h3D4; 4'h9: title_rgb = 12'h173; 4'hA: title_rgb = 12'hE33; 4'hB: title_rgb = 12'h812;
-                4'hC: title_rgb = 12'hEDA; 4'hD: title_rgb = 12'h5DF; 4'hE: title_rgb = 12'h226;
-                default: title_rgb = on ? 12'hFF6 : 12'h226;
+                4'h0: title_rgb = 12'h112; 4'h1: title_rgb = 12'h235; 4'h2: title_rgb = 12'h812; 4'h3: title_rgb = 12'h183;
+                4'h4: title_rgb = 12'h862; 4'h5: title_rgb = 12'h358; 4'h6: title_rgb = 12'h1E4; 4'h7: title_rgb = 12'hE32;
+                4'h8: title_rgb = 12'hD91; 4'h9: title_rgb = 12'h0CD; 4'hA: title_rgb = 12'h48D; 4'hB: title_rgb = 12'h998;
+                4'hC: title_rgb = 12'hEE1; 4'hD: title_rgb = 12'hABD; 4'hE: title_rgb = 12'hED9; default: title_rgb = 12'hDEE;
             endcase
         end
     endfunction
@@ -324,11 +324,12 @@ module vga_screen #(
     reg  [3:0]  s1_bp;
     reg         s1_vis, s1_hs, s1_vs;
     reg  [15:0] art_addr;
-    reg         s1_art;
+    reg         s1_art, s1_btn;
     wire [10:0] bx = h - 11'd18;               // chart x: day = bx / 16
     always @(posedge pclk) begin
         rd_addr <= {cy, cx};
         art_addr <= t_row + {7'd0, tx};           // ty * 320 + tx
+        s1_btn   <= (ty >= TITLE_BTN_ROW);
         s1_art  <= (h < 11'd1280) && (v < 10'd720);
         s1_h    <= h;
         s1_v    <= v;
@@ -349,10 +350,11 @@ module vga_screen #(
     reg  [7:0]  p_hc, p_hp;
     reg         p_vis, p_hs, p_vs;
     reg  [3:0]  p_tpx;
-    reg         p_art;
+    reg         p_art, p_btn;
     always @(posedge pclk) begin
         p_tpx   <= title_pic[art_addr];
         p_art   <= s1_art && ti_p[1];
+        p_btn   <= s1_btn;
         p_h <= s1_h; p_v <= s1_v; p_px <= s1_px; p_ly <= s1_ly; p_bn <= s1_bn; p_bp <= s1_bp;
         p_hc <= h_tab[s1_bn];
         p_hp <= h_tab[(s1_bn == 5'd0) ? 5'd0 : s1_bn - 5'd1];
@@ -392,7 +394,7 @@ module vga_screen #(
     always @(posedge pclk) begin
         s2_text <= glyph ? rgb(rd_data[15:12]) : rgb(rd_data[11:8]);
         s2_gfx_on <= 1'b1;
-        if (p_art)                                  s2_gfx <= title_rgb(p_tpx, t_blink);
+        if (p_art)                                  s2_gfx <= title_rgb((p_btn && !t_blink) ? 4'h0 : p_tpx);
         else if (in_bar)                            s2_gfx <= bar_on ? bar_rgb : 12'h222;
         else if (in_chart && on_line)               s2_gfx <= rising ? 12'h0F0 : 12'hF44;
         else if (in_chart && on_sl)                 s2_gfx <= 12'hF00;

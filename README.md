@@ -74,7 +74,9 @@ The progress bar along the top is green, turns yellow at 60 days left and red at
 
 Screens: the right OLED shows the game, the left OLED your order ticket (and title artwork on the
 title screen; the monitor shows its own Bull vs Bear title screen with the five bots and a blinking
-PRESS START, drawn by `5_Matthew_Display/title_screen/make_title_screen.py`). The 7-seg shows the quantity being set; LEDs flash on a fill (led 15) or a
+PRESS BTNC TO START, `5_Matthew_Display/title_art_vga.mem`). While you make an order, the monitor's
+right panel shows TRADE CONTROLS (the order, the buttons, the switches, and whether it can be sent)
+instead of PENDING ORDERS. The 7-seg shows the quantity being set; LEDs flash on a fill (led 15) or a
 reject (led 14) and show pending orders (led 11-8).
 
 **Sound** (a Pmod AMP2 with a speaker in the top row of the JXADC port; a small speaker or

@@ -631,3 +631,17 @@ one gave 2 presses for one, 9 for three), and the button went unsynchronised int
 Now the button is synchronised and every change, press or release, is passed on at once and then
 ignored for 20 ms. The review NOW bar reads "BTNU / BTND / BTNL / BTNR  GO BACK ... BTNC  SEND IT";
 `tb_vga_leaderboard` checks every screen's NOW bar has a space before BTNC. All 33 testbenches pass.
+
+## 2026-11-03: Tricia's branch-tricia-visual merged into branch-team-integration
+
+**Asked for:** use Tricia's visuals: her monitor title screen (with the PRESS START button blinking)
+and her TRADE CONTROLS panel in place of PENDING ORDERS while making an order. On
+branch-team-integration first, for Douglas to check before main.
+
+**Done by the AI:** Merged her two commits. Her `vga_cells.v` panel and `tb_vga_controls` merged
+cleanly. The title screen conflicted with ours: kept our address counters and frame counter, took
+her `title_art_vga.mem` and palette, and made PRESS BTNC TO START blink by showing the background on
+picture rows 146 down every other 2^5 frames. `tb_vga_title` checks five lines, the shelf above the
+button not blinking and the button blinking; fails on planted bugs (no blink; blink starting at row
+140). Our `title_screen/` and `title_screen.mem` removed; `tb_vga_controls` added to the test list;
+README. All 34 testbenches pass. Not yet on main.

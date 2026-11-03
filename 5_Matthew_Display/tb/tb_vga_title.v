@@ -1,10 +1,10 @@
 `timescale 1ns / 1ps
 `include "trading_defs.vh"
 
-// tb_vga_title: the VGA title screen. One 320 x 180 picture (title_screen.mem),
-// each pixel 4 x 4 over the whole 1280 x 720 screen, in its 16 colours; colour
-// 15 (PRESS START) blinks between bright and the button's colour. Here the
-// blink changes every frame (TITLE_BLINK = 0).
+// tb_vga_title: the VGA title screen. One 320 x 180 picture (title_art_vga.mem),
+// each pixel 4 x 4 over the whole 1280 x 720 screen, in its 16 colours; PRESS
+// BTNC TO START (picture rows 146 down) blinks: shown, then background. Here
+// the blink changes every frame (TITLE_BLINK = 0).
 module tb_vga_title;
     reg clk = 0;  always #5     clk  = ~clk;         // 100 MHz
     reg pclk = 0; always #6.734 pclk = ~pclk;        // 74.25 MHz
@@ -26,19 +26,21 @@ module tb_vga_title;
         .vga_r(r), .vga_g(g), .vga_b(b), .hsync(hs), .vsync(vs)
     );
 
-    // the picture and its colours, as make_title_screen.py draws them
+    // the picture and its colours
     reg [3:0] pic [0:57599];
-    initial $readmemh("title_screen.mem", pic);
+    initial $readmemh("title_art_vga.mem", pic);
     function [11:0] rgb12;
         input [3:0] c;
-        input       on;                    // the blinking colour is bright
+        input       on;                    // 0: the blink is off (PRESS START rows hidden)
+        input       btn_row;               // the pixel is in the PRESS START rows
+        reg   [3:0] k;
         begin
-            case (c)
-                4'h0: rgb12 = 12'h112; 4'h1: rgb12 = 12'h224; 4'h2: rgb12 = 12'h349; 4'h3: rgb12 = 12'hFFF;
-                4'h4: rgb12 = 12'hAAB; 4'h5: rgb12 = 12'h000; 4'h6: rgb12 = 12'hFD2; 4'h7: rgb12 = 12'hF82;
-                4'h8: rgb12 = 12'h3D4; 4'h9: rgb12 = 12'h173; 4'hA: rgb12 = 12'hE33; 4'hB: rgb12 = 12'h812;
-                4'hC: rgb12 = 12'hEDA; 4'hD: rgb12 = 12'h5DF; 4'hE: rgb12 = 12'h226;
-                default: rgb12 = on ? 12'hFF6 : 12'h226;
+            k = (btn_row && !on) ? 4'h0 : c;
+            case (k)
+                4'h0: rgb12 = 12'h112; 4'h1: rgb12 = 12'h235; 4'h2: rgb12 = 12'h812; 4'h3: rgb12 = 12'h183;
+                4'h4: rgb12 = 12'h862; 4'h5: rgb12 = 12'h358; 4'h6: rgb12 = 12'h1E4; 4'h7: rgb12 = 12'hE32;
+                4'h8: rgb12 = 12'hD91; 4'h9: rgb12 = 12'h0CD; 4'hA: rgb12 = 12'h48D; 4'hB: rgb12 = 12'h998;
+                4'hC: rgb12 = 12'hEE1; 4'hD: rgb12 = 12'hABD; 4'hE: rgb12 = 12'hED9; default: rgb12 = 12'hDEE;
             endcase
         end
     endfunction
@@ -74,9 +76,9 @@ module tb_vga_title;
             bad_on = 0; bad_off = 0; blinkers = 0;
             for (i = 0; i < 1280; i = i + 1) begin
                 a = (yy / 4) * 320 + i / 4;
-                if (px[i] != rgb12(pic[a], 1'b1)) bad_on  = bad_on + 1;
-                if (px[i] != rgb12(pic[a], 1'b0)) bad_off = bad_off + 1;
-                if (pic[a] == 4'hF) blinkers = blinkers + 1;
+                if (px[i] != rgb12(pic[a], 1'b1, yy / 4 >= 146)) bad_on  = bad_on + 1;
+                if (px[i] != rgb12(pic[a], 1'b0, yy / 4 >= 146)) bad_off = bad_off + 1;
+                if (yy / 4 >= 146 && pic[a] != 4'h0) blinkers = blinkers + 1;
             end
         end
     endtask
@@ -89,18 +91,26 @@ module tb_vga_title;
         grab_line(0);    compare(0);
         check(bad_on == 0 || bad_off == 0, "screen line 0: the picture's top row, every pixel");
         grab_line(361);  compare(361);
-        check(bad_on == 0 || bad_off == 0, "screen line 361: the bull, VS and the bear");
+        check(bad_on == 0 && bad_off == 0, "screen line 361: the bull, the bolt and the bear (no blink)");
         grab_line(530);  compare(530);
         check(bad_on == 0 || bad_off == 0, "screen line 530: the five bots");
         grab_line(719);  compare(719);
         check(bad_on == 0 || bad_off == 0, "screen line 719: the picture's last row");
 
-        // PRESS START: line 670 crosses its letters; one frame bright, the next not
-        grab_line(670);  compare(670);
-        check(blinkers > 100, "line 670 crosses the PRESS START letters");
+        // the bots' shelf just above the button (picture row 141) never blinks:
+        // two frames running, both exactly the picture
+        grab_line(566);  compare(566);
+        check(bad_on == 0 && bad_off == 0, "line 566 (the shelf above the button): the picture");
+        grab_line(566);  compare(566);
+        check(bad_on == 0 && bad_off == 0, "line 566 next frame: still the picture (only the button blinks)");
+
+        // PRESS BTNC TO START: line 630 (picture row 157) crosses its letters; one
+        // frame shown, the next hidden
+        grab_line(630);  compare(630);
+        check(blinkers > 100, "line 630 crosses the PRESS START letters");
         first_on = (bad_on == 0);
-        check(bad_on == 0 || bad_off == 0, "line 670: every pixel, blink on or off");
-        grab_line(670);  compare(670);
+        check(bad_on == 0 || bad_off == 0, "line 630: every pixel, blink on or off");
+        grab_line(630);  compare(630);
         check(first_on ? (bad_off == 0 && bad_on != 0) : (bad_on == 0 && bad_off != 0),
               "PRESS START blinks: the next frame has the other colour");
 

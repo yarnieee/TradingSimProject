@@ -21,21 +21,19 @@ C Tricia, D Matthew). Still to rename by its owner: `A_top` to `A_market_top`.
 
 ## Open in Vivado
 
-This is `branch-douglas-sound`: `main` plus sound effects on the JXADC port (not yet merged into `main`).
-`main` is the team's tested copy; work goes into a branch first and is merged into `main` once its
-tests pass.
+`main` is the team's tested copy. Work goes into a branch first (for example
+`branch-team-integration`, `branch-douglas-sound`) and is merged into `main` once its tests pass.
 
-1. Clone this branch to a short path with no spaces:
+1. Clone `main` to a short path with no spaces:
    ```
-   git clone -b branch-douglas-sound https://github.com/yarnieee/TradingSimProject.git C:/EE2026/TradingSimProject
+   git clone https://github.com/yarnieee/TradingSimProject.git C:/EE2026/TradingSimProject
    ```
    Already have a clone? In it:
    ```
-   git fetch
-   git checkout branch-douglas-sound
+   git fetch --prune
+   git checkout main
    git pull
    ```
-   (Back to `main` later: `git checkout main`, then `git pull`.)
 2. Open Vivado 2025.2 and type in the Tcl Console:
    ```
    source C:/EE2026/TradingSimProject/0_Integrated_Top/create_integration_project.tcl

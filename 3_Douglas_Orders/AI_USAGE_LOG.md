@@ -612,3 +612,10 @@ plays segment lists with two tone voices and a filtered-noise voice, PWM on JXAD
 order, priorities, mute; writes the samples, `tb/sound_to_wav.py` makes .wav files) fails on
 planted bugs; `tb_integration` checks click, blips, woosh then bell, and the game-end tune. All 32
 testbenches pass. About 310 LUTs (yosys estimate) and 3 DSPs. Not yet built in Vivado.
+
+## 2026-11-03: branch-douglas-sound merged into main
+
+**Asked for:** merge the sound branch into main (it works on the board).
+
+**Done by the AI:** main fast-forwarded to the sound branch, README clone steps back to `main`;
+branch-team-integration moved to the same commit.

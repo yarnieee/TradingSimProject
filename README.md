@@ -9,7 +9,7 @@ The team build: everyone's parts joined in one Vivado project for the Basys3.
 | `0_Integrated_Top/` | team | `Integration_Top.v`, plus pins, Vivado scripts, whole-game test |
 | `1_Shared_Modules/` | team | debouncer, clock divider, OLED driver, shared codes |
 | `2_YiAn_Market_Engine/` | Yi An | `A_top.v` |
-| `3_Douglas_Orders/` | Douglas | `B_order_top.v` |
+| `3_Douglas_Orders/` | Douglas | `B_order_top.v`, `B_sound_top.v` |
 | `4_Tricia_Ledger/` | Tricia | `C_portfolio_top.v` |
 | `5_Matthew_Display/` | Matthew | `D_display_top.v` |
 | `9_Not_Used/` | | old files, not in the build |
@@ -21,19 +21,21 @@ C Tricia, D Matthew). Still to rename by its owner: `A_top` to `A_market_top`.
 
 ## Open in Vivado
 
-`main` is the team's tested copy. Work goes into `branch-team-integration` first and is merged
-into `main` once its tests pass.
+This is `douglas-sound`: `main` plus sound effects on the JXADC port (not yet merged into `main`).
+`main` is the team's tested copy; work goes into a branch first and is merged into `main` once its
+tests pass.
 
-1. Clone `main` to a short path with no spaces:
+1. Clone this branch to a short path with no spaces:
    ```
-   git clone https://github.com/yarnieee/TradingSimProject.git C:/EE2026/TradingSimProject
+   git clone -b douglas-sound https://github.com/yarnieee/TradingSimProject.git C:/EE2026/TradingSimProject
    ```
    Already have a clone? In it:
    ```
    git fetch
-   git checkout main
+   git checkout douglas-sound
    git pull
    ```
+   (Back to `main` later: `git checkout main`, then `git pull`.)
 2. Open Vivado 2025.2 and type in the Tcl Console:
    ```
    source C:/EE2026/TradingSimProject/0_Integrated_Top/create_integration_project.tcl
@@ -61,6 +63,7 @@ Each test prints `PASS` or `FAIL`.
 | sw[3:2] | order type: `00` market, `01` limit, `10` stop |
 | sw[5:4] | stop-loss / take-profit for a buy: `00` off, `01` 2%, `10` 5%, `11` 10% |
 | sw[7:6] | trigger distance from the price: `00` 1%, `01` 2%, `10` 5%, `11` 10% |
+| sw[13] | up = no sound |
 | sw[14] | up = your pending orders on the left OLED: BTNU / BTND choose one, BTNC cancels it (the game buttons do nothing) |
 | sw[15] | view: down = you (the game), up = the bots (BTNL / BTNR choose which bot; the game buttons do nothing) |
 
@@ -75,6 +78,19 @@ Screens: the right OLED shows the game, the left OLED your order ticket (and tit
 title screen; the monitor shows its own Bull vs Bear title screen with the five bots and a blinking
 PRESS START, drawn by `5_Matthew_Display/title_screen/make_title_screen.py`). The 7-seg shows the quantity being set; LEDs flash on a fill (led 15) or a
 reject (led 14) and show pending orders (led 11-8).
+
+**Sound** (a Pmod AMP2 with a speaker in the top row of the JXADC port; a small speaker or
+piezo between JXADC pin 1 and GND also works; sw[13] up mutes):
+
+| When | Sound |
+|---|---|
+| any button | a short click |
+| BTNU / BTND on the quantity screen | a rising / falling blip |
+| an order is sent | a woosh, then a bell when it fills (a limit order's bell rings when it triggers) |
+| the game ends | a short tune |
+
+To hear the sounds without the board: run `tb_sound`, then
+`python3 3_Douglas_Orders/tb/sound_to_wav.py <its folder>` turns `sound_*.txt` into `.wav` files.
 
 **Buying or selling**
 1. From HOME, go to MARKET, pick a stock, then BUY or SELL.

@@ -15,6 +15,7 @@
 //                                             down, stop-loss / take-profit
 //   bot_log          bot_logbook     Tricia   every bot's recent trades, for the bot view
 //   matthew_display  D_display_top   Matthew  buttons, game screens, 7-seg, both OLEDs
+//   douglas_sound    B_sound_top     Douglas  sound effects on JXADC
 //
 // Board:
 //   sw[0] (rst)   reset, as in Matthew's constraints
@@ -26,6 +27,7 @@
 //                 choose the bot, the game buttons are ignored
 //   sw[14] (orders_sw) up: the buttons work the left OLED's ORDERS list: BTNU / BTND
 //                 choose a pending order, BTNC cancels it (the game buttons are ignored)
+//   sw[13] (mute_sw) up: no sound
 //   buttons       Matthew's game FSM (title > portfolio > stocks > stock > buy/sell
 //                 > quantity > review > result)
 //   JB (right)    Matthew's game screens
@@ -33,18 +35,23 @@
 //   VGA           the whole game on a monitor (1280 x 720): prices, portfolio, chart, orders,
 //                 a leaderboard of you and the 5 bots, what to press, the switch settings
 //   7-seg         Matthew's quantity
+//   JXADC         sound (Pmod AMP2 or a speaker): pin 1 audio, pin 2 gain, pin 4 amplifier on;
+//                 a click for every button, a rising / falling blip for the quantity,
+//                 a woosh when an order is sent, a bell when it fills, a tune at game over
 //   led[7:4]      Matthew's screen_state;  led[15] fill;  led[14] reject;  led[11:8] pending orders
 module Integration_Top #(
     parameter DAY_MAX_COUNT = 499_999_999,      // Yi An: 5 s per trading day
     parameter DEBOUNCE_CTR  = 32'd1_999_999,    // Matthew: 20 ms
     parameter FINAL_TRADING_DAY = 32'd120,     // Game ends after this many days (120 x 5 s = 10 minutes)
-    parameter integer ENABLE_BOT = 1            // Tricia's moving-average bot (0: left out of the build)
+    parameter integer ENABLE_BOT = 1,           // Tricia's moving-average bot (0: left out of the build)
+    parameter integer SOUND_SAMPLE_SHIFT = 11   // Douglas: sound samples every 2^11 clocks (48.8 kHz)
 ) (
     input  wire        clk,
     input  wire        rst,
     input  wire [5:0]  order_sw,        // sw[7:2]: order type, SL/TP, trigger distance
     input  wire        view_sw,         // sw[15]: show the bot
     input  wire        orders_sw,       // sw[14]: the buttons work the left OLED's ORDERS list (cancel)
+    input  wire        mute_sw,         // sw[13]: no sound
     input  wire        btnU,
     input  wire        btnD,
     input  wire        btnL,
@@ -59,7 +66,10 @@ module Integration_Top #(
     output wire [7:0]  JB,
     output wire [15:0] led,
     output wire [3:0]  an,
-    output wire [7:0]  seg
+    output wire [7:0]  seg,
+    output wire        aud_pwm,         // JXADC pin 1: audio
+    output wire        aud_gain,        // JXADC pin 2: Pmod AMP2 gain (1: 6 dB)
+    output wire        aud_sd_n         // JXADC pin 4: Pmod AMP2 on
 );
     // ================================================================ reset
     reg rst_s0, sys_reset;
@@ -157,7 +167,7 @@ module Integration_Top #(
     wire signed [31:0] view_upnl3 = show_ma ? bot_upnl3 : squad_upnl[127:96];
     // switches, synchronised to clk
     reg  [5:0]  osw_s0, osw;
-    reg         view_s0, bot_view, ords_s0, ords_sw;
+    reg         view_s0, bot_view, ords_s0, ords_sw, mute_s0, mute;
     always @(posedge clk) begin
         osw_s0   <= order_sw;
         osw      <= osw_s0;
@@ -165,6 +175,8 @@ module Integration_Top #(
         bot_view <= view_s0;
         ords_s0  <= orders_sw;
         ords_sw  <= ords_s0;
+        mute_s0  <= mute_sw;
+        mute     <= mute_s0;
     end
     // sw14 up (not in the bot view, not on the title): the buttons go to the
     // left OLED's ORDERS list, U / D choose a pending order, C cancels it
@@ -476,6 +488,16 @@ module Integration_Top #(
         end
     end
     assign led = {fill_led != 0, rej_led != 0, 2'b00, pending_count, screen_state, 4'b0000};
+
+    // ================================================================ Douglas: sound
+    wire [2:0] sound_now;
+    B_sound_top #(.SAMPLE_SHIFT(SOUND_SAMPLE_SHIFT)) douglas_sound (
+        .clk(clk), .rst(sys_reset), .mute(mute),
+        .btn_pulse(d_btn_pulse), .screen_state(screen_state),
+        .ord_req(ord_req), .fill(fill),
+        .aud_pwm(aud_pwm), .aud_gain(aud_gain), .aud_sd_n(aud_sd_n),
+        .now_playing(sound_now)
+    );
 endmodule
 
 `default_nettype wire

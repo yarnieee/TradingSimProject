@@ -38,6 +38,7 @@ set all_tbs {
     tb_exec_engine
     tb_ticket_screen
     tb_B_order_top
+    tb_sound
 }
 if {[info exists only_tbs]} { set tbs $only_tbs } else { set tbs $all_tbs }
 

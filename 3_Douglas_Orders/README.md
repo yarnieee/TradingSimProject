@@ -17,6 +17,9 @@ limit, stop, stop-loss and take-profit orders in an 8-slot book, and draws the o
 | `submodules/ticket_screen.v` | draws the ticket page and the ORDERS list |
 | `submodules/font_3x5.v` | 3x5 font (63 characters) |
 | `submodules/b_bin2bcd_seq.v`, `ticket_layout.vh` | helpers for the page |
+| `B_sound_top.v` | sound effects: which sound each game event plays, by priority; mute |
+| `submodules/sound_synth.v` | plays a sound: two tone voices and a noise voice, PWM out on JXADC pin 1 |
+| `tb/sound_to_wav.py` | turns `tb_sound`'s samples into `.wav` files |
 | `tb/` | tests |
 | `board_test/` | board test of this part on its own (not in the team build) |
 

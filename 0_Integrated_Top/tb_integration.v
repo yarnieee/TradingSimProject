@@ -21,8 +21,8 @@ module tb_integration;
     wire [3:0]  an;
 
     localparam DAY = 4000;
-    Integration_Top #(.DAY_MAX_COUNT(DAY), .DEBOUNCE_CTR(32'd50)) dut (
-        .clk(clk), .rst(rst), .order_sw(order_sw), .view_sw(view_sw), .orders_sw(orders_sw),
+    Integration_Top #(.DAY_MAX_COUNT(DAY), .DEBOUNCE_CTR(32'd50), .SOUND_SAMPLE_SHIFT(4)) dut (
+        .clk(clk), .rst(rst), .order_sw(order_sw), .view_sw(view_sw), .orders_sw(orders_sw), .mute_sw(1'b0),
         .btnU(btnU), .btnD(btnD), .btnL(btnL), .btnR(btnR), .btnC(btnC),
         .JA(JA), .JB(JB), .led(led), .an(an), .seg(seg)
     );
@@ -84,6 +84,20 @@ module tb_integration;
             if (dut.matthew_display.bar_level == 2'd3) saw_r = 1;
         end
         tr_d <= dut.time_remaining;
+    end
+
+    // sounds heard during the game (B_sound_top's now_playing: 1 click .. 5 game end),
+    // and whether a bell ever came straight after a woosh
+    integer saw_snd [0:5];
+    integer woosh_bell = 0;
+    reg [2:0] snd_d = 3'd0;
+    initial for (q = 0; q < 6; q = q + 1) saw_snd[q] = 0;
+    always @(posedge clk) begin
+        if (dut.sound_now != snd_d) begin
+            saw_snd[dut.sound_now] = saw_snd[dut.sound_now] + 1;
+            if (snd_d == 3'd3 && dut.sound_now == 3'd4) woosh_bell = woosh_bell + 1;
+        end
+        snd_d <= dut.sound_now;
     end
 
     // the six places are 1..6, each once
@@ -290,8 +304,15 @@ module tb_integration;
         $display("     bot_squad: %0d trades; values %0d %0d %0d %0d c", n_squad,
                  dut.squad_value[31:0], dut.squad_value[63:32], dut.squad_value[95:64], dut.squad_value[127:96]);
 
+        // ---------------- sound
+        check(saw_snd[1] > 0 && saw_snd[2] > 0, "sound: buttons click, the quantity blips");
+
         // ---------------- game over: everything stops
         while (dut.screen_state != `UI_GAME_END) @(posedge clk);
+        repeat (10) @(posedge clk);
+        check(dut.sound_now == 3'd5, "sound: the game-end tune plays at game over");
+        // (a woosh lasts 2.6 ms here, in a 5 ms game: by now one has ended and rung its bell)
+        check(saw_snd[3] > 0 && woosh_bell > 0, "sound: an order whooshes, then its fill rings the bell");
         repeat (DAY) @(posedge clk);
         begin : frozen
             reg [31:0] d0, v0; reg [15:0] p0; integer s0, b0, t0, pn; reg [63:0] dd;

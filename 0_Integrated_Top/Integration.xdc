@@ -19,6 +19,8 @@ set_property -dict { PACKAGE_PIN W13   IOSTANDARD LVCMOS33 } [get_ports {order_s
 set_property -dict { PACKAGE_PIN R2    IOSTANDARD LVCMOS33 } [get_ports view_sw]
 ## Pending orders on the left OLED (cancel): sw[14] (top port orders_sw)
 set_property -dict { PACKAGE_PIN T1    IOSTANDARD LVCMOS33 } [get_ports orders_sw]
+## Mute: sw[13] (top port mute_sw)
+set_property -dict { PACKAGE_PIN U1    IOSTANDARD LVCMOS33 } [get_ports mute_sw]
 
 ## LEDs
 set_property -dict { PACKAGE_PIN U16   IOSTANDARD LVCMOS33 } [get_ports {led[0]}]
@@ -131,3 +133,9 @@ set_multicycle_path -setup 4 -to [get_cells -hierarchical -filter {NAME =~ *disp
 set_multicycle_path -hold 3  -to [get_cells -hierarchical -filter {NAME =~ *display_numbers_inst/load_v_reg* && IS_SEQUENTIAL}]
 set_multicycle_path -setup 4 -to [get_cells -hierarchical -filter {NAME =~ *display_numbers_inst/cur_neg_reg* && IS_SEQUENTIAL}]
 set_multicycle_path -hold 3  -to [get_cells -hierarchical -filter {NAME =~ *display_numbers_inst/cur_neg_reg* && IS_SEQUENTIAL}]
+
+## Sound on JXADC (top row): pin 1 audio, pin 2 gain, pin 4 amplifier on (a Pmod AMP2;
+## a small speaker or piezo goes between pin 1 and GND)
+set_property -dict { PACKAGE_PIN J3    IOSTANDARD LVCMOS33 } [get_ports aud_pwm]
+set_property -dict { PACKAGE_PIN L3    IOSTANDARD LVCMOS33 } [get_ports aud_gain]
+set_property -dict { PACKAGE_PIN N2    IOSTANDARD LVCMOS33 } [get_ports aud_sd_n]

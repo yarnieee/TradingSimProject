@@ -152,6 +152,7 @@ module tb_exec_engine;
     endtask
 
     integer b_fill, b_rej, b_ins, b_ack, b_pair;
+    integer q_fit;
     task mark;
         begin
             b_fill = n_fill; b_rej = n_rej; b_ins = n_ins; b_ack = n_ack; b_pair = n_pair;
@@ -204,6 +205,18 @@ module tb_exec_engine;
 
         mark; book_full = 1; submit(0, `SIDE_BUY, `OT_LMT, 1, 12000); step(10); book_full = 0;
         check(n_rej == b_rej + 1 && last_rej == `RJ_BOOK_FULL && n_ins == b_ins, "E3 BOOK_FULL");
+
+        // a new pending BUY is costed at its trigger, not today's price (stock 0, ask 123.05):
+        // a limit at 100.00 that fits only at its trigger is placed; a stop at 140.00 that
+        // fits only at the ask is rejected
+        q_fit = (cash - 100) / 10000;
+        mark; submit(0, `SIDE_BUY, `OT_LMT, q_fit, 10000); step(10);
+        check(q_fit * 12305 + 100 > cash && n_ins == b_ins + 1 && n_rej == b_rej,
+              "E3 LMT BUY affordable at its trigger only: placed");
+        q_fit = (cash - 100) / 12305;
+        mark; submit(0, `SIDE_BUY, `OT_STP, q_fit, 14000); step(10);
+        check(q_fit * 14000 + 100 > cash && n_rej == b_rej + 1 && last_rej == `RJ_NO_CASH && n_ins == b_ins,
+              "E3 STP BUY affordable at the price only: NO_CASH");
 
         // ---------------------------------------------------- E4 pending submit -> insert
         mark;

@@ -5,10 +5,12 @@
 // exec_engine: the single arbiter between
 //   - submits from order_entry (priority), held in a one-deep buffer, and
 //   - trigger requests from order_book.
-// Every job goes IDLE -> CHECK -> VAL -> EVAL -> POST -> (PAIR) -> IDLE:
+// Every job goes IDLE -> CHECK -> MUL -> VAL -> EVAL -> POST -> (PAIR) -> IDLE:
 //   CHECK  wait for !ledger_busy (Tricia's ledger has settled the last fill), then latch the
 //          execution price: ask for BUY, bid for SELL. A book job keeps the
 //          price the book latched when the trigger was seen.
+//   MUL    register the job's value (price x qty: the trigger for a new LMT / STP,
+//          else the latched price) and whether its stock has a price
 //   VAL    run order_validate on the latched job and register its answer (so the
 //          checks and the actions below are not one long path in one clock)
 //   EVAL   on that answer, exactly one of:
@@ -92,7 +94,8 @@ module exec_engine #(
                ST_EVAL  = 3'd2,
                ST_POST  = 3'd3,
                ST_PAIR  = 3'd4,
-               ST_VAL   = 3'd5;
+               ST_VAL   = 3'd5,
+               ST_MUL   = 3'd6;
 
     localparam [15:0] FEE16 = FEE;
 
@@ -161,9 +164,12 @@ module exec_engine #(
     wire [2:0] v_code;
     reg        v_ok_r;                 // order_validate's answer, registered in VAL
     reg  [2:0] v_code_r;
-    order_validate #(.FEE(FEE), .POS_MAX(POS_MAX)) u_validate (
+    reg  [23:0] cand_value;            // price x qty, registered in MUL
+    reg         cand_open;             // the stock has a price, registered in MUL
+    order_validate #(.FEE(FEE), .POS_MAX(POS_MAX), .EXT_VALUE(1)) u_validate (
         .game_live   (game_live),
-        .mkt_open    (cand_mid != 16'd0),
+        .mkt_open    (cand_open),
+        .value_in    (cand_value),
         .retest      (cand_book),
         .stock       (cand_stock),
         .side        (cand_side),
@@ -277,8 +283,14 @@ module exec_engine #(
                     if (!ledger_busy) begin
                         if (!cand_book)
                             cand_px <= (cand_side == `SIDE_SELL) ? cand_bid : cand_ask;
-                        state <= ST_VAL;
+                        state <= ST_MUL;
                     end
+                end
+
+                ST_MUL: begin
+                    cand_value <= (((cand_type != `OT_MKT) && !cand_book) ? cand_trig : cand_px) * cand_qty;
+                    cand_open  <= (cand_mid != 16'd0);
+                    state      <= ST_VAL;
                 end
 
                 ST_VAL: begin

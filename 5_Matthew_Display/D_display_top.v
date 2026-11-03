@@ -237,10 +237,11 @@ module D_display_top #(
     wire [16:0] selected_ask_full = {1'b0, selected_price} + 17'd5;
     wire [15:0] selected_ask = selected_ask_full[16] ? 16'hFFFF : selected_ask_full[15:0];
     // a market buy pays the ask; a limit / stop buy is checked at its trigger (as B does)
-    wire [15:0] buy_price    = (ord_type == `OT_MKT) ? selected_ask : ord_trig;
-    // registered steps (price x quantity, then the checks): the selected price,
-    // the multiply and the cash compare do not have to fit in one clock, and the
-    // result is 2 clocks behind the switches and buttons, which is never seen
+    // registered steps (the price, price x quantity, then the checks): the selected
+    // price, the multiply and the cash compare do not have to fit in one clock, and
+    // the result is 3 clocks behind the switches and buttons, which is never seen
+    reg  [15:0] buy_price;
+    always @(posedge clk) buy_price <= (ord_type == `OT_MKT) ? selected_ask : ord_trig;
     reg  [31:0] buy_notional;
     always @(posedge clk) buy_notional <= {16'd0, buy_price} * {18'd0, quantity};
     wire [32:0] buy_total = {1'b0, buy_notional} + 33'd100;

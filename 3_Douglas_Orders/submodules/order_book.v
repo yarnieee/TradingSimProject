@@ -16,8 +16,9 @@
 //          other leg is removed too: one cancels the other.
 // Cancel : by slot index, from the ORDERS view. Ignored for an empty slot, and
 //          for the slot that is waiting on exec_engine (it is leaving anyway).
-// Scan   : after each tick the FSM walks the slots one per clock with ONE
-//          shared comparator path. On a hit it raises trq with the slot's
+// Scan   : after each tick the FSM walks the slots, two clocks each (LOOK: the
+//          slot's fields and its stock's price into registers; SCAN: spread,
+//          compare, load), with ONE shared comparator path. On a hit it raises trq with the slot's
 //          fields and the fill price, waits for trq_ack, clears the slot and
 //          carries on. A tick that lands mid-scan sets rescan, so slots
 //          already passed are checked against the newest prices too.
@@ -92,7 +93,8 @@ module order_book #(
 );
     localparam S_IDLE = 2'd0,
                S_SCAN = 2'd1,
-               S_WAIT = 2'd2;
+               S_WAIT = 2'd2,
+               S_LOOK = 2'd3;
 
     // ------------------------------------------------------------ slots
     reg [7:0]  valid;
@@ -147,18 +149,19 @@ module order_book #(
     reg [2:0] idx;
     reg       rescan;
 
-    wire [1:0]  sc_stock = s_stock[idx];
-    wire        sc_side  = s_side[idx];
-    wire [1:0]  sc_type  = s_type[idx];
-    wire [15:0] sc_trig  = s_trig[idx];
-
-    reg [15:0] sc_mid;
+    // the slot being checked, registered in S_LOOK (so the slot / price choice
+    // and the spread / compare / load are in different clocks)
+    reg [1:0]  sc_stock, sc_type, sc_brk;
+    reg        sc_side, sc_valid;
+    reg [7:0]  sc_qty;
+    reg [15:0] sc_trig, sc_mid;
+    reg [15:0] look_mid;
     always @* begin
-        case (sc_stock)
-            2'd0:    sc_mid = price0;
-            2'd1:    sc_mid = price1;
-            2'd2:    sc_mid = price2;
-            default: sc_mid = price3;
+        case (s_stock[idx])
+            2'd0:    look_mid = price0;
+            2'd1:    look_mid = price1;
+            2'd2:    look_mid = price2;
+            default: look_mid = price3;
         endcase
     end
 
@@ -175,7 +178,8 @@ module order_book #(
             default:               sc_cond = 1'b0;
         endcase
     end
-    wire sc_hit = valid[idx] && sc_cond && (sc_mid != 16'd0);   // no price: no trigger
+    // still valid now, as in S_LOOK (a slot freed or filled in between is not used)
+    wire sc_hit = sc_valid && valid[idx] && sc_cond && (sc_mid != 16'd0);   // no price: no trigger
 
     wire new_tick = tick && scan_en;
 
@@ -207,8 +211,20 @@ module order_book #(
                     if (new_tick || rescan) begin
                         idx    <= 3'd0;
                         rescan <= 1'b0;
-                        state  <= S_SCAN;
+                        state  <= S_LOOK;
                     end
+                end
+                S_LOOK: begin
+                    if (new_tick) rescan <= 1'b1;
+                    sc_valid <= valid[idx];
+                    sc_stock <= s_stock[idx];
+                    sc_side  <= s_side[idx];
+                    sc_type  <= s_type[idx];
+                    sc_qty   <= s_qty[idx];
+                    sc_trig  <= s_trig[idx];
+                    sc_brk   <= s_brk[idx];
+                    sc_mid   <= look_mid;
+                    state    <= S_SCAN;
                 end
                 S_SCAN: begin
                     if (new_tick) rescan <= 1'b1;
@@ -218,14 +234,15 @@ module order_book #(
                         trq_stock <= sc_stock;
                         trq_side  <= sc_side;
                         trq_type  <= sc_type;
-                        trq_qty   <= s_qty[idx];
+                        trq_qty   <= sc_qty;
                         trq_px    <= (sc_side == `SIDE_SELL) ? sc_bid : sc_ask;
-                        trq_brk   <= s_brk[idx];
+                        trq_brk   <= sc_brk;
                         state     <= S_WAIT;
                     end else if (idx == 3'd7) begin
                         state <= S_IDLE;
                     end else begin
-                        idx <= idx + 3'd1;
+                        idx   <= idx + 3'd1;
+                        state <= S_LOOK;
                     end
                 end
                 S_WAIT: begin
@@ -236,7 +253,7 @@ module order_book #(
                             state <= S_IDLE;
                         end else begin
                             idx   <= idx + 3'd1;
-                            state <= S_SCAN;
+                            state <= S_LOOK;
                         end
                     end
                 end

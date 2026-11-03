@@ -26,7 +26,7 @@ module tb_order_validate;
         .game_live(game_live), .mkt_open(mkt_open), .retest(retest), .stock(stock), .side(side),
         .otype(otype), .qty(qty), .trig(trig), .px_exec(px_exec), .cash(cash),
         .pos0(pos0), .pos1(pos1), .pos2(pos2), .pos3(pos3),
-        .book_full(book_full), .brk(brk), .free_cnt(free_cnt), .ok(ok), .reject_code(code)
+        .book_full(book_full), .brk(brk), .value_in(24'd0), .free_cnt(free_cnt), .ok(ok), .reject_code(code)
     );
 
     integer n_pass = 0, n_fail = 0;

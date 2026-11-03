@@ -657,3 +657,17 @@ cursor while it is on a ticker (`tb_matthew_game_fsm`: 4 new checks, fail on the
 `sound_synth.v`: the segment table's output is registered, so it is not in the same clock as the
 fades (every sample of every sound unchanged). All 34 testbenches pass. Right OLED and timing wait
 for the board and Vivado reports.
+
+## 2026-11-03: the four failing paths from Tricia's build (WNS -0.542 ns, 42 endpoints)
+
+**Asked for:** fix the timing failures Tricia's report found on branch-team-integration.
+
+**Done by the AI:** (1) `order_book.v`: the trigger scan takes two clocks a slot: S_LOOK registers
+the slot's fields, its stock's price and whether it is valid; S_SCAN does the spread, compare and
+load (a slot freed or filled in between is not used). (2) `D_display_top.v`: the buy price is
+registered before price x quantity. (3) `exec_engine.v`: a MUL step registers price x qty (the
+trigger for a new pending order) and whether the stock has a price; `order_validate.v` takes it
+through `value_in` (EXT_VALUE). (4) Tricia's `bot_trader.v`: PREP registers ask / bid, PREP2 the
+cost. `tb_exec_engine`: 2 new checks that a new pending buy is costed at its trigger (fail on a
+planted bug, pass on main's engine); planted bugs in the order book and the bot are caught too.
+All 34 testbenches pass. Needs a Vivado build to confirm.

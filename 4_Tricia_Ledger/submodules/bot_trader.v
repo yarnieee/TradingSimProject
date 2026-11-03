@@ -18,11 +18,12 @@
 //      to go high and then low again before moving to the next stock.
 // tick_done pulses when all 4 stocks are finished (bot's cash/positions final).
 //
-//   IDLE --tick--> UPD -> PREP -> DECIDE --trade--> SEND -> WAIT_HI -> WAIT_LO -> NEXT
-//                   ^                \--no trade--------------------------------> NEXT
-//                   \------------------------ k < 3 ---------------------------- NEXT --k = 3--> IDLE
-// PREP registers ask, bid and ask*QTY + FEE, so DECIDE only compares registers.
-// (In one clock, price mux -> ask -> multiply -> compare -> fill_price failed 100 MHz.)
+//   IDLE --tick--> UPD -> PREP -> PREP2 -> DECIDE --trade--> SEND -> WAIT_HI -> WAIT_LO -> NEXT
+//                   ^                         \--no trade--------------------------------> NEXT
+//                   \------------------------------ k < 3 --------------------------------- NEXT --k = 3--> IDLE
+// PREP registers ask and bid, PREP2 ask*QTY + FEE, so DECIDE only compares registers.
+// (In one clock, price mux -> ask -> multiply -> compare -> fill_price failed 100 MHz;
+// later price mux -> ask -> multiply alone missed by 0.03 ns.)
 module bot_trader #(
     parameter QTY    = 20,       // shares per buy
     parameter SPREAD = 5,        // cents per side (same as spread_calc)
@@ -55,7 +56,7 @@ module bot_trader #(
 );
     localparam [3:0] IDLE = 4'd0, UPD = 4'd1, DECIDE = 4'd2, SEND = 4'd3,
                      WAIT_HI = 4'd4, WAIT_LO = 4'd5, NEXT = 4'd6, INIT = 4'd7,
-                     PREP = 4'd8;
+                     PREP = 4'd8, PREP2 = 4'd9;
     localparam [15:0] FEE16 = FEE;
     localparam [7:0]  QTY8  = QTY;
 
@@ -97,9 +98,9 @@ module bot_trader #(
     wire [15:0] bid      = (p > SPREAD) ? p - SPREAD : 16'd1;
 
     // 17-bit compares so MA + band can't overflow
-    wire [31:0] buy_cost = ask * QTY + FEE;          // registered in PREP
     reg  [31:0] r_cost;
     reg  [15:0] r_ask, r_bid;
+    wire [31:0] buy_cost = r_ask * QTY + FEE;        // registered in PREP2, from PREP's ask
     wire want_buy  = run && (pos_k == 10'd0) && ({1'b0, p} > {1'b0, ma} + band)
                          && (r_cost <= cash);
     wire want_sell = run && (pos_k != 10'd0) && ({1'b0, p} + band < {1'b0, ma});
@@ -156,9 +157,13 @@ module bot_trader #(
                 else init_slot <= init_slot + 1'b1;
             end
 
-            PREP: begin                              // price maths for stock k, one clock
+            PREP: begin                              // price maths for stock k: bid and ask
                 r_ask  <= ask;
                 r_bid  <= bid;
+                state  <= PREP2;
+            end
+
+            PREP2: begin                             // then the cost of a buy
                 r_cost <= buy_cost;
                 state  <= DECIDE;
             end

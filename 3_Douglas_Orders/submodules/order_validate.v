@@ -32,7 +32,8 @@
 //      near zero that would go negative.
 module order_validate #(
     parameter FEE     = 100,     // cents per execution [ASSUMPTION] flat $1
-    parameter POS_MAX = 1023
+    parameter POS_MAX = 1023,
+    parameter EXT_VALUE = 0      // 1: price x qty comes in on value_in (worked out a clock earlier)
 ) (
     input  wire        game_live,
     input  wire        mkt_open,     // the stock's mid price is non-zero
@@ -51,6 +52,7 @@ module order_validate #(
     input  wire        book_full,
     input  wire [1:0]  brk,          // SL/TP setting (`BRK_*); used on BUYs only
     input  wire [3:0]  free_cnt,     // free book slots, 0..8
+    input  wire [23:0] value_in,     // with EXT_VALUE: the order's price x qty
     output reg         ok,
     output reg  [2:0]  reject_code
 );
@@ -61,7 +63,7 @@ module order_validate #(
     wire [15:0] cost_px     = new_pending ? trig : px_exec;
 
     // 16 x 8 -> 24-bit, one DSP48
-    wire [23:0] value = cost_px * qty;
+    wire [23:0] value = EXT_VALUE ? value_in : cost_px * qty;
 
     reg [9:0] pos_sel;
     always @* begin

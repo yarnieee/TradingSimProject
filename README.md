@@ -72,7 +72,8 @@ are making, what the buttons do on the current screen, and what the switches are
 The progress bar along the top is green, turns yellow at 60 days left and red at 10.
 
 Screens: the right OLED shows the game, the left OLED your order ticket (and title artwork on the
-title screen; the monitor shows both title pictures). The 7-seg shows the quantity being set; LEDs flash on a fill (led 15) or a
+title screen; the monitor shows its own Bull vs Bear title screen with the five bots and a blinking
+PRESS START, drawn by `5_Matthew_Display/title_screen/make_title_screen.py`). The 7-seg shows the quantity being set; LEDs flash on a fill (led 15) or a
 reject (led 14) and show pending orders (led 11-8).
 
 **Buying or selling**

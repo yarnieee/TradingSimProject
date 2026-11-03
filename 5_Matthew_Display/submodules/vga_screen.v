@@ -21,13 +21,15 @@
 //                as dashed lines, dotted lines at the high and low
 // Pixel path (pixel clock, pipelined): counters -> RAM address -> RAM data ->
 // font + graphics -> colour; the syncs are delayed to match.
-// Title screen: the OLEDs' two title pictures side by side, each pixel 6 x 6
-// (x 64..1215, y 72..455), from their own copy in block RAM read on the pixel
-// clock; the chart is hidden.
+// Title screen: one 320 x 180 picture (Bull vs Bear and the five bots, PRESS
+// START blinking), each pixel 4 x 4 over the whole screen, from block RAM read
+// on the pixel clock; text, bar and chart are hidden under it.
+// title_screen/make_title_screen.py draws it and writes title_screen.mem.
 // GAME OVER: the big GAME OVER flashes for about 3 s (36 steps of 2^GO_STEP
 // clocks), then the final results show; the chart is hidden.
 module vga_screen #(
-    parameter GO_STEP = 23              // 2^23 clocks = 84 ms
+    parameter GO_STEP = 23,             // 2^23 clocks = 84 ms
+    parameter TITLE_BLINK = 5           // PRESS START: 2^5 frames on, 2^5 off (about 1 s a blink)
 ) (
     input  wire        clk,             // 100 MHz: character writer
     input  wire        rst,
@@ -270,47 +272,48 @@ module vga_screen #(
         endcase
     end
 
-    // ------------------------------------------------------------ title pictures
-    // ax / ay: the picture pixel of (h, v); asx / asy count its 6 screen pixels;
-    // ar: the right picture (from x 640)
-    (* rom_style = "block" *) reg [3:0] art_l [0:6143];
-    (* rom_style = "block" *) reg [3:0] art_r [0:6143];
-    initial begin
-        $readmemh("title_art_left.mem", art_l);
-        $readmemh("title_art_right.mem", art_r);
-    end
-    function [11:0] art_rgb;                   // the OLEDs' 16 colours, 4 bits each
+    // ------------------------------------------------------------ title screen
+    // One 320 x 180 picture (5_Matthew_Display/title_screen), each pixel 4 x 4,
+    // filling the screen, in its own 16 colours. Colour 15 (PRESS START) blinks:
+    // bright for 2^TITLE_BLINK frames, then the button's colour.
+    // tx / ty: the picture pixel of (h, v), txs / tys count its 4 screen pixels,
+    // t_row: ty x 320, so the address needs no multiply.
+    (* rom_style = "block" *) reg [3:0] title_pic [0:57599];
+    initial $readmemh("title_screen.mem", title_pic);
+    reg  [5:0] t_frame;                        // frames, for the blink
+    wire       t_blink = !t_frame[TITLE_BLINK];
+    function [11:0] title_rgb;                 // keep in step with make_title_screen.py
         input [3:0] c;
+        input       on;
         begin
             case (c)
-                4'h0: art_rgb = 12'h000; 4'h1: art_rgb = 12'h012; 4'h2: art_rgb = 12'h015; 4'h3: art_rgb = 12'h237;
-                4'h4: art_rgb = 12'h99A; 4'h5: art_rgb = 12'hFFE; 4'h6: art_rgb = 12'hFD1; 4'h7: art_rgb = 12'hF60;
-                4'h8: art_rgb = 12'hC11; 4'h9: art_rgb = 12'h1A2; 4'hA: art_rgb = 12'h051; 4'hB: art_rgb = 12'hE96;
-                4'hC: art_rgb = 12'h632; 4'hD: art_rgb = 12'h666; 4'hE: art_rgb = 12'hCA8; default: art_rgb = 12'h2BB;
+                4'h0: title_rgb = 12'h112; 4'h1: title_rgb = 12'h224; 4'h2: title_rgb = 12'h349; 4'h3: title_rgb = 12'hFFF;
+                4'h4: title_rgb = 12'hAAB; 4'h5: title_rgb = 12'h000; 4'h6: title_rgb = 12'hFD2; 4'h7: title_rgb = 12'hF82;
+                4'h8: title_rgb = 12'h3D4; 4'h9: title_rgb = 12'h173; 4'hA: title_rgb = 12'hE33; 4'hB: title_rgb = 12'h812;
+                4'hC: title_rgb = 12'hEDA; 4'hD: title_rgb = 12'h5DF; 4'hE: title_rgb = 12'h226;
+                default: title_rgb = on ? 12'hFF6 : 12'h226;
             endcase
         end
     endfunction
-    reg  [6:0] ax;
-    reg  [5:0] ay;
-    reg  [2:0] asx, asy;
-    reg        ar;
+    reg  [8:0]  tx;
+    reg  [7:0]  ty;
+    reg  [1:0]  txs, tys;
+    reg  [15:0] t_row;
+    initial begin t_frame = 6'd0; tx = 9'd0; ty = 8'd0; txs = 2'd0; tys = 2'd0; t_row = 16'd0; end
     always @(posedge pclk) begin
-        if (h == 11'd63) begin
-            ax <= 7'd0; asx <= 3'd0; ar <= 1'b0;
-        end else if (asx == 3'd5) begin
-            asx <= 3'd0;
-            if (ax == 7'd95) begin ax <= 7'd0; ar <= 1'b1; end
-            else ax <= ax + 7'd1;
-        end else
-            asx <= asx + 3'd1;
-        if (h == 11'd1649) begin                // the next line
-            if (v == 10'd71) begin
-                ay <= 6'd0; asy <= 3'd0;
-            end else if (asy == 3'd5) begin
-                asy <= 3'd0; ay <= ay + 6'd1;
+        if (h == 11'd1649) begin                // the next line starts at the left
+            tx <= 9'd0; txs <= 2'd0;
+            if (v == 10'd749) begin             // and the next frame at the top
+                ty <= 8'd0; tys <= 2'd0; t_row <= 16'd0;
+                t_frame <= t_frame + 6'd1;
+            end else if (tys == 2'd3) begin
+                tys <= 2'd0; ty <= ty + 8'd1; t_row <= t_row + 16'd320;
             end else
-                asy <= asy + 3'd1;
-        end
+                tys <= tys + 2'd1;
+        end else if (txs == 2'd3) begin
+            txs <= 2'd0; tx <= tx + 9'd1;
+        end else
+            txs <= txs + 2'd1;
     end
 
     // ------------------------------------------------------------ pixel pipeline
@@ -320,14 +323,13 @@ module vga_screen #(
     reg  [4:0]  s1_px, s1_ly, s1_bn;
     reg  [3:0]  s1_bp;
     reg         s1_vis, s1_hs, s1_vs;
-    reg  [12:0] art_addr;
-    reg         s1_art, s1_ar;
+    reg  [15:0] art_addr;
+    reg         s1_art;
     wire [10:0] bx = h - 11'd18;               // chart x: day = bx / 16
     always @(posedge pclk) begin
         rd_addr <= {cy, cx};
-        art_addr <= {ay, 6'd0} + {1'b0, ay, 5'd0} + {6'd0, ax};   // ay * 96 + ax
-        s1_art  <= (h >= 11'd64) && (h <= 11'd1215) && (v >= 10'd72) && (v <= 10'd455);
-        s1_ar   <= ar;
+        art_addr <= t_row + {7'd0, tx};           // ty * 320 + tx
+        s1_art  <= (h < 11'd1280) && (v < 10'd720);
         s1_h    <= h;
         s1_v    <= v;
         s1_px   <= px;
@@ -346,13 +348,11 @@ module vga_screen #(
     reg  [3:0]  p_bp;
     reg  [7:0]  p_hc, p_hp;
     reg         p_vis, p_hs, p_vs;
-    reg  [3:0]  p_art_l, p_art_r;
-    reg         p_art, p_ar;
+    reg  [3:0]  p_tpx;
+    reg         p_art;
     always @(posedge pclk) begin
-        p_art_l <= art_l[art_addr];
-        p_art_r <= art_r[art_addr];
+        p_tpx   <= title_pic[art_addr];
         p_art   <= s1_art && ti_p[1];
-        p_ar    <= s1_ar;
         p_h <= s1_h; p_v <= s1_v; p_px <= s1_px; p_ly <= s1_ly; p_bn <= s1_bn; p_bp <= s1_bp;
         p_hc <= h_tab[s1_bn];
         p_hp <= h_tab[(s1_bn == 5'd0) ? 5'd0 : s1_bn - 5'd1];
@@ -392,7 +392,7 @@ module vga_screen #(
     always @(posedge pclk) begin
         s2_text <= glyph ? rgb(rd_data[15:12]) : rgb(rd_data[11:8]);
         s2_gfx_on <= 1'b1;
-        if (p_art)                                  s2_gfx <= art_rgb(p_ar ? p_art_r : p_art_l);
+        if (p_art)                                  s2_gfx <= title_rgb(p_tpx, t_blink);
         else if (in_bar)                            s2_gfx <= bar_on ? bar_rgb : 12'h222;
         else if (in_chart && on_line)               s2_gfx <= rising ? 12'h0F0 : 12'hF44;
         else if (in_chart && on_sl)                 s2_gfx <= 12'hF00;

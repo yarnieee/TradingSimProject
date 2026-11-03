@@ -584,3 +584,16 @@ checks every day 0..120 (fails on planted bugs). `tight_setup_hold_pins.txt` nam
 reject_code / pair_pend: a VAL state now registers order_validate's answer. `risk_metrics.v`: the
 MAC's product is registered before it is added (an extra MAC_END clock). All 31 testbenches pass.
 To be confirmed by the next Vivado build.
+
+## 2026-11-03: new monitor title screen (Bull vs Bear, the five bots, PRESS START)
+
+**Asked for:** a single video-game style start screen on the monitor, Bull vs Bear with the five bots
+in it, each showing its trading style (e.g. OVERNIGHT asleep); the OLEDs unchanged.
+
+**Done by the AI:** `5_Matthew_Display/title_screen/make_title_screen.py` draws a 320 x 180, 16-colour
+picture (title, bull VS bear, MA BOT with glasses and a chart, OVERNIGHT asleep in a nightcap,
+MOMENTUM running on rocket boots, AVG DOWN with a basket by falling stairs, SL / TP with a shield and
+a target, PRESS START) and writes `title_screen.mem` and a preview PNG. `vga_screen.v` shows it 4x
+over the whole screen (one block-RAM picture instead of the OLEDs' two; colour 15 blinks about once a
+second). `tb_vga_title` checks every pixel of five screen lines and the blink; it fails on planted
+bugs (no blink, wrong row stride, wrong scale). All 31 testbenches pass.

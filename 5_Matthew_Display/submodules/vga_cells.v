@@ -20,7 +20,7 @@
 //   row 27      the order being made, or the last result
 //   row 28      NOW: which buttons to press on this screen (highlighted bar)
 //   row 29      the switches and what they are set to
-// TITLE (rows 2-27 instead): the title pictures (vga_screen) and PRESS BTNC TO START.
+// TITLE: vga_screen's title picture covers the whole screen (these cells are hidden under it).
 // GAME OVER (rows 2-27 instead): a big flashing GAME OVER for a few seconds,
 // then GAME OVER at the top and the final results, 1st to 6th, below it.
 //

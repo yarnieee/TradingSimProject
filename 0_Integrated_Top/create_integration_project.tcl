@@ -38,6 +38,7 @@ add_person "$repo/3_Douglas_Orders"
 add_person "$repo/4_Tricia_Ledger"
 add_person "$repo/5_Matthew_Display"
 add_list sources_1 [glob "$repo/5_Matthew_Display/title_art_*.mem"]
+add_list sources_1 [glob "$repo/5_Matthew_Display/title_screen.mem"]
 
 set incdirs [list "$repo/1_Shared_Modules" "$repo/3_Douglas_Orders/submodules"]
 set_property include_dirs $incdirs [get_filesets sources_1]

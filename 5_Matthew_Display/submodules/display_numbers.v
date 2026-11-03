@@ -101,7 +101,8 @@ module display_numbers #(
     // ------------------------------------------------------------ which stock / log entry
     reg [2:0] k;               // stock 0-3, log entry 0-4 or bot 0-4 of this field
     always @* begin
-        if      (idx >= `DN_LBPNL0)  k = idx - `DN_LBPNL0;
+        if      (idx >= `DN_PCT0)    k = idx - `DN_PCT0;
+        else if (idx >= `DN_LBPNL0)  k = idx - `DN_LBPNL0;
         else if (idx >= `DN_LBNET0)  k = idx - `DN_LBNET0;
         else if (idx >= `DN_CHI)     k = 3'd0;
         else if (idx >= `DN_CHG0)    k = idx - `DN_CHG0;
@@ -149,6 +150,56 @@ module display_numbers #(
             if (smp > run_hi) run_hi <= smp;
             if (smp < run_lo) run_lo <= smp;
             sc <= sc + 5'd1;
+        end
+    end
+
+    // each stock's 30-day change in %, as basis points: |price - price 30 days
+    // ago| x 10000 / price 30 days ago, worked out for one stock at a time
+    // (33 clocks: difference, x 10000, 30 restoring-division steps, store) and
+    // kept between rounds; 999.99% at most
+    reg  [1:0]  pk;                            // stock being worked out
+    reg  [5:0]  pstep;
+    reg  [15:0] p_diff, p_ref;
+    reg         p_neg;
+    reg  [29:0] p_q;                           // the dividend, shifted into the quotient
+    reg  [15:0] p_rem;
+    reg  [16:0] pct_bp  [0:3];
+    reg         pct_neg [0:3];
+    reg  [15:0] p_px, p_px_ref;
+    always @* begin
+        case (pk)
+            2'd0:    begin p_px = price0; p_px_ref = ref_price0; end
+            2'd1:    begin p_px = price1; p_px_ref = ref_price1; end
+            2'd2:    begin p_px = price2; p_px_ref = ref_price2; end
+            default: begin p_px = price3; p_px_ref = ref_price3; end
+        endcase
+    end
+    wire [16:0] p_rem_sh = {p_rem, p_q[29]};
+    wire        p_fits   = (p_rem_sh >= {1'b0, p_ref});
+    always @(posedge clk) begin
+        if (rst) begin
+            pk <= 2'd0; pstep <= 6'd0;
+            pct_bp[0] <= 17'd0; pct_bp[1] <= 17'd0; pct_bp[2] <= 17'd0; pct_bp[3] <= 17'd0;
+            pct_neg[0] <= 1'b0; pct_neg[1] <= 1'b0; pct_neg[2] <= 1'b0; pct_neg[3] <= 1'b0;
+        end else begin
+            pstep <= pstep + 6'd1;
+            if (pstep == 6'd0) begin
+                p_neg  <= p_px < p_px_ref;
+                p_diff <= (p_px < p_px_ref) ? p_px_ref - p_px : p_px - p_px_ref;
+                p_ref  <= p_px_ref;
+            end else if (pstep == 6'd1) begin
+                p_q   <= p_diff * 14'd10000;
+                p_rem <= 16'd0;
+            end else if (pstep <= 6'd31) begin
+                p_rem <= p_fits ? p_rem_sh - {1'b0, p_ref} : p_rem_sh[15:0];
+                p_q   <= {p_q[28:0], p_fits};
+            end else begin
+                pct_bp[pk]  <= (p_ref == 16'd0) ? 17'd0 :
+                               (p_q > 30'd99999) ? 17'd99999 : p_q[16:0];
+                pct_neg[pk] <= p_neg && (p_ref != 16'd0);
+                pk    <= pk + 2'd1;
+                pstep <= 6'd0;
+            end
         end
     end
 
@@ -216,7 +267,11 @@ module display_numbers #(
             `DN_CHI:    val = {16'd0, chart_hi};
             `DN_CLO:    val = {16'd0, chart_lo};
             default: begin
-                if (idx >= `DN_LBPNL0) begin                                             // bot k: value - start
+                if (idx >= `DN_PCT0) begin                                               // 30-day % of stock k
+                    val_neg = pct_neg[k[1:0]];
+                    val     = {15'd0, pct_bp[k[1:0]]};
+                end
+                else if (idx >= `DN_LBPNL0) begin                                        // bot k: value - start
                     val_neg = lb_k < START_CASH;
                     val     = val_neg ? START_CASH - lb_k : lb_k - START_CASH;
                 end

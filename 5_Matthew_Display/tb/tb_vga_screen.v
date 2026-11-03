@@ -12,6 +12,7 @@ module tb_vga_screen;
     reg rst = 1;
     wire [3:0] r, g, b;
     wire hs, vs;
+    reg  [1:0] bar_level = 2'd1;                    // yellow: 60 to 11 days left
 
     vga_screen dut (
         .clk(clk), .rst(rst), .pclk(pclk), .pix_rst(rst),
@@ -22,7 +23,7 @@ module tb_vga_screen;
         .stock_up(4'b0101), .num_f(), .num_rd(33'd0), .zero({`DN_N{1'b1}}), .bot_sel(3'd0), .order({3'd5, 3'd4, 3'd3, 3'd2, 3'd1, 3'd0}),
         .book_valid(8'd0), .book_side(8'd0), .book_stock(16'd0), .book_type(16'd0), .book_leg(8'd0),
         .stock_samples({30{16'd10000}}), .sel_sl(16'd0), .sel_tp(16'd0),
-        .progress_w(11'd621),                       // half of the 1242-pixel bar
+        .progress_w(11'd621), .bar_level(bar_level), // half of the 1242-pixel bar
         .vga_r(r), .vga_g(g), .vga_b(b), .hsync(hs), .vsync(vs)
     );
 
@@ -96,6 +97,12 @@ module tb_vga_screen;
         check(px[100] == 12'hFC0 && px[638] == 12'hFC0, "progress bar filled up to half (x 18..638)");
         check(px[639] == 12'h222 && px[1259] == 12'h222, "rest of the progress bar dark");
         check(px[5] == 12'h000 && px[1270] == 12'h000, "nothing either side of the progress bar");
+        bar_level = 2'd0;                           // more than 60 days left
+        grab_line(35);
+        check(px[100] == 12'h0D2 && px[638] == 12'h0D2 && px[639] == 12'h222, "progress bar green above 60 days left");
+        bar_level = 2'd3;                           // 10 days or fewer
+        grab_line(35);
+        check(px[100] == 12'hF22 && px[638] == 12'hF22 && px[639] == 12'h222, "progress bar red at 10 days left");
 
         if (n_fail == 0) $display("PASS: tb_vga_screen (%0d checks)", n_pass);
         else             $display("FAIL: tb_vga_screen (%0d failed, %0d passed)", n_fail, n_pass);

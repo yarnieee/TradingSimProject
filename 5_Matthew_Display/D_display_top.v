@@ -351,6 +351,12 @@ module D_display_top #(
     );
 
 
+    // game progress bar colour: green, yellow from 60 days left, red from 10
+    // (bar_level 0 green, 1 yellow, 3 red: one bit changes at a time, for the VGA clock)
+    reg  [1:0]  bar_level;
+    always @(posedge clk)
+        bar_level <= (time_remaining <= 32'd10) ? 2'd3 : (time_remaining <= 32'd60) ? 2'd1 : 2'd0;
+
     // game progress bar: days gone / all days, as 0..96 pixels (registered)
     wire [31:0] days_gone = (time_remaining < FINAL_TRADING_DAY) ? FINAL_TRADING_DAY - time_remaining : 32'd0;
     reg  [6:0]  progress_w;
@@ -385,7 +391,7 @@ module D_display_top #(
         .book_valid(book_valid), .book_side(book_side), .book_stock(book_stock),
         .book_type(book_type), .book_leg(book_leg),
         .stock_samples(selected_samples_30), .sel_sl(sel_sl), .sel_tp(sel_tp),
-        .progress_w(vga_progress_w),
+        .progress_w(vga_progress_w), .bar_level(bar_level),
         .vga_r(vga_r), .vga_g(vga_g), .vga_b(vga_b), .hsync(vga_hs), .vsync(vga_vs)
     );
 
@@ -418,7 +424,7 @@ module D_display_top #(
         .bot_signal(bot_signal),
         .sel_sl(sel_sl),
         .sel_tp(sel_tp),
-        .progress_w(progress_w),
+        .progress_w(progress_w), .bar_level(bar_level),
         .pixel_data(pixel_data_game_R)
     );
 

@@ -525,3 +525,17 @@ stocks' histories through a mux). `risk_metrics.v`: drawdown numerator registere
 on). `Integration.xdc`: multicycle filters match registers only. New checks in
 `tb_portfolio_history` and `tb_display_numbers`, each failing on planted bugs or the old code. All 30
 testbenches pass. Not yet confirmed in Vivado.
+
+## 2026-11-03: 30-day % change on the monitor; progress bar colour
+
+**Asked for:** show each stock's 30-day movement in % on the VGA market table (LUTs at 81%); the
+progress bar green, yellow from 60 days left, red from 10.
+
+**Done by the AI:** `display_numbers.v`: one sequential divider works out |price - price 30 days
+ago| x 10000 / price 30 days ago for one stock at a time (33 clocks each), capped at 999.99%; new
+fields `DN_PCT0..3` (`trading_defs.vh`). `vga_cells.v`: market rows show price, $ change, arrow and %
+(UP / DOWN text removed for room). `D_display_top.v` works out the bar colour from the days left;
+`vga_screen.v` (synchronised to the pixel clock) and `OLED_Renderer.v` draw it. Tests: % values,
+the cap and sign in `tb_display_numbers`; the market row text in `tb_vga_leaderboard`; all three bar
+colours in `tb_vga_screen`; the colour against the days left over a whole game in `tb_integration`.
+Each fails on planted bugs. All 30 testbenches pass.

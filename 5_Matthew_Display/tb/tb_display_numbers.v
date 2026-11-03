@@ -147,6 +147,11 @@ module tb_display_numbers;
         check(`DN_CHG0 + 1, 32'h00000990, 1, "MCD down $9.90 in 30 days");
         check(`DN_CHG0 + 2, 32'h00000000, 0, "NVDA unchanged");
         check(`DN_CHG0 + 3, 32'h00000010, 1, "GME down $0.10");
+        // the same as % of the price 30 days ago, in basis points (rounded toward zero)
+        check(`DN_PCT0,     32'h00000672, 0, "AMD up 6.72% (1345 / 20000)");
+        check(`DN_PCT0 + 1, 32'h00000314, 1, "MCD down 3.14% (990 / 31500)");
+        check(`DN_PCT0 + 2, 32'h00000000, 0, "NVDA 0.00%");
+        check(`DN_PCT0 + 3, 32'h00000040, 1, "GME down 0.40% (10 / 2500)");
         check(`DN_CHI,      32'h00032150, 0, "chart high $321.50");
         check(`DN_CLO,      32'h00030000, 0, "chart low $300.00");
         check(`DN_LBNET0 + 2, 32'h00987550, 0, "leaderboard: bot 2 worth $9875.50");
@@ -189,6 +194,12 @@ module tb_display_numbers;
         #1;
         if (bad_rank == 0) n_pass = n_pass + 1;
         else begin n_fail = n_fail + 1; $display("FAIL: ranks / order mixed rounds on %0d clocks", bad_rank); end
+
+        // a rise of more than 999.99% shows 999.99; a large exact one in full
+        pr3 = 16'd60000; pr0 = 16'd65534;
+        refresh;
+        check(`DN_PCT0 + 3, 32'h00099999, 0, "GME 25.00 -> 600.00 (+2300%) shows 999.99");
+        check(`DN_PCT0,     32'h00022767, 0, "AMD 200.00 -> 655.34: +227.67%");
 
         if (n_fail == 0) $display("PASS: tb_display_numbers (%0d checks)", n_pass);
         else             $display("FAIL: tb_display_numbers (%0d failed, %0d passed)", n_fail, n_pass);

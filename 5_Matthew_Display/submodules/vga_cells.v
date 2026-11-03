@@ -12,7 +12,7 @@
 //
 //   row 0       title bar                                      days left
 //   row 1       game progress bar (graphics)
-//   rows 2-7    MARKET: price, 30-day change, trend | YOUR PORTFOLIO
+//   rows 2-7    MARKET: price, 30-day change $ / %  | YOUR PORTFOLIO
 //   rows 9-19   <stock> LAST 30 DAYS: chart with    | HOLDINGS (rows 9-14)
 //               high / low and SL / TP prices       | PENDING ORDERS (rows 16-25)
 //   rows 20-26  LEADERBOARD: you and the 5 bots in  |
@@ -291,8 +291,9 @@ module vga_cells (
             else                   begin num_f = `DN_ORDTOT; d_w = 7'd12; d_p = col - 7'd54; end
         end else if (left) begin
             if (row >= 5'd4 && row <= 5'd7) begin                                 // market
-                if (cl <= 7'd15) begin num_f = `DN_PX0 + mk;  d_w = 7'd9;  d_p = cl - 7'd7; end
-                else             begin num_f = `DN_CHG0 + mk; d_sgn = 1'b1; d_w = 7'd10; d_p = cl - 7'd17; end
+                if (cl <= 7'd14)      begin num_f = `DN_PX0 + mk;  d_w = 7'd8; d_p = cl - 7'd7; end
+                else if (cl <= 7'd23) begin num_f = `DN_CHG0 + mk; d_sgn = 1'b1; d_w = 7'd8; d_p = cl - 7'd16; end
+                else begin num_f = `DN_PCT0 + mk; d_sgn = 1'b1; d_prefix = 8'd0; d_w = 7'd7; d_p = cl - 7'd26; end
             end else if (row >= 5'd10 && row <= 5'd19) begin                      // chart labels
                 num_f = (row == 5'd10) ? `DN_CHI : (row == 5'd19) ? `DN_CLO :
                         (row == 5'd14) ? `DN_SL  : `DN_TP;
@@ -426,18 +427,18 @@ module vga_cells (
         // ------------------------------------------------------------ MARKET (left, rows 3-7)
         else if (row == 5'd3 && left) begin                  // column names
             fg = K_GREY;
-            ch = s64("  STOCK    PRICE    30 DAYS TREND                               ", cl);
+            ch = s64("  STOCK   PRICE    30-DAY CHANGE                                ", cl);
         end
-        else if (row >= 5'd4 && row <= 5'd7 && left) begin   // > AMD   $207.02   -$12.34  v DOWN
+        else if (row >= 5'd4 && row <= 5'd7 && left) begin   // > AMD  $207.02  -$12.34 v  -5.63%
             if (cl == 7'd0)                       begin ch = (mk == s) ? ">" : " "; fg = K_YELLOW; end
             else if (cl >= 7'd2 && cl <= 7'd5)    ch = ticker_ch(mk, cl - 7'd2);
-            else if (cl >= 7'd7 && cl <= 7'd15)   ch = num_char;
-            else if (cl >= 7'd17 && cl <= 7'd26) begin
+            else if (cl >= 7'd7 && cl <= 7'd14)   ch = num_char;
+            else if ((cl >= 7'd16 && cl <= 7'd23) || (cl >= 7'd26 && cl <= 7'd32)) begin
                 ch = num_char;
                 fg = num_zero ? K_WHITE : num_neg ? K_RED : K_GREEN;
             end
-            else if (cl == 7'd28)                 begin ch = up[mk] ? 8'h80 : 8'h81; fg = up[mk] ? K_GREEN : K_RED; end
-            else if (cl >= 7'd30 && cl <= 7'd33)  begin ch = s16(up[mk] ? "UP              " : "DOWN            ", cl - 7'd30); fg = up[mk] ? K_GREEN : K_RED; end
+            else if (cl == 7'd25)                 begin ch = up[mk] ? 8'h80 : 8'h81; fg = up[mk] ? K_GREEN : K_RED; end
+            else if (cl == 7'd33)                 begin ch = "%"; fg = K_WHITE; end
             if (mk == s) bg = K_ROW;                          // the selected stock
             if ((screen_state == `UI_STOCKS) && (menu_selection == {2'b00, mk} + 4'd2)) begin
                 bg = K_YELLOW; fg = K_BLACK;                  // the stock the cursor is on

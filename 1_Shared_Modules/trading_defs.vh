@@ -99,7 +99,8 @@
 `define DN_CLO     68   // selected stock: lowest price of the last 30 days
 `define DN_LBNET0  69   // leaderboard: bot 0..4 value (0 = moving average, 1-4 = bot_squad), DN_LBNET0 + n
 `define DN_LBPNL0  74   // leaderboard: bot 0..4 value - starting cash, DN_LBPNL0 + n
-`define DN_N       79
+`define DN_PCT0    79   // stock 0..3: 30-day change in basis points (-1234 = -12.34%), DN_PCT0 + k
+`define DN_N       83
 
 // the bots, in leaderboard and bot-view order
 `define BOTS       5

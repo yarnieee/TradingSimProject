@@ -71,6 +71,21 @@ module tb_integration;
         for (w = 0; w < 200 && !dut.tick; w = w + 1) begin
             @(posedge clk); if (dut.squad_trade && dut.squad_bot == 2'd1) bad_day = bad_day + 1; end
     end
+    // the progress bar colour follows the days left (one clock later): green, then
+    // yellow from 60 days left, red from 10; and each colour is seen in a game
+    integer bad_bar = 0, saw_g = 0, saw_y = 0, saw_r = 0;
+    reg [31:0] tr_d;
+    always @(posedge clk) begin
+        if (!dut.sys_reset && tr_d == dut.time_remaining) begin
+            if (dut.matthew_display.bar_level !== ((tr_d <= 10) ? 2'd3 : (tr_d <= 60) ? 2'd1 : 2'd0))
+                bad_bar = bad_bar + 1;
+            if (dut.matthew_display.bar_level == 2'd0) saw_g = 1;
+            if (dut.matthew_display.bar_level == 2'd1) saw_y = 1;
+            if (dut.matthew_display.bar_level == 2'd3) saw_r = 1;
+        end
+        tr_d <= dut.time_remaining;
+    end
+
     // the six places are 1..6, each once
     function places_ok;
         input [17:0] r;
@@ -288,6 +303,8 @@ module tb_integration;
             check(dut.portfolio_value == v0, "game over: your net worth stays at the final value");
             check(n_squad == s0 && dut.bot_trades == b0, "game over: no bot trades any more");
             check(dut.time_remaining == 0, "game over: no days left");
+            check(bad_bar == 0 && saw_g && saw_y && saw_r,
+                  "progress bar green, yellow from 60 days left, red from 10");
             // return % and max drawdown (basis points) on the portfolio panel
             pn = dut.pnl;
             dd = ({32'd0, dut.tricia_portfolio.peak - dut.equity} * 64'd10000) / dut.tricia_portfolio.peak;

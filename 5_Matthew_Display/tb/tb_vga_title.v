@@ -21,7 +21,7 @@ module tb_vga_title;
         .bot_sel(3'd0), .order({3'd5, 3'd4, 3'd3, 3'd2, 3'd1, 3'd0}),
         .book_valid(8'd0), .book_side(8'd0), .book_stock(16'd0), .book_type(16'd0), .book_leg(8'd0),
         .stock_samples({30{16'd10000}}), .sel_sl(16'd0), .sel_tp(16'd0),
-        .progress_w(11'd0),
+        .progress_w(11'd0), .bar_level(2'd0),
         .vga_r(r), .vga_g(g), .vga_b(b), .hsync(hs), .vsync(vs)
     );
 

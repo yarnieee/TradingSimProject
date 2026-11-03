@@ -13,7 +13,8 @@
 //   The vga_cells logic is given those 4 clocks (multicycle constraint in
 //   Integration.xdc).
 // Graphics, on top of the text (pixel clock):
-//   row 1        progress bar: how much of the game has gone (progress_w of 1242 px)
+//   row 1        progress bar: how much of the game has gone (progress_w of 1242 px),
+//                green, then yellow from 60 days left and red from 10 (bar_level)
 //   rows 10-19   chart of the selected stock, x 18..497 (30 days, 16 px each):
 //                scaled to its own low..high with a sequential divider (worked out
 //                once per frame, after the picture), stop-loss / take-profit levels
@@ -63,6 +64,7 @@ module vga_screen #(
     input  wire [15:0]  sel_sl,          // its stop-loss / take-profit levels (0 = none)
     input  wire [15:0]  sel_tp,
     input  wire [10:0]  progress_w,      // 0..1242: game progress bar width
+    input  wire [1:0]   bar_level,       // its colour: 0 green, 1 yellow, 3 red
     // VGA port
     output reg  [3:0]  vga_r,
     output reg  [3:0]  vga_g,
@@ -133,6 +135,9 @@ module vga_screen #(
     reg  [1:0] go_p, ti_p;
     always @(posedge clk)  begin go_c <= (screen_state == `UI_GAME_END); ti_c <= (screen_state == `UI_TITLE); end
     always @(posedge pclk) begin go_p <= {go_p[0], go_c}; ti_p <= {ti_p[0], ti_c}; end
+    reg  [1:0] bl_c, bl_p;                 // bar_level changes one bit at a time
+    always @(posedge pclk) begin bl_c <= bar_level; bl_p <= bl_c; end
+    wire [11:0] bar_rgb = (bl_p == 2'd3) ? 12'hF22 : bl_p[0] ? 12'hFC0 : 12'h0D2;
 
     // ------------------------------------------------------------ writer: one cell every 4 clocks
     reg  [4:0] wr_row;
@@ -388,7 +393,7 @@ module vga_screen #(
         s2_text <= glyph ? rgb(rd_data[15:12]) : rgb(rd_data[11:8]);
         s2_gfx_on <= 1'b1;
         if (p_art)                                  s2_gfx <= art_rgb(p_ar ? p_art_r : p_art_l);
-        else if (in_bar)                            s2_gfx <= bar_on ? 12'hFC0 : 12'h222;
+        else if (in_bar)                            s2_gfx <= bar_on ? bar_rgb : 12'h222;
         else if (in_chart && on_line)               s2_gfx <= rising ? 12'h0F0 : 12'hF44;
         else if (in_chart && on_sl)                 s2_gfx <= 12'hF00;
         else if (in_chart && on_tp)                 s2_gfx <= 12'h0F0;

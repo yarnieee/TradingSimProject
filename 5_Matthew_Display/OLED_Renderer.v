@@ -38,6 +38,7 @@ module OLED_Renderer (
     input  [15:0] sel_sl,                  // selected stock's SL / TP levels (0 = none)
     input  [15:0] sel_tp,
     input  [6:0]  progress_w,              // 0..96: width of the game-progress bar
+    input  [1:0]  bar_level,               // its colour: 0 green, 1 yellow, 3 red
     output [15:0] pixel_data
 );
     wire [6:0]  pixel_x = pixel_index % 96;
@@ -102,6 +103,7 @@ module OLED_Renderer (
     // game progress: the header's bottom line, filled from the left
     wire on_progress = (screen_state != `UI_TITLE) && (pixel_y == 6'd9) && (pixel_x < progress_w);
 
-    assign pixel_data = on_progress  ? 16'hFFE0 :
+    wire [15:0] bar_color = (bar_level == 2'd3) ? 16'hF800 : bar_level[0] ? 16'hFFE0 : 16'h07E0;
+    assign pixel_data = on_progress  ? bar_color :
                         chart_active ? chart_color : text_color;
 endmodule

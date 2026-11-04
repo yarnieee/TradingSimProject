@@ -67,6 +67,8 @@ module vga_screen #(
     input  wire [23:0] feed_bot,
     input  wire [7:0]  feed_side,
     input  wire [15:0] feed_stock,
+    input  wire [1:0]  quantity_cursor,  // the digit being changed (quantity screen)
+    input  wire [2:0]  orders_sel,       // sw14: the order the cancel cursor is on
     // graphics
     input  wire [479:0] stock_samples,   // selected stock, 30 days, oldest first
     input  wire [15:0]  sel_sl,          // its stop-loss / take-profit levels (0 = none)
@@ -149,6 +151,9 @@ module vga_screen #(
     reg  [1:0] bv_p;
     always @(posedge clk)  bv_c <= oled_bot_view;
     always @(posedge pclk) bv_p <= {bv_p[0], bv_c};
+    reg  [2:0] bs_c, bs_p0, bs_p;                // the chosen bot (changes rarely)
+    always @(posedge clk)  bs_c <= bot_sel;
+    always @(posedge pclk) begin bs_p0 <= bs_c; bs_p <= bs_p0; end
     always @(posedge pclk) begin go_p <= {go_p[0], go_c}; ti_p <= {ti_p[0], ti_c}; end
     reg  [1:0] bl_c, bl_p;                 // bar_level changes one bit at a time
     always @(posedge pclk) begin bl_c <= bar_level; bl_p <= bl_c; end
@@ -173,6 +178,7 @@ module vga_screen #(
         .book_valid(book_valid), .book_side(book_side), .book_stock(book_stock),
         .book_type(book_type), .book_leg(book_leg),
         .feed_valid(feed_valid), .feed_bot(feed_bot), .feed_side(feed_side), .feed_stock(feed_stock),
+        .quantity_cursor(quantity_cursor), .orders_sel(orders_sel),
         .ch(c_ch), .fg(c_fg), .bg(c_bg)
     );
 
@@ -328,6 +334,39 @@ module vga_screen #(
             txs <= txs + 2'd1;
     end
 
+    // ------------------------------------------------------------ bot view: the chosen bot's picture
+    // its 62 x 46 box from the title picture (rows 98-143), drawn 3 x at x 650..835,
+    // y 411..548 (the left of the chosen bot's panel, rows 17-22). Only the bot and
+    // its props are drawn: the box's background colours (0, 1, 5), its shelf
+    // (box rows 37 down) and its edges (3 pixels each side) are left to the panel.
+    localparam [10:0] BX0 = 11'd650;
+    localparam [9:0]  BY0 = 10'd411;
+    reg  [8:0]  b_src;                          // the box's left edge in the title picture
+    always @* begin
+        case (bs_p)
+            3'd0:    b_src = 9'd6;              // MA BOT
+            3'd1:    b_src = 9'd70;             // OVERNIGHT
+            3'd2:    b_src = 9'd129;            // MOMENTUM
+            3'd3:    b_src = 9'd191;            // AVG DOWN
+            default: b_src = 9'd255;            // SL / TP
+        endcase
+    end
+    reg  [5:0]  gx, gy;
+    reg  [1:0]  gxs, gys;
+    reg  [15:0] g_row;                          // (98 + gy) x 320
+    initial begin gx = 6'd0; gy = 6'd0; gxs = 2'd0; gys = 2'd0; g_row = 16'd31360; end
+    always @(posedge pclk) begin
+        if (h == 11'd1649) begin
+            gx <= 6'd0; gxs <= 2'd0;
+            if (v == BY0 - 10'd1) begin gy <= 6'd0; gys <= 2'd0; g_row <= 16'd31360; end
+            else if (gys == 2'd2) begin gys <= 2'd0; gy <= gy + 6'd1; g_row <= g_row + 16'd320; end
+            else gys <= gys + 2'd1;
+        end else if (h >= BX0) begin
+            if (gxs == 2'd2) begin gxs <= 2'd0; gx <= gx + 6'd1; end
+            else gxs <= gxs + 2'd1;
+        end
+    end
+
     // ------------------------------------------------------------ pixel pipeline
     // stage 1: RAM address, the pixel's position, its chart day
     reg  [10:0] s1_h;
@@ -336,11 +375,15 @@ module vga_screen #(
     reg  [3:0]  s1_bp;
     reg         s1_vis, s1_hs, s1_vs;
     reg  [15:0] art_addr;
-    reg         s1_art, s1_btn;
+    reg         s1_art, s1_btn, s1_bimg;
     wire [10:0] bx = h - 11'd18;               // chart x: day = bx / 16
     always @(posedge pclk) begin
         rd_addr <= {cy, cx};
-        art_addr <= t_row + {7'd0, tx};           // ty * 320 + tx
+        art_addr <= ti_p[1] ? t_row + {7'd0, tx}  // the title: ty * 320 + tx
+                            : g_row + {7'd0, b_src} + {10'd0, gx};   // the chosen bot's box
+        s1_bimg  <= bv_p[1] && !go_p[1] && !ti_p[1] && (h >= BX0) && (h < BX0 + 11'd186) &&
+                    (v >= BY0) && (v < BY0 + 10'd138) &&
+                    (gx >= 6'd3) && (gx < 6'd59) && (gy >= 6'd3) && (gy < 6'd37);
         s1_btn   <= (ty >= TITLE_BTN_ROW);
         s1_art  <= (h < 11'd1280) && (v < 10'd720);
         s1_h    <= h;
@@ -362,11 +405,12 @@ module vga_screen #(
     reg  [7:0]  p_hc, p_hp;
     reg         p_vis, p_hs, p_vs;
     reg  [3:0]  p_tpx;
-    reg         p_art, p_btn;
+    reg         p_art, p_btn, p_bimg;
     always @(posedge pclk) begin
         p_tpx   <= title_pic[art_addr];
         p_art   <= s1_art && ti_p[1];
         p_btn   <= s1_btn;
+        p_bimg  <= s1_bimg;
         p_h <= s1_h; p_v <= s1_v; p_px <= s1_px; p_ly <= s1_ly; p_bn <= s1_bn; p_bp <= s1_bp;
         p_hc <= h_tab[s1_bn];
         p_hp <= h_tab[(s1_bn == 5'd0) ? 5'd0 : s1_bn - 5'd1];
@@ -407,6 +451,8 @@ module vga_screen #(
         s2_text <= glyph ? rgb(rd_data[15:12]) : rgb(rd_data[11:8]);
         s2_gfx_on <= 1'b1;
         if (p_art)                                  s2_gfx <= title_rgb((p_btn && !t_blink) ? 4'h0 : p_tpx);
+        else if (p_bimg && p_tpx != 4'h0 && p_tpx != 4'h1 && p_tpx != 4'h5)
+                                                    s2_gfx <= title_rgb(p_tpx);
         else if (in_bar)                            s2_gfx <= bar_on ? bar_rgb : 12'h222;
         else if (in_chart && on_line)               s2_gfx <= rising ? 12'h0F0 : 12'hF44;
         else if (in_chart && on_sl)                 s2_gfx <= 12'hF00;

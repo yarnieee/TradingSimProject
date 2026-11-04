@@ -34,7 +34,7 @@ module tb_vga_botview;
         .go_blink(1'b0), .go_results(1'b0), .up(4'd0),
         .num_f(num_f), .num_rd(num_rd), .zero(zero),
         .book_valid(8'd0), .book_side(8'd0), .book_stock(16'd0), .book_type(16'd0), .book_leg(8'd0),
-        .feed_valid(fv), .feed_bot({18'd0, 3'd3, 3'd2}), .feed_side(8'b0000_0010), .feed_stock({12'd0, 2'd3, 2'd2}),
+        .feed_valid(fv), .feed_bot({18'd0, 3'd3, 3'd2}), .feed_side(8'b0000_0010), .feed_stock({12'd0, 2'd3, 2'd2}), .quantity_cursor(2'd0), .orders_sel(3'd0),
         .ch(ch), .fg(fg), .bg(bg)
     );
 
@@ -99,9 +99,13 @@ module tb_vga_botview;
         text(5'd16, 36, 69);
         check(txt[8*34:1] == " MOMENTUM              BTNL / BTNR", "bot view: the chosen bot instead of PENDING ORDERS");
         text(5'd17, 36, 69);
-        check(txt[8*34:1] == " NET WORTH               $12345.67", "bot view: its net worth");
+        check(txt[8*34:1] == "            WORTH        $12345.67", "bot view: its net worth (its picture at the left)");
         text(5'd20, 36, 69);
-        check(txt[8*34:1] == " RETURN                    +23.45%", "bot view: its return");
+        check(txt[8*34:1] == "            RETURN         +23.45%", "bot view: its return");
+        text(5'd21, 36, 69);
+        check(txt[8*34:1] == "            BUYS AFTER 2 UP DAYS, ", "bot view: its strategy, line 1");
+        text(5'd22, 36, 69);
+        check(txt[8*34:1] == "            SELLS ON A DOWN DAY   ", "bot view: its strategy, line 2");
         text(5'd25, 36, 69);
         check(txt[8*34:1] == " NVDA            20          $0.00", "bot view: its holdings");
         text(5'd2, 36, 51); check(txt[8*16:1] == " YOUR PORTFOLIO ", "bot view: your portfolio stays");

@@ -29,7 +29,7 @@ module tb_vga_leaderboard;
         .oled_bot_view(1'b0), .orders_view(1'b0), .bot_sel(3'd0), .order(order),
         .go_blink(1'b0), .go_results(1'b0), .up(4'd0),
         .num_f(num_f), .num_rd(num_rd), .zero(zero),
-        .book_valid(8'd0), .book_side(8'd0), .book_stock(16'd0), .book_type(16'd0), .book_leg(8'd0), .feed_valid(8'd0), .feed_bot(24'd0), .feed_side(8'd0), .feed_stock(16'd0),
+        .book_valid(8'd0), .book_side(8'd0), .book_stock(16'd0), .book_type(16'd0), .book_leg(8'd0), .feed_valid(8'd0), .feed_bot(24'd0), .feed_side(8'd0), .feed_stock(16'd0), .quantity_cursor(2'd0), .orders_sel(3'd0),
         .ch(ch), .fg(fg), .bg(bg)
     );
 

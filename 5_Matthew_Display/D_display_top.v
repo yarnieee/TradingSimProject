@@ -72,6 +72,7 @@ module D_display_top #(
     input  wire [15:0] feed_stock,
     input  wire [127:0] feed_price,
     input  wire [63:0] feed_day,
+    input  wire [2:0]  orders_sel,        // sw14: the order the cancel cursor is on (monitor)
     // The page shown on JA (left OLED) after the title screen.
     input  wire [15:0] left_pixel,
     output wire [6:0]  left_x,
@@ -405,6 +406,7 @@ module D_display_top #(
         .book_valid(book_valid), .book_side(book_side), .book_stock(book_stock),
         .book_type(book_type), .book_leg(book_leg),
         .feed_valid(feed_valid), .feed_bot(feed_bot), .feed_side(feed_side), .feed_stock(feed_stock),
+        .quantity_cursor(quantity_cursor), .orders_sel(orders_sel),
         .stock_samples(selected_samples_30), .sel_sl(sel_sl), .sel_tp(sel_tp),
         .progress_w(vga_progress_w), .bar_level(bar_level),
         .vga_r(vga_r), .vga_g(vga_g), .vga_b(vga_b), .hsync(vga_hs), .vsync(vga_vs)

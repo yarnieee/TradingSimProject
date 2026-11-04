@@ -39,7 +39,7 @@ module tb_vga_controls;
         .go_blink(1'b0), .go_results(1'b0), .up(4'd0),
         .num_f(num_f), .num_rd(num_rd), .zero(zero),
         .book_valid(book_valid), .book_side(8'b0001_0000), .book_stock(16'b0000_0011_0000_0000),
-        .book_type({6'd0, `OT_STP, 4'd0, `OT_LMT, 2'd0}), .book_leg(8'b0001_0000), .feed_valid(8'd0), .feed_bot(24'd0), .feed_side(8'd0), .feed_stock(16'd0),
+        .book_type({6'd0, `OT_STP, 4'd0, `OT_LMT, 2'd0}), .book_leg(8'b0001_0000), .feed_valid(8'd0), .feed_bot(24'd0), .feed_side(8'd0), .feed_stock(16'd0), .quantity_cursor(2'd0), .orders_sel(3'd0),
         .ch(ch), .fg(fg), .bg(bg)
     );
 
@@ -102,8 +102,8 @@ module tb_vga_controls;
 
     initial begin
         // ---- not making an order: PENDING ORDERS as before
-        screen_state = `UI_SPECIFIC;
-        show("SPECIFIC (not trading): pending orders");
+        screen_state = `UI_STOCKS;
+        show("STOCKS (not trading): pending orders");
         right_text(5'd16); check(txt[8*34:8*18+1] == " PENDING ORDERS ", "not trading: PENDING ORDERS header");
         look(5'd16, 7'd28); check(ch == "2", "not trading: 2 pending");
         right_text(5'd18); check(txt[8*34:8*29+1] == " AMD ", "not trading: 1st order is AMD");
@@ -180,8 +180,11 @@ module tb_vga_controls;
         oled_bot_view = 1'b0;
 
         // ---- after the order: back to the list
-        screen_state = `UI_TRADE_RESULT;
-        right_text(5'd16); check(txt[8*34:8*18+1] == " PENDING ORDERS ", "result screen: PENDING ORDERS");
+        screen_state = `UI_TRADE_RESULT;     // the result and BTNC CONTINUE (monitor-only play)
+        right_text(5'd16); check(txt[8*34:8*18+1] == " TRADE CONTROLS ", "result screen: the result panel");
+        right_text(5'd23); check(txt[8*34:8*13+1] == " BTNC        CONTINUE", "result screen: BTNC CONTINUE");
+        screen_state = `UI_SPECIFIC;         // the stock page: BUY / SELL / BACK on the monitor
+        right_text(5'd23); check(txt[8*34:8*3+1] == " BTNL/BTNR   BUY   SELL   BACK ", "stock page: BUY / SELL / BACK");
         book_valid = 8'd0; screen_state = `UI_PORTFOLIO;
         right_text(5'd18); check(txt[8*34:8*16+1] == " NO PENDING ORDERS", "no orders: NO PENDING ORDERS");
 

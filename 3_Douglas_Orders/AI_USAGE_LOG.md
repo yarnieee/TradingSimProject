@@ -689,3 +689,16 @@ bot view). The restart hint moved onto the GAME OVER screen and the sw14 hint un
 New `tb_vga_botview` (28 checks; fails on planted bugs), feed checks in `tb_bot_logbook` and
 `tb_display_numbers`, `tb_integration`; `tb_vga_controls` / `tb_vga_leaderboard` updated for the
 removed NOW bar. All 35 testbenches pass.
+
+## 2026-11-04: monitor-only play; the chosen bot's picture and strategy
+
+**Asked for:** play the whole game on the monitor without the OLEDs (the stock page's BUY / SELL /
+BACK, the result's CONTINUE); in the bot view, the chosen bot's picture and strategy.
+
+**Done by the AI:** `vga_cells.v`: the right panel shows controls on the stock page (price, change,
+held, P/L; BUY / SELL / BACK and HOME / MARKET lit at the cursor) and on the result screens (FILLED /
+PLACED / REJECTED, reason, BTNC CONTINUE); YOUR PORTFOLIO / MARKET bars lit for the HOME / MARKET
+cursor with a hint; quantity digits with the one being changed lit; sw14's cancel cursor lit in
+PENDING ORDERS (`orders_sel` out of `B_order_top.v`). Bot panel: picture at the left (`vga_screen.v`
+draws the bot's box from the title picture, 3x), values and two lines of strategy at the right.
+Tests updated for the new panels (`tb_vga_controls`, `tb_vga_botview`). All 35 testbenches pass.

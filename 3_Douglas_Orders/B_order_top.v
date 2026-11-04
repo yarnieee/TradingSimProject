@@ -138,6 +138,7 @@ module B_order_top #(
     output wire [63:0]  book_qty,
     output wire [127:0] book_trig,
     output wire [7:0]   book_leg,
+    output wire [2:0]   orders_sel,     // the ORDERS view's cursor (book slot), for the monitor
     // Ticket page pixel (Matthew)
     output wire [15:0] ticket_pixel
 );
@@ -175,6 +176,7 @@ module B_order_top #(
     wire [15:0] e_trig;
     wire [1:0]  e_brk;
     wire [2:0]  e_ord_sel;
+    assign orders_sel = e_ord_sel;
     wire [2:0]  e_focus;
     wire        submit_req;
     wire [1:0]  sub_stock;

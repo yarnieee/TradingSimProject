@@ -122,6 +122,7 @@ module Integration_Top #(
     wire        ord_placed, res_submit;
     wire [63:0] sl_price, tp_price;
     wire [7:0]   book_valid, book_side, book_leg;
+    wire [2:0]   orders_sel;                     // the ORDERS view's cursor (book slot)
     wire [15:0]  book_stock, book_type;
     wire [63:0]  book_qty;
     wire [127:0] book_trig;
@@ -233,7 +234,7 @@ module Integration_Top #(
         .ord_type(ord_type), .ord_trig(ord_trig), .ord_brk(ord_brk), .ord_dist(osw[5:4]),
         .ret_bp(ret_bp), .max_dd_bp(max_dd_bp), .bot_ret_bp(bot_ret_bp),
         .book_valid(book_valid), .book_side(book_side), .book_stock(book_stock),
-        .book_type(book_type), .book_qty(book_qty), .book_trig(book_trig), .book_leg(book_leg),
+        .book_type(book_type), .book_qty(book_qty), .book_trig(book_trig), .book_leg(book_leg), .orders_sel(orders_sel),
         .game_state(game_state),
         .vga_r(vgaRed), .vga_g(vgaGreen), .vga_b(vgaBlue), .vga_hs(Hsync), .vga_vs(Vsync),
         .JA(JA), .JB(JB), .an(an), .seg(seg)
@@ -482,7 +483,7 @@ module Integration_Top #(
         .ord_placed(ord_placed), .res_submit(res_submit),
         .sl_price(sl_price), .tp_price(tp_price),
         .book_valid(book_valid), .book_side(book_side), .book_stock(book_stock),
-        .book_type(book_type), .book_qty(book_qty), .book_trig(book_trig), .book_leg(book_leg),
+        .book_type(book_type), .book_qty(book_qty), .book_trig(book_trig), .book_leg(book_leg), .orders_sel(orders_sel),
         .ticket_pixel(ticket_pixel)
     );
 

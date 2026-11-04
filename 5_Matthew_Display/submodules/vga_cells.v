@@ -65,6 +65,8 @@ module vga_cells (
     input  [23:0] feed_bot,            // 0 moving average, 1-4 bot_squad 0-3
     input  [7:0]  feed_side,
     input  [15:0] feed_stock,
+    input  [1:0]  quantity_cursor,     // the digit being changed: 0 ones .. 3 thousands
+    input  [2:0]  orders_sel,          // sw14: the book slot the cancel cursor is on
     output reg [7:0] ch,
     output reg [3:0] fg,
     output reg [3:0] bg
@@ -219,6 +221,28 @@ module vga_cells (
         end
     endfunction
 
+    function [7:0] rule_ch;                // bot b's strategy, line l (0 / 1), 22 cells
+        input [2:0] b;
+        input       l;
+        input [6:0] c;
+        reg [175:0] t;
+        begin
+            case ({b, l})
+                {3'd0, 1'b0}: t = "BUYS ABOVE ITS 8-DAY  ";
+                {3'd0, 1'b1}: t = "AVERAGE, SELLS BELOW  ";
+                {3'd1, 1'b0}: t = "BUYS AT THE CLOSE,    ";
+                {3'd1, 1'b1}: t = "SELLS AT THE NEXT OPEN";
+                {3'd2, 1'b0}: t = "BUYS AFTER 2 UP DAYS, ";
+                {3'd2, 1'b1}: t = "SELLS ON A DOWN DAY   ";
+                {3'd3, 1'b0}: t = "BUYS MORE AT EVERY -5%";
+                {3'd3, 1'b1}: t = "SELLS AT +5% PROFIT   ";
+                {3'd4, 1'b0}: t = "SELLS AT -3% (STOP)   ";
+                default:      t = "OR +10% (TARGET)      ";
+            endcase
+            rule_ch = (c > 7'd21) ? " " : t[175 - 8*c -: 8];
+        end
+    endfunction
+
     function [7:0] type_word;              // MARKET / LIMIT / STOP in 6 cells
         input [1:0] t;
         input [6:0] c;
@@ -301,7 +325,9 @@ module vga_cells (
                     (screen_state == `UI_QUANTITY)  || (screen_state == `UI_ORDER_REVIEW);
     // the right panel shows TRADE CONTROLS instead of PENDING ORDERS while an order
     // is being made, unless the buttons work the OLEDs (sw14 orders list, sw15 bot)
-    wire ctl = in_order && !orders_view && !oled_bot_view;
+    wire on_stock  = (screen_state == `UI_SPECIFIC);
+    wire on_result = (screen_state == `UI_TRADE_RESULT) || (screen_state == `UI_ORDER_RESULT);
+    wire ctl = (in_order || on_stock || on_result) && !orders_view && !oled_bot_view;
     wire ctl_menu = (screen_state == `UI_BUY_STOCK) || (screen_state == `UI_SELL_STOCK);
     // a limit buy / stop sell waits below the price, a limit sell / stop buy above it
     wire below = ((order_type == `OT_LMT) && !trade_side) || ((order_type == `OT_STP) && trade_side);
@@ -337,10 +363,10 @@ module vga_cells (
             else             begin num_f = `DN_FPX0 + fe;  d_w = 7'd8; d_p = cl - 7'd26; end
         end else if (bv && right && row >= 5'd17) begin                          // the chosen bot
             case (row)
-                5'd17: begin num_f = `DN_BNET;    d_w = 7'd17; d_p = cr - 7'd17; end
-                5'd18: begin num_f = `DN_BCASH;   d_w = 7'd17; d_p = cr - 7'd17; end
-                5'd19: begin num_f = `DN_BNETPNL; d_sgn = 1'b1; d_w = 7'd17; d_p = cr - 7'd17; end
-                5'd20: begin num_f = `DN_BNETPNL; d_sh8 = 1'b1; d_sgn = 1'b1; d_prefix = 8'd0; d_w = 7'd16; d_p = cr - 7'd17; end
+                5'd17: begin num_f = `DN_BNET;    d_w = 7'd14; d_p = cr - 7'd20; end
+                5'd18: begin num_f = `DN_BCASH;   d_w = 7'd14; d_p = cr - 7'd20; end
+                5'd19: begin num_f = `DN_BNETPNL; d_sgn = 1'b1; d_w = 7'd14; d_p = cr - 7'd20; end
+                5'd20: begin num_f = `DN_BNETPNL; d_sh8 = 1'b1; d_sgn = 1'b1; d_prefix = 8'd0; d_w = 7'd13; d_p = cr - 7'd20; end
                 5'd23, 5'd24, 5'd25, 5'd26: begin                                 // its holdings
                     if (cr <= 7'd18) begin num_f = `DN_BPOS0 + hk; d_dp2 = 1'b0; d_prefix = 8'd0; d_w = 7'd6; d_p = cr - 7'd13; end
                     else             begin num_f = `DN_BPNL0 + hk; d_sgn = 1'b1; d_w = 7'd12; d_p = cr - 7'd22; end
@@ -364,6 +390,14 @@ module vga_cells (
                     d_sh8 = 1'b1; d_sgn = 1'b1; d_prefix = 8'd0; d_w = 7'd7; d_p = cl - 7'd26;
                 end
             end
+        end else if (ctl && on_stock && row >= 5'd17) begin                       // the stock page
+            case (row)
+                5'd18: begin num_f = `DN_PX0 + s;  d_w = 7'd17; d_p = cr - 7'd17; end
+                5'd19: begin num_f = `DN_CHG0 + s; d_sgn = 1'b1; d_w = 7'd17; d_p = cr - 7'd17; end
+                5'd20: begin num_f = `DN_POS0 + s; d_dp2 = 1'b0; d_prefix = 8'd0; d_w = 7'd17; d_p = cr - 7'd17; end
+                5'd21: begin num_f = `DN_PNL0 + s; d_sgn = 1'b1; d_w = 7'd17; d_p = cr - 7'd17; end
+                default: ;
+            endcase
         end else if (ctl && row >= 5'd17) begin                                   // trade controls
             case (row)
                 5'd18: begin num_f = `DN_QTY;    d_dp2 = 1'b0; d_prefix = 8'd0; d_w = 7'd17; d_p = cr - 7'd17; end
@@ -467,7 +501,14 @@ module vga_cells (
         else if ((row == 5'd2 || row == 5'd9 || row == 5'd20) && left) begin
             bg = K_PANEL;
             case (row)
-                5'd2: ch = s16(" MARKET         ", cl);
+                5'd2: begin                                   //  MARKET          L/R MOVE  C OPEN
+                    ch = s16(" MARKET         ", cl);
+                    if (screen_state == `UI_PORTFOLIO && cl >= 7'd15) begin ch = s64("BTNL/R MOVE  C OPEN                                             ", cl - 7'd15); fg = K_GREY; end
+                    if (screen_state == `UI_STOCKS && cl >= 7'd15)    begin ch = s64("BTNU/D MOVE  C OPEN                                             ", cl - 7'd15); fg = K_GREY; end
+                    if ((screen_state == `UI_PORTFOLIO || screen_state == `UI_STOCKS) && menu_selection == 4'd1) begin
+                        bg = K_YELLOW; fg = K_BLACK;          // the cursor is on MARKET
+                    end
+                end
                 5'd9: begin                                   //  MCD  LAST 30 DAYS  /  LATEST TRADES  ALL BOTS
                     if (bv) begin
                         ch = s64(" LATEST TRADES                                                  ", cl);
@@ -487,7 +528,12 @@ module vga_cells (
         else if ((row == 5'd2 || row == 5'd9 || row == 5'd16) && right) begin
             bg = K_PANEL;
             case (row)
-                5'd2: ch = s16(" YOUR PORTFOLIO ", cr);
+                5'd2: begin
+                    ch = s16(" YOUR PORTFOLIO ", cr);
+                    if ((screen_state == `UI_PORTFOLIO || screen_state == `UI_STOCKS) && menu_selection == 4'd0) begin
+                        bg = K_YELLOW; fg = K_BLACK;          // the cursor is on HOME
+                    end
+                end
                 5'd9: ch = s16(" HOLDINGS       ", cr);
                 default: begin                                //  PENDING ORDERS          2 OF 8
                     if (bv) begin                             //  MOMENTUM            BTNL / BTNR
@@ -495,7 +541,7 @@ module vga_cells (
                         else if (cr >= 7'd23)          begin ch = s16("BTNL / BTNR     ", cr - 7'd23); fg = K_GREY; end
                     end
                     else if (cr <= 7'd15)                ch = s16(ctl ? " TRADE CONTROLS " : " PENDING ORDERS ", cr);
-                    else if (ctl && cr >= 7'd17 && cr <= 7'd20) begin   //  TRADE CONTROLS  BUY     2 OF 8
+                    else if (ctl && in_order && cr >= 7'd17 && cr <= 7'd20) begin   //  TRADE CONTROLS  BUY     2 OF 8
                         ch = s16(trade_side ? "SELL            " : "BUY             ", cr - 7'd17);
                         fg = trade_side ? K_RED : K_GREEN;
                     end
@@ -627,20 +673,20 @@ module vga_cells (
         // ------------------------------------------------------------ THE CHOSEN BOT (bot view, right, rows 17-26)
         else if (bv && row >= 5'd17 && row <= 5'd26 && right) begin
             fg = K_GREY;
+            // cells 0-10 of rows 17-22: the bot's picture (vga_screen, from the title art)
             case (row)
-                5'd17: begin if (cr <= 7'd16) ch = s16(" NET WORTH      ", cr); else begin ch = num_char; fg = K_WHITE; end end
-                5'd18: begin if (cr <= 7'd16) ch = s16(" CASH           ", cr); else begin ch = num_char; fg = K_WHITE; end end
+                5'd17: begin if (cr >= 7'd12 && cr <= 7'd17) ch = s16("WORTH           ", cr - 7'd12); else if (cr >= 7'd20) begin ch = num_char; fg = K_WHITE; end end
+                5'd18: begin if (cr >= 7'd12 && cr <= 7'd17) ch = s16("CASH            ", cr - 7'd12); else if (cr >= 7'd20) begin ch = num_char; fg = K_WHITE; end end
                 5'd19: begin
-                    if (cr <= 7'd16) ch = s16(" PROFIT/LOSS    ", cr);
-                    else begin ch = num_char; fg = num_zero ? K_WHITE : num_neg ? K_RED : K_GREEN; end
+                    if (cr >= 7'd12 && cr <= 7'd17) ch = s16("P/L             ", cr - 7'd12);
+                    else if (cr >= 7'd20) begin ch = num_char; fg = num_zero ? K_WHITE : num_neg ? K_RED : K_GREEN; end
                 end
                 5'd20: begin
-                    if (cr <= 7'd16) ch = s16(" RETURN         ", cr);
-                    else if (cr <= 7'd32) begin ch = num_char; fg = num_zero ? K_WHITE : num_neg ? K_RED : K_GREEN; end
-                    else begin ch = "%"; fg = K_WHITE; end
+                    if (cr >= 7'd12 && cr <= 7'd17) ch = s16("RETURN          ", cr - 7'd12);
+                    else if (cr >= 7'd20 && cr <= 7'd32) begin ch = num_char; fg = num_zero ? K_WHITE : num_neg ? K_RED : K_GREEN; end
+                    else if (cr == 7'd33) begin ch = "%"; fg = K_WHITE; end
                 end
-                5'd21: ;
-                5'd22: ch = s64(" STOCK       SHARES            P/L                              ", cr);
+                5'd21, 5'd22: if (cr >= 7'd12) begin ch = rule_ch(bot_sel, !row[0], cr - 7'd12); fg = K_CYAN; end
                 default: begin                                // rows 23-26: its holdings
                     if (zero[`DN_BPOS0 + hk]) begin
                         fg = K_DGREY;
@@ -659,6 +705,79 @@ module vga_cells (
         // ------------------------------------------------------------ TRADE CONTROLS (right, rows 17-26)
         // while an order is being made: the order (values right-aligned as in YOUR PORTFOLIO),
         // the buttons for this screen, the switches, and whether it can be sent
+        else if (ctl && on_stock && row >= 5'd17 && row <= 5'd26 && right) begin
+            fg = K_GREY;                                      // the stock page: BUY / SELL / BACK
+            case (row)
+                5'd17: begin
+                    if (cr <= 7'd16) ch = s16(" STOCK          ", cr);
+                    else begin ch = ticker_ch(s, cr - ((s == 2'd2) ? 7'd30 : 7'd31)); fg = K_YELLOW; end
+                end
+                5'd18: begin if (cr <= 7'd16) ch = s16(" PRICE          ", cr); else begin ch = num_char; fg = K_WHITE; end end
+                5'd19: begin
+                    if (cr <= 7'd16) ch = s16(" 30-DAY CHANGE  ", cr);
+                    else begin ch = num_char; fg = num_zero ? K_WHITE : num_neg ? K_RED : K_GREEN; end
+                end
+                5'd20: begin if (cr <= 7'd16) ch = s16(" YOU HOLD       ", cr); else begin ch = num_char; fg = K_WHITE; end end
+                5'd21: begin
+                    if (cr <= 7'd16) ch = s16(" PROFIT/LOSS    ", cr);
+                    else begin ch = num_char; fg = num_zero ? K_WHITE : num_neg ? K_RED : K_GREEN; end
+                end
+                5'd23: begin                                  //  BTNL/BTNR   BUY    SELL   BACK
+                    if (cr <= 7'd11) begin ch = s16(" BTNL/BTNR      ", cr); fg = K_WHITE; end
+                    else if (cr >= 7'd12 && cr <= 7'd16) begin
+                        ch = s16(" BUY            ", cr - 7'd12);
+                        fg = (menu_selection == 4'd0) ? K_BLACK : K_WHITE; bg = (menu_selection == 4'd0) ? K_YELLOW : K_DGREY;
+                    end
+                    else if (cr >= 7'd18 && cr <= 7'd23) begin
+                        ch = s16(" SELL           ", cr - 7'd18);
+                        fg = (menu_selection == 4'd1) ? K_BLACK : K_WHITE; bg = (menu_selection == 4'd1) ? K_YELLOW : K_DGREY;
+                    end
+                    else if (cr >= 7'd25 && cr <= 7'd30) begin
+                        ch = s16(" BACK           ", cr - 7'd25);
+                        fg = (menu_selection == 4'd2) ? K_BLACK : K_WHITE; bg = (menu_selection == 4'd2) ? K_YELLOW : K_DGREY;
+                    end
+                end
+                5'd24: begin                                  //  BTNU        HOME   MARKET
+                    if (cr <= 7'd11) begin ch = s16(" BTNU           ", cr); fg = K_WHITE; end
+                    else if (cr >= 7'd12 && cr <= 7'd17) begin
+                        ch = s16(" HOME           ", cr - 7'd12);
+                        fg = (menu_selection == 4'd3) ? K_BLACK : K_WHITE; bg = (menu_selection == 4'd3) ? K_YELLOW : K_DGREY;
+                    end
+                    else if (cr >= 7'd19 && cr <= 7'd26) begin
+                        ch = s16(" MARKET         ", cr - 7'd19);
+                        fg = (menu_selection == 4'd4) ? K_BLACK : K_WHITE; bg = (menu_selection == 4'd4) ? K_YELLOW : K_DGREY;
+                    end
+                end
+                5'd25: begin ch = s64(" BTNC        SELECT                                             ", cr); if (cr <= 7'd11) fg = K_WHITE; end
+                default: ;
+            endcase
+        end
+        else if (ctl && on_result && row >= 5'd17 && row <= 5'd26 && right) begin
+            fg = K_GREY;                                      // the result: FILLED / PLACED / REJECTED, BTNC CONTINUE
+            case (row)
+                5'd17: begin
+                    if (cr <= 7'd16) ch = s16(" STOCK          ", cr);
+                    else begin ch = ticker_ch(s, cr - ((s == 2'd2) ? 7'd30 : 7'd31)); fg = K_YELLOW; end
+                end
+                5'd18: begin
+                    if (screen_state == `UI_ORDER_RESULT) ch = s64(" SENDING THE ORDER...                                           ", cr);
+                    else if (cr <= 7'd16) ch = s16(" YOUR ORDER     ", cr);
+                    else if (cr >= 7'd24) begin
+                        ch = s16(!trade_result_success ? " REJECTED       " : trade_result_placed ? "   PLACED       " : "   FILLED       ", cr - 7'd24);
+                        fg = !trade_result_success ? K_RED : trade_result_placed ? K_CYAN : K_GREEN;
+                    end
+                end
+                5'd19: if (screen_state == `UI_TRADE_RESULT) begin
+                    if (!trade_result_success) begin if (cr >= 7'd1 && cr <= 7'd16) begin ch = reason_ch(trade_result_code, cr - 7'd1); fg = K_RED; end end
+                    else if (trade_result_placed) ch = s64(" WAITING IN PENDING ORDERS                                      ", cr);
+                end
+                5'd23: if (screen_state == `UI_TRADE_RESULT) begin
+                    ch = s64(" BTNC        CONTINUE                                           ", cr);
+                    if (cr <= 7'd11) begin fg = K_BLACK; bg = K_YELLOW; end else fg = K_WHITE;
+                end
+                default: ;
+            endcase
+        end
         else if (ctl && row >= 5'd17 && row <= 5'd26 && right) begin
             fg = K_GREY;
             case (row)
@@ -668,6 +787,13 @@ module vga_cells (
                 end
                 5'd18: begin                                  //  QUANTITY                       10
                     if (cr <= 7'd16) ch = s16(" QUANTITY       ", cr);
+                    else if (screen_state == `UI_QUANTITY) begin   // 0012, the digit being changed lit
+                        if (cr >= 7'd30) begin
+                            ch = "0" + num_rd[4 * (7'd33 - cr) +: 4];
+                            fg = K_WHITE;
+                            if (7'd33 - cr == {5'd0, quantity_cursor}) begin fg = K_BLACK; bg = K_YELLOW; end
+                        end
+                    end
                     else begin ch = num_char; fg = K_WHITE; end
                 end
                 5'd19: begin                                  //  ORDER          LIMIT  5%  BELOW
@@ -766,6 +892,7 @@ module vga_cells (
             end
             else if (cr >= 7'd21 && cr <= 7'd24) ch = num_char;
             else if (cr >= 7'd26 && cr <= 7'd33) ch = num_char;
+            if (sl_ok && orders_view && sl == orders_sel) begin bg = K_YELLOW; fg = K_BLACK; end   // to cancel
         end
 
         else if (row == 5'd26 && right && orders_view) begin  // sw14: the buttons work the list on the left OLED

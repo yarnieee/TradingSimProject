@@ -4,8 +4,7 @@
 // tb_vga_leaderboard: the VGA leaderboard rows (21-26) list you and the bots in
 // place order, 1st at the top: each row shows its place, the right net worth
 // field and name, and your row keeps its highlight wherever it is.
-// Also the market rows (3-7): price, 30-day change in $ and in %; and on every
-// screen, the NOW bar (row 28) leaves a space before its BTNC part.
+// Also the market rows (3-7): price, 30-day change in $ and in %.
 module tb_vga_leaderboard;
     reg  [4:0]  row = 5'd0;
     reg  [6:0]  col = 7'd0;
@@ -30,7 +29,7 @@ module tb_vga_leaderboard;
         .oled_bot_view(1'b0), .orders_view(1'b0), .bot_sel(3'd0), .order(order),
         .go_blink(1'b0), .go_results(1'b0), .up(4'd0),
         .num_f(num_f), .num_rd(num_rd), .zero(zero),
-        .book_valid(8'd0), .book_side(8'd0), .book_stock(16'd0), .book_type(16'd0), .book_leg(8'd0),
+        .book_valid(8'd0), .book_side(8'd0), .book_stock(16'd0), .book_type(16'd0), .book_leg(8'd0), .feed_valid(8'd0), .feed_bot(24'd0), .feed_side(8'd0), .feed_stock(16'd0),
         .ch(ch), .fg(fg), .bg(bg)
     );
 
@@ -93,20 +92,6 @@ module tb_vga_leaderboard;
         board({3'd5, 3'd4, 3'd3, 3'd2, 3'd1, 3'd0});   // you 1st, then bots 0..4
         board({3'd0, 3'd3, 3'd1, 3'd4, 3'd2, 3'd5});   // bot 4 1st ... you 6th
         board({3'd3, 3'd1, 3'd5, 3'd0, 3'd4, 3'd2});   // bot 1 1st, you 3rd
-        // NOW bar: on every screen, "BTNC" at bar column 44 has a space before it
-        for (e = 0; e < 16; e = e + 1) begin
-            scr = e; p = e;
-            left_text(5'd28, 48, 51);                   // bar column j is cell 5 + j: 44..47
-            if (txt[32:1] == "BTNC") begin
-                row = 5'd28; col = 7'd48; #1;           // bar column 43
-                check(ch == " ", "NOW bar: a space before BTNC");
-            end
-        end
-        scr = `UI_ORDER_REVIEW; p = 0;
-        left_text(5'd28, 4, 37);
-        check(txt == "BTNU / BTND / BTNL / BTNR  GO BACK", "review NOW bar: the go-back buttons");
-        scr = `UI_PORTFOLIO;
-
         if (n_fail == 0) $display("PASS: tb_vga_leaderboard (%0d checks)", n_pass);
         else             $display("FAIL: tb_vga_leaderboard (%0d failed, %0d passed)", n_fail, n_pass);
         $finish;

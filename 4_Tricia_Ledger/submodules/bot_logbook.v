@@ -6,6 +6,8 @@
 //   bots 1-4   bot_squad's bots 0-3, trade q_*
 // Each bot keeps its last 8 trades in one small RAM ({bot, slot}); log_* are the
 // last 5 of bot `sel`, newest first, in the layout the screens already use.
+// feed_* are the last 8 trades of all the bots together, newest first (entry 0),
+// for the monitor's news feed and its two notification rows.
 // A trade from the moving-average bot that arrives on the same clock as one
 // from bot_squad waits one clock (they are never closer than a few clocks apart).
 module bot_logbook (
@@ -26,7 +28,13 @@ module bot_logbook (
     output reg  [4:0]  log_side,
     output reg  [9:0]  log_stock,
     output reg  [79:0] log_price,
-    output reg  [39:0] log_day
+    output reg  [39:0] log_day,
+    output reg  [7:0]  feed_valid,         // entry n (0 newest) at bit n
+    output reg  [23:0] feed_bot,           // 0 moving average, 1-4 bot_squad 0-3
+    output reg  [7:0]  feed_side,
+    output reg  [15:0] feed_stock,
+    output reg  [127:0] feed_price,
+    output reg  [63:0] feed_day
 );
     reg [26:0] mem [0:63];                 // {side, stock, price, day}
     reg [2:0]  head [0:4];                 // next slot to write
@@ -46,6 +54,7 @@ module bot_logbook (
         if (rst) begin
             a_pend <= 1'b0;
             for (n = 0; n < 5; n = n + 1) begin head[n] <= 3'd0; cnt[n] <= 3'd0; end
+            feed_valid <= 8'd0;
         end else begin
             if (a_trade) begin
                 a_pend <= 1'b1;
@@ -53,6 +62,12 @@ module bot_logbook (
             end else if (w_a)
                 a_pend <= 1'b0;
             if (w_q || w_a) begin
+                feed_valid <= {feed_valid[6:0], 1'b1};
+                feed_bot   <= {feed_bot[20:0], w_bot};
+                feed_side  <= {feed_side[6:0], w_dat[26]};
+                feed_stock <= {feed_stock[13:0], w_dat[25:24]};
+                feed_price <= {feed_price[111:0], w_dat[23:8]};
+                feed_day   <= {feed_day[55:0], w_dat[7:0]};
                 mem[{w_bot, head[w_bot]}] <= w_dat;
                 head[w_bot] <= head[w_bot] + 3'd1;
                 if (cnt[w_bot] != 3'd5) cnt[w_bot] <= cnt[w_bot] + 3'd1;

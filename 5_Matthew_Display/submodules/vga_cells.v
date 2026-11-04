@@ -19,9 +19,12 @@
 //                                                   | an order is being made
 //   rows 20-26  LEADERBOARD: you and the 5 bots in  |
 //               place order, net worth and return   |
-//   row 27      the order being made, or the last result
-//   row 28      NOW: which buttons to press on this screen (highlighted bar)
-//   row 29      the switches and what they are set to
+//   rows 28-29  the bots' two latest trades, newest on top (each stays until a
+//               newer one pushes it down): day, bot, BUYS / SELLS, stock, price, why
+// BOT VIEW (sw15 up), in purple: the left rows 9-19 are LATEST TRADES (the last 8
+// trades of all the bots, newest on top) instead of the chart, and the right rows
+// 16-26 the bot chosen on the OLEDs (net worth, cash, profit / loss, return,
+// holdings) instead of PENDING ORDERS. The rest stays as it is.
 // TITLE: vga_screen's title picture covers the whole screen (these cells are hidden under it).
 // GAME OVER (rows 2-27 instead): a big flashing GAME OVER for a few seconds,
 // then GAME OVER at the top and the final results, 1st to 6th, below it.
@@ -58,6 +61,10 @@ module vga_cells (
     input  [15:0] book_stock,
     input  [15:0] book_type,
     input  [7:0]  book_leg,
+    input  [7:0]  feed_valid,          // the bots' last 8 trades, entry 0 newest
+    input  [23:0] feed_bot,            // 0 moving average, 1-4 bot_squad 0-3
+    input  [7:0]  feed_side,
+    input  [15:0] feed_stock,
     output reg [7:0] ch,
     output reg [3:0] fg,
     output reg [3:0] bg
@@ -66,7 +73,7 @@ module vga_cells (
     localparam [3:0] K_BLACK = 4'd0, K_WHITE = 4'd1, K_CYAN = 4'd2, K_YELLOW = 4'd3,
                      K_GREEN = 4'd4, K_RED = 4'd5, K_GREY = 4'd6, K_NAVY = 4'd7,
                      K_DGREY = 4'd8, K_PLUM = 4'd9, K_ORANGE = 4'd10, K_PANEL = 4'd11,
-                     K_ROW = 4'd12;
+                     K_ROW = 4'd12, K_PURPLE = 4'd13, K_PROW = 4'd14;
 
     // ------------------------------------------------------------ helpers
     function [7:0] s16;                    // character c of a 16-character string
@@ -190,6 +197,28 @@ module vga_cells (
         end
     endfunction
 
+    function [7:0] why_ch;                 // why bot b bought / sold (its rule), 21 cells
+        input [2:0] b;
+        input       sold;
+        input [6:0] c;
+        reg [167:0] t;
+        begin
+            case ({b, sold})
+                {3'd0, 1'b0}: t = "ABOVE ITS 8-DAY AVG  ";
+                {3'd0, 1'b1}: t = "BELOW ITS 8-DAY AVG  ";
+                {3'd1, 1'b0}: t = "HOLDING OVERNIGHT    ";
+                {3'd1, 1'b1}: t = "SOLD AT THE OPEN     ";
+                {3'd2, 1'b0}: t = "RIDING THE RALLY     ";
+                {3'd2, 1'b1}: t = "THE TREND BROKE      ";
+                {3'd3, 1'b0}: t = "BUYING THE DIP       ";
+                {3'd3, 1'b1}: t = "TOOK ITS 5% PROFIT   ";
+                {3'd4, 1'b0}: t = "NEW POSITION         ";
+                default:      t = "STOP OR TARGET HIT   ";
+            endcase
+            why_ch = (c > 7'd20) ? " " : t[167 - 8*c -: 8];
+        end
+    endfunction
+
     function [7:0] type_word;              // MARKET / LIMIT / STOP in 6 cells
         input [1:0] t;
         input [6:0] c;
@@ -259,6 +288,15 @@ module vga_cells (
     wire [52:0] big_bits = big_row(big_r[2:0]);
     wire        big_on  = (big_r <= 5'd6) && (col >= 7'd9) && (col <= 7'd61) && big_bits[7'd52 - big_c];
 
+    // bot view (sw15 up) on the game screens; the feed entry this row shows:
+    // left rows 11-18 in the bot view -> 0..7, notification rows 28 / 29 -> 0 / 1
+    wire        bv     = oled_bot_view && !go;
+    wire [2:0]  fe     = (row >= 5'd28) ? {2'b00, row[0]} : row[2:0] - 3'd3;
+    wire        f_ok   = feed_valid[fe];
+    wire [2:0]  f_bot  = feed_bot[3*fe +: 3];
+    wire        f_sell = feed_side[fe];
+    wire [1:0]  f_stk  = feed_stock[2*fe +: 2];
+
     wire in_order = (screen_state == `UI_BUY_STOCK) || (screen_state == `UI_SELL_STOCK) ||
                     (screen_state == `UI_QUANTITY)  || (screen_state == `UI_ORDER_REVIEW);
     // the right panel shows TRADE CONTROLS instead of PENDING ORDERS while an order
@@ -284,17 +322,31 @@ module vga_cells (
         num_f = `DN_CASH; d_sgn = 1'b0; d_sh8 = 1'b0; d_dp2 = 1'b1; d_prefix = "$"; d_w = 7'd1; d_p = 7'd0;
         if (row == 5'd0) begin                                                    // days left
             num_f = `DN_DAYS; d_dp2 = 1'b0; d_prefix = 8'd0; d_w = 7'd3; d_p = col - 7'd67;
-        end else if (go) begin                                                    // final results
+        end else if (go && row <= 5'd27) begin                                    // final results
             if (col <= 7'd39)      begin num_f = (go_ent == 3'd0) ? `DN_NET : `DN_LBNET0 + go_ent - 7'd1; d_w = 7'd11; d_p = col - 7'd28; end
             else begin
                 num_f = (go_ent == 3'd0) ? `DN_NETPNL : `DN_LBPNL0 + go_ent - 7'd1; d_sgn = 1'b1;
                 if (col <= 7'd54)  begin d_w = 7'd12; d_p = col - 7'd42; end
                 else               begin d_sh8 = 1'b1; d_prefix = 8'd0; d_w = 7'd7; d_p = col - 7'd57; end
             end
-        end else if (row == 5'd27) begin                                          // the order
-            if (col <= 7'd9)       begin num_f = `DN_QTY;    d_dp2 = 1'b0; d_prefix = 8'd0; d_w = 7'd4; d_p = col - 7'd6; end
-            else if (col <= 7'd34) begin num_f = `DN_ORDPX;  d_w = 7'd9;  d_p = col - 7'd26; end
-            else                   begin num_f = `DN_ORDTOT; d_w = 7'd12; d_p = col - 7'd54; end
+        end else if (row >= 5'd28) begin                                          // notifications
+            if (col <= 7'd20) begin num_f = `DN_FDAY0 + fe; d_dp2 = 1'b0; d_prefix = 8'd0; d_w = 7'd3; d_p = col - 7'd9; end
+            else              begin num_f = `DN_FPX0 + fe;  d_w = 7'd8; d_p = col - 7'd39; end
+        end else if (bv && left && row >= 5'd11 && row <= 5'd18) begin           // the news feed
+            if (cl <= 7'd10) begin num_f = `DN_FDAY0 + fe; d_dp2 = 1'b0; d_prefix = 8'd0; d_w = 7'd3; d_p = cl - 7'd1; end
+            else             begin num_f = `DN_FPX0 + fe;  d_w = 7'd8; d_p = cl - 7'd26; end
+        end else if (bv && right && row >= 5'd17) begin                          // the chosen bot
+            case (row)
+                5'd17: begin num_f = `DN_BNET;    d_w = 7'd17; d_p = cr - 7'd17; end
+                5'd18: begin num_f = `DN_BCASH;   d_w = 7'd17; d_p = cr - 7'd17; end
+                5'd19: begin num_f = `DN_BNETPNL; d_sgn = 1'b1; d_w = 7'd17; d_p = cr - 7'd17; end
+                5'd20: begin num_f = `DN_BNETPNL; d_sh8 = 1'b1; d_sgn = 1'b1; d_prefix = 8'd0; d_w = 7'd16; d_p = cr - 7'd17; end
+                5'd23, 5'd24, 5'd25, 5'd26: begin                                 // its holdings
+                    if (cr <= 7'd18) begin num_f = `DN_BPOS0 + hk; d_dp2 = 1'b0; d_prefix = 8'd0; d_w = 7'd6; d_p = cr - 7'd13; end
+                    else             begin num_f = `DN_BPNL0 + hk; d_sgn = 1'b1; d_w = 7'd12; d_p = cr - 7'd22; end
+                end
+                default: ;
+            endcase
         end else if (left) begin
             if (row >= 5'd4 && row <= 5'd7) begin                                 // market
                 if (cl <= 7'd14)      begin num_f = `DN_PX0 + mk;  d_w = 7'd8; d_p = cl - 7'd7; end
@@ -354,6 +406,7 @@ module vga_cells (
         if (row == 5'd0) begin
             bg = K_NAVY;
             if (col >= 7'd1 && col <= 7'd28)       ch = s64("SCAM STOCK TRADING SIMULATOR                                    ", cl);
+            else if (bv && col >= 7'd32 && col <= 7'd39) begin ch = s16("BOT VIEW        ", col - 7'd32); fg = K_YELLOW; end
             else if (col >= 7'd57 && col <= 7'd65) begin ch = s16("DAYS LEFT       ", col - 7'd57); fg = K_GREY; end
             else if (col >= 7'd67 && col <= 7'd69) begin
                 ch = num_char;
@@ -397,6 +450,9 @@ module vga_cells (
                 else if (col >= 7'd31 && col <= 7'd37) begin ch = s16("WINNER:         ", col - 7'd31); fg = K_GREY; end
                 else if (col >= 7'd39 && col <= 7'd49) begin ch = bot_name(order[2:0]) >> (8 * (7'd49 - col)); fg = K_YELLOW; end
             end
+            else if (row == 5'd23 && col >= 7'd6 && col <= 7'd39) begin
+                ch = s64("NEW GAME: SW0 UP, THEN DOWN                                     ", col - 7'd6); fg = K_GREY;
+            end
         end
 
         // ------------------------------------------------------------ TITLE (rows 2-27): pictures above
@@ -412,8 +468,12 @@ module vga_cells (
             bg = K_PANEL;
             case (row)
                 5'd2: ch = s16(" MARKET         ", cl);
-                5'd9: begin                                   //  MCD  LAST 30 DAYS
-                    if (cl >= 7'd1 && cl <= 7'd4) begin ch = ticker_ch(s, cl - 7'd1); fg = K_YELLOW; end
+                5'd9: begin                                   //  MCD  LAST 30 DAYS  /  LATEST TRADES  ALL BOTS
+                    if (bv) begin
+                        ch = s64(" LATEST TRADES                                                  ", cl);
+                        if (cl >= 7'd26) begin ch = s16("ALL BOTS        ", cl - 7'd26); fg = K_GREY; end
+                    end
+                    else if (cl >= 7'd1 && cl <= 7'd4) begin ch = ticker_ch(s, cl - 7'd1); fg = K_YELLOW; end
                     else if (cl >= 7'd6)            ch = s16("LAST 30 DAYS    ", cl - 7'd6);
                 end
                 default: begin                                //  # LEADERBOARD  NET WORTH   RETURN
@@ -430,7 +490,11 @@ module vga_cells (
                 5'd2: ch = s16(" YOUR PORTFOLIO ", cr);
                 5'd9: ch = s16(" HOLDINGS       ", cr);
                 default: begin                                //  PENDING ORDERS          2 OF 8
-                    if (cr <= 7'd15)                     ch = s16(ctl ? " TRADE CONTROLS " : " PENDING ORDERS ", cr);
+                    if (bv) begin                             //  MOMENTUM            BTNL / BTNR
+                        if (cr >= 7'd1 && cr <= 7'd11) begin ch = bot_name(bot_sel + 3'd1) >> (8 * (7'd11 - cr)); fg = K_YELLOW; end
+                        else if (cr >= 7'd23)          begin ch = s16("BTNL / BTNR     ", cr - 7'd23); fg = K_GREY; end
+                    end
+                    else if (cr <= 7'd15)                ch = s16(ctl ? " TRADE CONTROLS " : " PENDING ORDERS ", cr);
                     else if (ctl && cr >= 7'd17 && cr <= 7'd20) begin   //  TRADE CONTROLS  BUY     2 OF 8
                         ch = s16(trade_side ? "SELL            " : "BUY             ", cr - 7'd17);
                         fg = trade_side ? K_RED : K_GREEN;
@@ -502,6 +566,29 @@ module vga_cells (
             endcase
         end
 
+        // ------------------------------------------------------------ LATEST TRADES (bot view, left, rows 10-19)
+        else if (bv && row >= 5'd10 && row <= 5'd19 && left) begin
+            if (row == 5'd10) begin                           // column names
+                fg = K_GREY;
+                ch = s64(" DAY BOT         SIDE STOCK  PRICE                              ", cl);
+            end
+            else if (row == 5'd19) begin
+                fg = K_DGREY;
+                ch = s64(" NEWEST AT THE TOP                                              ", cl);
+            end
+            else if (!f_ok) begin
+                if (fe == 3'd0 && cl >= 7'd1) begin ch = s64("NO BOT TRADES YET                                               ", cl - 7'd1); fg = K_DGREY; end
+            end
+            else begin                                        // 045 MOMENTUM    BUY  NVDA  $451.41
+                if (fe == 3'd0) bg = K_ROW;                   // the newest
+                if (cl >= 7'd1 && cl <= 7'd3)        begin ch = num_char; fg = K_GREY; end
+                else if (cl >= 7'd5 && cl <= 7'd15) ch = bot_name(f_bot + 3'd1) >> (8 * (7'd15 - cl));
+                else if (cl >= 7'd17 && cl <= 7'd20) begin ch = s16(f_sell ? "SELL            " : "BUY             ", cl - 7'd17); fg = f_sell ? K_RED : K_GREEN; end
+                else if (cl >= 7'd22 && cl <= 7'd25) begin ch = ticker_ch(f_stk, cl - 7'd22); fg = K_YELLOW; end
+                else if (cl >= 7'd26 && cl <= 7'd33) ch = num_char;
+            end
+        end
+
         // ------------------------------------------------------------ chart labels (left, rows 10-19)
         else if (row >= 5'd10 && row <= 5'd19 && left) begin
             case (row)                                        // in the column right of the chart
@@ -535,6 +622,38 @@ module vga_cells (
                     fg = num_zero ? K_WHITE : num_neg ? K_RED : K_GREEN;
                 end
             end
+        end
+
+        // ------------------------------------------------------------ THE CHOSEN BOT (bot view, right, rows 17-26)
+        else if (bv && row >= 5'd17 && row <= 5'd26 && right) begin
+            fg = K_GREY;
+            case (row)
+                5'd17: begin if (cr <= 7'd16) ch = s16(" NET WORTH      ", cr); else begin ch = num_char; fg = K_WHITE; end end
+                5'd18: begin if (cr <= 7'd16) ch = s16(" CASH           ", cr); else begin ch = num_char; fg = K_WHITE; end end
+                5'd19: begin
+                    if (cr <= 7'd16) ch = s16(" PROFIT/LOSS    ", cr);
+                    else begin ch = num_char; fg = num_zero ? K_WHITE : num_neg ? K_RED : K_GREEN; end
+                end
+                5'd20: begin
+                    if (cr <= 7'd16) ch = s16(" RETURN         ", cr);
+                    else if (cr <= 7'd32) begin ch = num_char; fg = num_zero ? K_WHITE : num_neg ? K_RED : K_GREEN; end
+                    else begin ch = "%"; fg = K_WHITE; end
+                end
+                5'd21: ;
+                5'd22: ch = s64(" STOCK       SHARES            P/L                              ", cr);
+                default: begin                                // rows 23-26: its holdings
+                    if (zero[`DN_BPOS0 + hk]) begin
+                        fg = K_DGREY;
+                        if (cr >= 7'd1 && cr <= 7'd4) ch = ticker_ch(hk, cr - 7'd1);
+                        else if (cr == 7'd18)         ch = "-";
+                    end else begin
+                        fg = K_WHITE;
+                        if (cr >= 7'd1 && cr <= 7'd4)        ch = ticker_ch(hk, cr - 7'd1);
+                        else if (cr >= 7'd13 && cr <= 7'd18) ch = num_char;
+                        else if (cr >= 7'd22 && cr <= 7'd33) begin ch = num_char; fg = num_zero ? K_WHITE : num_neg ? K_RED : K_GREEN; end
+                    end
+                end
+            endcase
         end
 
         // ------------------------------------------------------------ TRADE CONTROLS (right, rows 17-26)
@@ -649,6 +768,11 @@ module vga_cells (
             else if (cr >= 7'd26 && cr <= 7'd33) ch = num_char;
         end
 
+        else if (row == 5'd26 && right && orders_view) begin  // sw14: the buttons work the list on the left OLED
+            fg = K_GREY;
+            ch = s64(" BTNU / BTND  CHOOSE   BTNC  CANCEL                             ", cr);
+        end
+
         // ------------------------------------------------------------ LEADERBOARD (left, rows 21-26)
         else if (row >= 5'd21 && row <= 5'd26 && left) begin  // > 1 OVERNIGHT   $10123.45   +1.23%
             if (ent == 3'd0) bg = K_ROW;                      // your row
@@ -660,78 +784,30 @@ module vga_cells (
             else if (cl == 7'd33)                 ch = "%";
         end
 
-        // ------------------------------------------------------------ row 27: the order, or the last result
-        else if (row == 5'd27) begin
-            if (in_order) begin             //  BUY  3 MCD  LIMIT  AT  $297.04  5% BELOW     TOTAL  $892.12
-                bg = K_ROW;
-                if (col >= 7'd1 && col <= 7'd4)        begin ch = s16(trade_side ? "SELL            " : "BUY             ", col - 7'd1); fg = trade_side ? K_RED : K_GREEN; end
-                else if (col >= 7'd6 && col <= 7'd9)   ch = num_char;
-                else if (col >= 7'd11 && col <= 7'd14) ch = ticker_ch(s, col - 7'd11);
-                else if (col >= 7'd16 && col <= 7'd21) begin ch = type_word(order_type, col - 7'd16); fg = K_GREY; end
-                else if (col >= 7'd23 && col <= 7'd24) begin ch = s16("AT              ", col - 7'd23); fg = K_GREY; end
-                else if (col >= 7'd26 && col <= 7'd34) ch = num_char;
-                else if (col >= 7'd36 && col <= 7'd38 && order_type != `OT_MKT) begin ch = pct_word(order_dist, 1'b1, col - 7'd36); fg = K_GREY; end
-                else if (col >= 7'd40 && col <= 7'd44 && order_type != `OT_MKT) begin ch = s16(below ? "BELOW           " : "ABOVE           ", col - 7'd40); fg = K_GREY; end
-                else if (!order_valid) begin
-                    if (col >= 7'd48 && col <= 7'd63) begin ch = reason_ch(validation_code, col - 7'd48); fg = K_RED; end
-                end
-                else if (col >= 7'd48 && col <= 7'd52) begin ch = s16("TOTAL           ", col - 7'd48); fg = K_GREY; end
-                else if (col >= 7'd54 && col <= 7'd65) ch = num_char;
-            end else if (screen_state == `UI_TRADE_RESULT) begin  //  LAST ORDER  FILLED / PLACED / REJECTED  reason
-                bg = K_ROW;
-                if (col >= 7'd1 && col <= 7'd10)       begin ch = s16("LAST ORDER      ", col - 7'd1); fg = K_GREY; end
-                else if (col >= 7'd12 && col <= 7'd19) begin
-                    ch = s16(!trade_result_success ? "REJECTED        " : trade_result_placed ? "PLACED          " : "FILLED          ", col - 7'd12);
-                    fg = !trade_result_success ? K_RED : trade_result_placed ? K_CYAN : K_GREEN;
-                end
-                else if (!trade_result_success && col >= 7'd21 && col <= 7'd36) ch = reason_ch(trade_result_code, col - 7'd21);
-                else if (trade_result_success && trade_result_placed && col >= 7'd21 && col <= 7'd69)
-                    begin ch = s64("NOW WAITING IN PENDING ORDERS FOR ITS PRICE                     ", col - 7'd21); fg = K_GREY; end
-            end
-        end
-
-        // ------------------------------------------------------------ row 28: NOW (highlighted bar)
-        else if (row == 5'd28) begin
-            bg = K_NAVY;
-            if (col >= 7'd1 && col <= 7'd3) begin ch = s16("NOW             ", col - 7'd1); fg = K_YELLOW; end
-            else if (col >= 7'd5 && col <= 7'd69 && oled_bot_view &&
-                     screen_state != `UI_TITLE && screen_state != `UI_GAME_END)
-                ch = s64("BTNL / BTNR  CHOOSE THE BOT ON THE OLEDS    SW15 DOWN  PLAY     ", col - 7'd5);
-            else if (col >= 7'd5 && col <= 7'd69 && orders_view)
-                ch = s64("BTNU / BTND  CHOOSE AN ORDER (LEFT OLED)   BTNC  CANCEL IT      ", col - 7'd5);
-            else if (col >= 7'd5 && col <= 7'd69) begin
-                case (screen_state)
-                    `UI_TITLE:        ch = s64("PRESS BTNC TO START                                             ", col - 7'd5);
-                    `UI_PORTFOLIO:    ch = s64("BTNL / BTNR  CHOOSE HOME OR MARKET          BTNC  OPEN          ", col - 7'd5);
-                    `UI_STOCKS:       ch = s64("BTNU / BTND  CHOOSE A STOCK                 BTNC  OPEN IT       ", col - 7'd5);
-                    `UI_SPECIFIC:     ch = s64("BTNL / BTNR  CHOOSE BUY, SELL OR BACK       BTNC  SELECT        ", col - 7'd5);
-                    `UI_BUY_STOCK,
-                    `UI_SELL_STOCK:   ch = s64("BTNL / BTNR  CHOOSE BACK, QTY OR NEXT       BTNC  SELECT        ", col - 7'd5);
-                    `UI_QUANTITY:     ch = s64("BTNU / BTND  CHANGE DIGIT    BTNL / BTNR  MOVE    BTNC  DONE    ", col - 7'd5);
-                    `UI_ORDER_REVIEW: ch = s64("BTNU / BTND / BTNL / BTNR  GO BACK          BTNC  SEND IT       ", col - 7'd5);
-                    `UI_ORDER_RESULT: ch = s64("SENDING THE ORDER...                                            ", col - 7'd5);
-                    `UI_TRADE_RESULT: ch = s64("BTNC  CONTINUE                                                  ", col - 7'd5);
-                    `UI_GAME_END:     ch = s64("GAME OVER        SW0 UP THEN DOWN  START A NEW GAME             ", col - 7'd5);
-                    default: ;
-                endcase
-            end
-        end
-
-        // ------------------------------------------------------------ row 29: the switches
-        else if (row == 5'd29) begin    // SW3:2 TYPE MARKET   SW5:4 SL/TP OFF   SW7:6 DISTANCE 5%   SW15 OLED YOU
+        // ------------------------------------------------------------ rows 28-29: the bots' latest trades
+        //  NEW  DAY 045  MOMENTUM     BUYS  NVDA  AT  $451.41   RIDING THE RALLY
+        else if (row >= 5'd28) begin
+            bg = (row == 5'd28) ? K_NAVY : K_ROW;
             fg = K_GREY;
-            if (col >= 7'd1 && col <= 7'd5)        begin ch = s16("SW3:2           ", col - 7'd1); fg = K_DGREY; end
-            else if (col >= 7'd7 && col <= 7'd10)  ch = s16("TYPE            ", col - 7'd7);
-            else if (col >= 7'd12 && col <= 7'd17) begin ch = type_word(order_type, col - 7'd12); fg = K_WHITE; end
-            else if (col >= 7'd20 && col <= 7'd24) begin ch = s16("SW5:4           ", col - 7'd20); fg = K_DGREY; end
-            else if (col >= 7'd26 && col <= 7'd30) ch = s16("SL/TP           ", col - 7'd26);
-            else if (col >= 7'd32 && col <= 7'd34) begin ch = pct_word(order_brk, 1'b0, col - 7'd32); fg = K_WHITE; end
-            else if (col >= 7'd37 && col <= 7'd41) begin ch = s16("SW7:6           ", col - 7'd37); fg = K_DGREY; end
-            else if (col >= 7'd43 && col <= 7'd50) ch = s16("DISTANCE        ", col - 7'd43);
-            else if (col >= 7'd52 && col <= 7'd54) begin ch = pct_word(order_dist, 1'b1, col - 7'd52); fg = K_WHITE; end
-            else if (col >= 7'd57 && col <= 7'd60) begin ch = s16("SW15            ", col - 7'd57); fg = K_DGREY; end
-            else if (col >= 7'd62 && col <= 7'd65) ch = s16("OLED            ", col - 7'd62);
-            else if (col >= 7'd67 && col <= 7'd69) begin ch = s16(oled_bot_view ? "BOT             " : "YOU             ", col - 7'd67); fg = K_WHITE; end
+            if (!f_ok) begin
+                if (row == 5'd28 && col >= 7'd5 && col <= 7'd68)
+                    ch = s64("NO BOT TRADES YET  (THEY TRADE AT THE OPEN AND THE CLOSE)       ", col - 7'd5);
+            end
+            else if (col >= 7'd1 && col <= 7'd3) begin if (row == 5'd28) begin ch = s16("NEW             ", col - 7'd1); fg = K_YELLOW; end end
+            else if (col >= 7'd5 && col <= 7'd7)   ch = s16("DAY             ", col - 7'd5);
+            else if (col >= 7'd9 && col <= 7'd11)  begin ch = num_char; fg = K_WHITE; end
+            else if (col >= 7'd14 && col <= 7'd24) begin ch = bot_name(f_bot + 3'd1) >> (8 * (7'd24 - col)); fg = K_WHITE; end
+            else if (col >= 7'd26 && col <= 7'd30) begin ch = s16(f_sell ? "SELLS           " : "BUYS            ", col - 7'd26); fg = f_sell ? K_RED : K_GREEN; end
+            else if (col >= 7'd32 && col <= 7'd35) begin ch = ticker_ch(f_stk, col - 7'd32); fg = K_YELLOW; end
+            else if (col >= 7'd37 && col <= 7'd38) ch = s16("AT              ", col - 7'd37);
+            else if (col >= 7'd39 && col <= 7'd46) begin ch = num_char; fg = K_WHITE; end
+            else if (col >= 7'd49 && col <= 7'd69) begin ch = why_ch(f_bot, f_sell, col - 7'd49); fg = K_CYAN; end
+        end
+
+        // bot view: purple bars and rows, so it is clear which view this is
+        if (bv) begin
+            if (bg == K_PANEL || bg == K_NAVY) bg = K_PURPLE;
+            else if (bg == K_ROW)              bg = K_PROW;
         end
     end
 endmodule

@@ -671,3 +671,21 @@ through `value_in` (EXT_VALUE). (4) Tricia's `bot_trader.v`: PREP registers ask 
 cost. `tb_exec_engine`: 2 new checks that a new pending buy is costed at its trigger (fail on a
 planted bug, pass on main's engine); planted bugs in the order book and the bot are caught too.
 All 34 testbenches pass. Needs a Vivado build to confirm.
+
+## 2026-11-04: monitor: bot-trade notifications; bot view with news feed and the chosen bot, in purple
+
+**Asked for:** replace the monitor's bottom three rows (order line, NOW hints, switches; redundant
+with TRADE CONTROLS) with two rows of bot-trade notifications that stay until replaced, on every
+screen; in the bot view (sw15) show the chosen bot's portfolio and holdings in place of PENDING
+ORDERS and a news feed of the latest trades (all bots) in place of the chart, keeping the market,
+your portfolio, the leaderboard and the notifications; bot view in purple.
+
+**Done by the AI:** `bot_logbook.v` (Tricia's) also keeps the last 8 trades of all the bots, newest
+first (`feed_*`). `display_numbers.v`: their prices and days as fields `DN_FPX0..7`, `DN_FDAY0..7`
+(`trading_defs.vh`). `vga_cells.v`: rows 28-29 the two latest trades (day, bot, BUYS / SELLS, stock,
+price, the bot's reason), row 27 empty; bot view: LATEST TRADES, the chosen bot's panel, BOT VIEW in
+the title, purple bars and rows (two new colours in `vga_screen.v`, which also hides the chart in the
+bot view). The restart hint moved onto the GAME OVER screen and the sw14 hint under PENDING ORDERS.
+New `tb_vga_botview` (28 checks; fails on planted bugs), feed checks in `tb_bot_logbook` and
+`tb_display_numbers`, `tb_integration`; `tb_vga_controls` / `tb_vga_leaderboard` updated for the
+removed NOW bar. All 35 testbenches pass.

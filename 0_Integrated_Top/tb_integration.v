@@ -311,6 +311,8 @@ module tb_integration;
         while (dut.screen_state != `UI_GAME_END) @(posedge clk);
         repeat (10) @(posedge clk);
         check(dut.sound_now == 3'd5, "sound: the game-end tune plays at game over");
+        check(dut.feed_valid == 8'hFF && dut.feed_price[15:0] != 16'd0 && dut.feed_bot[2:0] <= 3'd4,
+              "monitor: the news feed holds the bots' last 8 trades");
         // (a woosh lasts 2.6 ms here, in a 5 ms game: by now one has ended and rung its bell)
         check(saw_snd[3] > 0 && woosh_bell > 0, "sound: an order whooshes, then its fill rings the bell");
         repeat (DAY) @(posedge clk);

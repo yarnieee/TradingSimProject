@@ -16,6 +16,7 @@ set all_tbs {
     tb_vga_gameover
     tb_vga_title
     tb_vga_controls
+    tb_vga_botview
     tb_progress_width
     tb_portfolio_history
     tb_yian_market

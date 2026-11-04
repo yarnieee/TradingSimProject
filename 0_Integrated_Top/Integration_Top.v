@@ -152,6 +152,12 @@ module Integration_Top #(
     wire [9:0]   bot_log_stock;
     wire [79:0]  bot_log_price;
     wire [39:0]  bot_log_day;
+    // the last 8 trades of all the bots, newest first (monitor: news feed, notifications)
+    wire [7:0]   feed_valid, feed_side;
+    wire [23:0]  feed_bot;
+    wire [15:0]  feed_stock;
+    wire [127:0] feed_price;
+    wire [63:0]  feed_day;
     // the bot view's numbers: the moving-average bot, or the chosen bot_squad bot
     wire        show_ma = (bot_sel == 3'd0);
     wire [1:0]  squad_sel = bot_sel[1:0] - 2'd1;    // bots 1-4 -> bot_squad 0-3
@@ -206,6 +212,8 @@ module Integration_Top #(
         .bot_signal(show_ma ? bot_signal : 8'd0),
         .bot_log_valid(bot_log_valid), .bot_log_side(bot_log_side),
         .bot_log_stock(bot_log_stock), .bot_log_price(bot_log_price), .bot_log_day(bot_log_day),
+        .feed_valid(feed_valid), .feed_bot(feed_bot), .feed_side(feed_side),
+        .feed_stock(feed_stock), .feed_price(feed_price), .feed_day(feed_day),
         .left_pixel(ticket_pixel), .left_x(xL), .left_y(yL),
         .screen_state(screen_state), .quantity(quantity), .sel_stock(sel_stock),
         .price0(price0), .price1(price1), .price2(price2), .price3(price3),
@@ -439,7 +447,9 @@ module Integration_Top #(
         .q_stock(squad_stock), .q_price(squad_price),
         .sel(bot_sel),
         .log_valid(bot_log_valid), .log_side(bot_log_side), .log_stock(bot_log_stock),
-        .log_price(bot_log_price), .log_day(bot_log_day)
+        .log_price(bot_log_price), .log_day(bot_log_day),
+        .feed_valid(feed_valid), .feed_bot(feed_bot), .feed_side(feed_side),
+        .feed_stock(feed_stock), .feed_price(feed_price), .feed_day(feed_day)
     );
 
     // Portfolio history is sampled on the same simulated trading-day tick

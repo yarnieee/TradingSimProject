@@ -48,6 +48,7 @@ module tb_display_numbers;
         .bot_cash(bcash), .bot_value(bval), .bot_pos0(bp0), .bot_pos1(bp1), .bot_pos2(bp2), .bot_pos3(bp3),
         .bot_upnl0(bu0), .bot_upnl1(bu1), .bot_upnl2(bu2), .bot_upnl3(bu3),
         .log_price(lpx), .log_day(lday),
+        .feed_price({112'd0, 16'd45141}), .feed_day({56'd0, 8'd45}),
         .book_qty({48'd0, 8'd5, 8'd12}), .book_trig({96'd0, 16'd21743, 16'd29704}),
         .ret_bp(-32'sd81), .max_dd_bp(32'd91), .bot_ret_bp(32'sd1579),
         .bots_value(bots), .ranks(ranks), .order(order),
@@ -152,6 +153,9 @@ module tb_display_numbers;
         check(`DN_PCT0 + 1, 32'h00000314, 1, "MCD down 3.14% (990 / 31500)");
         check(`DN_PCT0 + 2, 32'h00000000, 0, "NVDA 0.00%");
         check(`DN_PCT0 + 3, 32'h00000040, 1, "GME down 0.40% (10 / 2500)");
+        check(`DN_FPX0,     32'h00045141, 0, "news feed: the newest trade's price $451.41");
+        check(`DN_FDAY0,    32'h00000045, 0, "news feed: its day 45");
+        check(`DN_FPX0 + 1, 32'h00000000, 0, "news feed: an empty entry is 0");
         check(`DN_CHI,      32'h00032150, 0, "chart high $321.50");
         check(`DN_CLO,      32'h00030000, 0, "chart low $300.00");
         check(`DN_LBNET0 + 2, 32'h00987550, 0, "leaderboard: bot 2 worth $9875.50");

@@ -66,6 +66,12 @@ module D_display_top #(
     input  wire [9:0]  bot_log_stock,
     input  wire [79:0] bot_log_price,
     input  wire [39:0] bot_log_day,
+    input  wire [7:0]  feed_valid,        // the bots' last 8 trades, newest first (monitor)
+    input  wire [23:0] feed_bot,
+    input  wire [7:0]  feed_side,
+    input  wire [15:0] feed_stock,
+    input  wire [127:0] feed_price,
+    input  wire [63:0] feed_day,
     // The page shown on JA (left OLED) after the title screen.
     input  wire [15:0] left_pixel,
     output wire [6:0]  left_x,
@@ -350,6 +356,7 @@ module D_display_top #(
         .bot_pos0(bot_pos0), .bot_pos1(bot_pos1), .bot_pos2(bot_pos2), .bot_pos3(bot_pos3),
         .bot_upnl0(bot_upnl0), .bot_upnl1(bot_upnl1), .bot_upnl2(bot_upnl2), .bot_upnl3(bot_upnl3),
         .log_price(bot_log_price), .log_day(bot_log_day),
+        .feed_price(feed_price), .feed_day(feed_day),
         .book_qty(book_qty), .book_trig(book_trig),
         .ret_bp(ret_bp), .max_dd_bp(max_dd_bp), .bot_ret_bp(bot_ret_bp),
         .bcd(numbers_bcd), .neg(numbers_neg),
@@ -397,6 +404,7 @@ module D_display_top #(
         .num_f(vga_num_f), .num_rd(vga_num_rd), .zero(numbers_zero),
         .book_valid(book_valid), .book_side(book_side), .book_stock(book_stock),
         .book_type(book_type), .book_leg(book_leg),
+        .feed_valid(feed_valid), .feed_bot(feed_bot), .feed_side(feed_side), .feed_stock(feed_stock),
         .stock_samples(selected_samples_30), .sel_sl(sel_sl), .sel_tp(sel_tp),
         .progress_w(vga_progress_w), .bar_level(bar_level),
         .vga_r(vga_r), .vga_g(vga_g), .vga_b(vga_b), .hsync(vga_hs), .vsync(vga_vs)

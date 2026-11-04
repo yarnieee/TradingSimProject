@@ -74,6 +74,8 @@ module display_numbers #(
     input  wire signed [31:0] bot_upnl3,
     input  wire [79:0] log_price,         // bot log, newest first
     input  wire [39:0] log_day,
+    input  wire [127:0] feed_price,       // news feed (all bots), newest first
+    input  wire [63:0] feed_day,
     // order book (VGA order list) and Tricia's risk figures
     input  wire [63:0]  book_qty,
     input  wire [127:0] book_trig,
@@ -101,7 +103,9 @@ module display_numbers #(
     // ------------------------------------------------------------ which stock / log entry
     reg [2:0] k;               // stock 0-3, log entry 0-4 or bot 0-4 of this field
     always @* begin
-        if      (idx >= `DN_PCT0)    k = idx - `DN_PCT0;
+        if      (idx >= `DN_FDAY0)   k = idx - `DN_FDAY0;
+        else if (idx >= `DN_FPX0)    k = idx - `DN_FPX0;
+        else if (idx >= `DN_PCT0)    k = idx - `DN_PCT0;
         else if (idx >= `DN_LBPNL0)  k = idx - `DN_LBPNL0;
         else if (idx >= `DN_LBNET0)  k = idx - `DN_LBNET0;
         else if (idx >= `DN_CHI)     k = 3'd0;
@@ -217,7 +221,9 @@ module display_numbers #(
             `DN_CHI:    val = {16'd0, chart_hi};
             `DN_CLO:    val = {16'd0, chart_lo};
             default: begin
-                if (idx >= `DN_PCT0) begin                                               // 30-day % of stock k:
+                if (idx >= `DN_FDAY0)        val = {24'd0, feed_day[8*k +: 8]};          // news feed entry k
+                else if (idx >= `DN_FPX0)    val = {16'd0, feed_price[16*k +: 16]};
+                else if (idx >= `DN_PCT0) begin                                          // 30-day % of stock k:
                     val_neg = px_k < ref_k;                                              // {price 30 days ago,
                     val     = {ref_k, val_neg ? ref_k - px_k : px_k - ref_k};            //  |change|}, divided below
                 end
@@ -258,7 +264,7 @@ module display_numbers #(
     // a 30-day % field (DN_PCT0..3) is divided before it is converted:
     // |change| x 10000 / price 30 days ago, 30 restoring-division steps, at most
     // 999.99%. It uses the same stock (k) and the same load as the $ change.
-    wire        is_pct = (idx >= `DN_PCT0);
+    wire        is_pct = (idx >= `DN_PCT0) && (idx < `DN_FPX0);
     reg         dv;                      // dividing
     reg  [4:0]  dcnt;
     reg  [15:0] d_ref;

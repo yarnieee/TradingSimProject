@@ -1,7 +1,8 @@
 `timescale 1ns / 1ps
 
 // tb_bot_logbook: each bot's last 5 trades, newest first; a moving-average
-// trade on the same clock as a bot_squad trade is not lost.
+// trade on the same clock as a bot_squad trade is not lost; the feed of all the
+// bots' last 8 trades, newest first.
 module tb_bot_logbook;
     reg clk = 1'b0;
     always #5 clk = ~clk;
@@ -15,13 +16,19 @@ module tb_bot_logbook;
     wire [9:0]  lk;
     wire [79:0] lp;
     wire [39:0] ld;
+    wire [7:0]   fv, fs;
+    wire [23:0]  fb;
+    wire [15:0]  fk;
+    wire [127:0] fp;
+    wire [63:0]  fd;
 
     bot_logbook dut (
         .clk(clk), .rst(rst), .day(day),
         .a_trade(a_trade), .a_side(a_side), .a_stock(a_stock), .a_price(a_price),
         .q_trade(q_trade), .q_bot(q_bot), .q_side(q_side), .q_stock(q_stock), .q_price(q_price),
         .sel(sel),
-        .log_valid(lv), .log_side(ls), .log_stock(lk), .log_price(lp), .log_day(ld)
+        .log_valid(lv), .log_side(ls), .log_stock(lk), .log_price(lp), .log_day(ld),
+        .feed_valid(fv), .feed_bot(fb), .feed_side(fs), .feed_stock(fk), .feed_price(fp), .feed_day(fd)
     );
 
     integer n_pass = 0, n_fail = 0, t;
@@ -59,6 +66,9 @@ module tb_bot_logbook;
         check(lv == 5'b11111, "five entries shown once there are more than five");
         check(lp[15:0] == 16'd107 && lp[31:16] == 16'd106 && lp[79:64] == 16'd103, "newest first, last five");
         check(ld[7:0] == 8'd7 && ls[0] == 1'b1 && lk[1:0] == 2'd3, "day, side and stock of the newest");
+        check(fv == 8'b0111_1111 && fp[15:0] == 16'd107 && fp[111:96] == 16'd101 && fb[2:0] == 3'd2,
+              "feed: seven trades, newest first, from bot 2");
+        check(fd[7:0] == 8'd7 && fs[0] == 1'b1 && fk[1:0] == 2'd3 && fd[55:48] == 8'd1, "feed: day, side, stock");
 
         // the moving-average bot and bot 4 on the same clock
         @(negedge clk);
@@ -75,10 +85,14 @@ module tb_bot_logbook;
         sel = 3'd1;
         repeat (12) @(posedge clk); #1;
         check(lv == 5'b00000, "a bot that has not traded shows no entries");
+        // feed: bot_squad's trade (bot 4) then the waiting moving-average one (bot 0) on top
+        check(fv == 8'hFF && fb[2:0] == 3'd0 && fp[15:0] == 16'd555 && fb[5:3] == 3'd4 && fp[31:16] == 16'd777
+              && fp[47:32] == 16'd107 && fp[127:112] == 16'd102, "feed: all the bots, newest first, the oldest dropped");
 
         @(negedge clk); rst = 1'b1; @(negedge clk); rst = 1'b0; sel = 3'd2;
         repeat (12) @(posedge clk); #1;
         check(lv == 5'd0, "a new game empties the logs");
+        check(fv == 8'd0, "a new game empties the feed");
 
         if (n_fail == 0) $display("PASS: tb_bot_logbook (%0d checks)", n_pass);
         else             $display("FAIL: tb_bot_logbook (%0d failed, %0d passed)", n_fail, n_pass);

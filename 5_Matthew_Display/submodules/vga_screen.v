@@ -63,6 +63,10 @@ module vga_screen #(
     input  wire [15:0] book_stock,
     input  wire [15:0] book_type,
     input  wire [7:0]  book_leg,
+    input  wire [7:0]  feed_valid,      // the bots' last 8 trades (news feed, notifications)
+    input  wire [23:0] feed_bot,
+    input  wire [7:0]  feed_side,
+    input  wire [15:0] feed_stock,
     // graphics
     input  wire [479:0] stock_samples,   // selected stock, 30 days, oldest first
     input  wire [15:0]  sel_sl,          // its stop-loss / take-profit levels (0 = none)
@@ -93,7 +97,9 @@ module vga_screen #(
                 4'd9:    rgb = 12'h515;   // plum
                 4'd10:   rgb = 12'hF90;   // orange
                 4'd11:   rgb = 12'h235;   // slate (panel header bars)
-                4'd12:   rgb = 12'h223;   // dark slate (selected row, order line)
+                4'd12:   rgb = 12'h223;   // dark slate (selected row, older notification)
+                4'd13:   rgb = 12'h63A;   // purple (bot view: bars)
+                4'd14:   rgb = 12'h314;   // dark purple (bot view: rows)
                 default: rgb = 12'h000;
             endcase
         end
@@ -138,6 +144,11 @@ module vga_screen #(
     reg        go_c, ti_c;
     reg  [1:0] go_p, ti_p;
     always @(posedge clk)  begin go_c <= (screen_state == `UI_GAME_END); ti_c <= (screen_state == `UI_TITLE); end
+    // the bot view shows the news feed where the chart is: no chart then
+    reg        bv_c;
+    reg  [1:0] bv_p;
+    always @(posedge clk)  bv_c <= oled_bot_view;
+    always @(posedge pclk) bv_p <= {bv_p[0], bv_c};
     always @(posedge pclk) begin go_p <= {go_p[0], go_c}; ti_p <= {ti_p[0], ti_c}; end
     reg  [1:0] bl_c, bl_p;                 // bar_level changes one bit at a time
     always @(posedge pclk) begin bl_c <= bar_level; bl_p <= bl_c; end
@@ -161,6 +172,7 @@ module vga_screen #(
         .go_blink(go_blink), .go_results(go_results),
         .book_valid(book_valid), .book_side(book_side), .book_stock(book_stock),
         .book_type(book_type), .book_leg(book_leg),
+        .feed_valid(feed_valid), .feed_bot(feed_bot), .feed_side(feed_side), .feed_stock(feed_stock),
         .ch(c_ch), .fg(c_fg), .bg(c_bg)
     );
 
@@ -371,7 +383,7 @@ module vga_screen #(
                         .pixel_on(glyph));
 
     // chart area: x 18..497, y 240..479 (rows 10-19); lines at y = 468 - height (252 = high, 468 = low)
-    wire       in_chart = !go_p[1] && !ti_p[1] && (p_h >= 11'd18) && (p_h <= 11'd497) && (p_v >= 10'd240) && (p_v <= 10'd479);
+    wire       in_chart = !go_p[1] && !ti_p[1] && !bv_p[1] && (p_h >= 11'd18) && (p_h <= 11'd497) && (p_v >= 10'd240) && (p_v <= 10'd479);
     wire [9:0] y_cur = 10'd468 - {2'd0, p_hc};
     wire [9:0] y_prv = 10'd468 - {2'd0, p_hp};
     wire [9:0] y_sl  = 10'd468 - {2'd0, h_tab[30]};

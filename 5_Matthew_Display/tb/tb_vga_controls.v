@@ -4,7 +4,8 @@
 // tb_vga_controls: the right panel's TRADE CONTROLS (rows 16-26). While an order
 // is being made (BUY / SELL, QUANTITY, ORDER REVIEW) it shows the order, the
 // buttons for that screen, the switches and READY TO BUY / SELL (or why not);
-// otherwise, and with sw14 / sw15 up, PENDING ORDERS as before. Nothing outside
+// otherwise, and with sw14 up, PENDING ORDERS as before (sw15 up: the chosen bot,
+// tb_vga_botview). Nothing outside
 // the panel changes. Each screen's panel is printed as text.
 module tb_vga_controls;
     reg  [4:0]  row = 5'd0;
@@ -38,7 +39,7 @@ module tb_vga_controls;
         .go_blink(1'b0), .go_results(1'b0), .up(4'd0),
         .num_f(num_f), .num_rd(num_rd), .zero(zero),
         .book_valid(book_valid), .book_side(8'b0001_0000), .book_stock(16'b0000_0011_0000_0000),
-        .book_type({6'd0, `OT_STP, 4'd0, `OT_LMT, 2'd0}), .book_leg(8'b0001_0000),
+        .book_type({6'd0, `OT_STP, 4'd0, `OT_LMT, 2'd0}), .book_leg(8'b0001_0000), .feed_valid(8'd0), .feed_bot(24'd0), .feed_side(8'd0), .feed_stock(16'd0),
         .ch(ch), .fg(fg), .bg(bg)
     );
 
@@ -175,7 +176,7 @@ module tb_vga_controls;
         right_text(5'd16); check(txt[8*34:8*18+1] == " PENDING ORDERS ", "sw14 up: PENDING ORDERS while trading");
         right_text(5'd18); check(txt[8*34:8*29+1] == " AMD ", "sw14 up: the orders listed");
         orders_view = 1'b0; oled_bot_view = 1'b1;
-        right_text(5'd16); check(txt[8*34:8*18+1] == " PENDING ORDERS ", "sw15 up: PENDING ORDERS while trading");
+        right_text(5'd16); check(txt[8*34:8*18+1] == " MA BOT         ", "sw15 up: the chosen bot, even while trading");
         oled_bot_view = 1'b0;
 
         // ---- after the order: back to the list

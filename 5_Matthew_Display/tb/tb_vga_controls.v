@@ -4,8 +4,8 @@
 // tb_vga_controls: the right panel's TRADE CONTROLS (rows 16-26). While an order
 // is being made (BUY / SELL, QUANTITY, ORDER REVIEW) it shows the order, the
 // buttons for that screen, the switches and READY TO BUY / SELL (or why not);
-// otherwise, and with sw14 up, PENDING ORDERS as before (sw15 up: the chosen bot,
-// tb_vga_botview). Nothing outside
+// otherwise PENDING ORDERS as before; sw14 up: ORDERS - CANCEL, all 8 slots as on
+// the left OLED; sw15 up: the chosen bot (tb_vga_botview). Nothing outside
 // the panel changes. Each screen's panel is printed as text.
 module tb_vga_controls;
     reg  [4:0]  row = 5'd0;
@@ -173,18 +173,20 @@ module tb_vga_controls;
 
         // ---- sw14 (cancel orders) or sw15 (bot view) up: the pending list, even while trading
         orders_view = 1'b1;
-        right_text(5'd16); check(txt[8*34:8*18+1] == " PENDING ORDERS ", "sw14 up: PENDING ORDERS while trading");
-        right_text(5'd18); check(txt[8*34:8*29+1] == " AMD ", "sw14 up: the orders listed");
+        right_text(5'd16); check(txt[8*34:8*18+1] == " ORDERS - CANCEL", "sw14 up: ORDERS - CANCEL while trading");
+        right_text(5'd18); check(txt[8*34:8*29+1] == " 1 - ", "sw14 up: slot 1 empty, as on the left OLED");
+        right_text(5'd19); check(txt[8*34:8*27+1] == " 2 AMD ", "sw14 up: slot 2 AMD");
         orders_view = 1'b0; oled_bot_view = 1'b1;
         right_text(5'd16); check(txt[8*34:8*18+1] == " MA BOT         ", "sw15 up: the chosen bot, even while trading");
         oled_bot_view = 1'b0;
 
         // ---- after the order: back to the list
         screen_state = `UI_TRADE_RESULT;     // the result and BTNC CONTINUE (monitor-only play)
-        right_text(5'd16); check(txt[8*34:8*18+1] == " TRADE CONTROLS ", "result screen: the result panel");
-        right_text(5'd23); check(txt[8*34:8*13+1] == " BTNC        CONTINUE", "result screen: BTNC CONTINUE");
+        right_text(5'd16); check(txt[8*34:8*18+1] == " ORDER RESULT   ", "result screen: the result panel");
+        right_text(5'd19); check(txt[8*21:8*13+1] == "REJECTED", "result screen: REJECTED on its band");
+        right_text(5'd25); check(txt[8*25:8*9+1] == "  C : CONTINUE  ", "result screen: the C : CONTINUE button");
         screen_state = `UI_SPECIFIC;         // the stock page: BUY / SELL / BACK on the monitor
-        right_text(5'd23); check(txt[8*34:8*3+1] == " BTNL/BTNR   BUY   SELL   BACK ", "stock page: BUY / SELL / BACK");
+        right_text(5'd24); check(txt[8*34:8*3+1] == " BTNL/BTNR   BUY   SELL   BACK ", "stock page: BUY / SELL / BACK");
         book_valid = 8'd0; screen_state = `UI_PORTFOLIO;
         right_text(5'd18); check(txt[8*34:8*16+1] == " NO PENDING ORDERS", "no orders: NO PENDING ORDERS");
 

@@ -288,8 +288,12 @@ module vga_cells (
                 cnt = cnt + 1;
             end
     end
-    wire [1:0]  sl_stk  = book_stock[2*sl +: 2];
-    wire [1:0]  sl_typ  = book_type[2*sl +: 2];
+    // sw14 up (cancelling): rows 18-25 are book slots 1-8 in order, empty ones too,
+    // as on the left OLED, so the cancel cursor always has its row
+    wire [2:0]  psl     = orders_view ? pn : sl;
+    wire        p_ok    = orders_view ? book_valid[pn] : sl_ok;
+    wire [1:0]  sl_stk  = book_stock[2*psl +: 2];
+    wire [1:0]  sl_typ  = book_type[2*psl +: 2];
     wire [3:0]  pending = book_valid[0] + book_valid[1] + book_valid[2] + book_valid[3]
                         + book_valid[4] + book_valid[5] + book_valid[6] + book_valid[7];
 
@@ -390,6 +394,8 @@ module vga_cells (
                     d_sh8 = 1'b1; d_sgn = 1'b1; d_prefix = 8'd0; d_w = 7'd7; d_p = cl - 7'd26;
                 end
             end
+        end else if (ctl && on_result && row >= 5'd17) begin                      // the result: BUY 12 MCD
+            if (row == 5'd22) begin num_f = `DN_QTY; d_dp2 = 1'b0; d_prefix = 8'd0; d_w = 7'd4; d_p = cr - 7'd15; end
         end else if (ctl && on_stock && row >= 5'd17) begin                       // the stock page
             case (row)
                 5'd18: begin num_f = `DN_PX0 + s;  d_w = 7'd17; d_p = cr - 7'd17; end
@@ -417,8 +423,8 @@ module vga_cells (
                     else             begin num_f = `DN_PNL0 + hk; d_sgn = 1'b1; d_w = 7'd12; d_p = cr - 7'd22; end
                 end
                 5'd18, 5'd19, 5'd20, 5'd21, 5'd22, 5'd23, 5'd24, 5'd25: begin     // pending orders
-                    if (cr <= 7'd24) begin num_f = `DN_SLQ0 + sl; d_dp2 = 1'b0; d_prefix = 8'd0; d_w = 7'd4; d_p = cr - 7'd21; end
-                    else             begin num_f = `DN_SLT0 + sl; d_w = 7'd8; d_p = cr - 7'd26; end
+                    if (cr <= 7'd24) begin num_f = `DN_SLQ0 + psl; d_dp2 = 1'b0; d_prefix = 8'd0; d_w = 7'd4; d_p = cr - 7'd21; end
+                    else             begin num_f = `DN_SLT0 + psl; d_w = 7'd8; d_p = cr - 7'd26; end
                 end
                 default: ;
             endcase
@@ -540,7 +546,9 @@ module vga_cells (
                         if (cr >= 7'd1 && cr <= 7'd11) begin ch = bot_name(bot_sel + 3'd1) >> (8 * (7'd11 - cr)); fg = K_YELLOW; end
                         else if (cr >= 7'd23)          begin ch = s16("BTNL / BTNR     ", cr - 7'd23); fg = K_GREY; end
                     end
-                    else if (cr <= 7'd15)                ch = s16(ctl ? " TRADE CONTROLS " : " PENDING ORDERS ", cr);
+                    else if (cr <= 7'd15)                ch = s16(orders_view ? " ORDERS - CANCEL" :
+                                                                  (ctl && on_result) ? " ORDER RESULT   " :
+                                                                  ctl ? " TRADE CONTROLS " : " PENDING ORDERS ", cr);
                     else if (ctl && in_order && cr >= 7'd17 && cr <= 7'd20) begin   //  TRADE CONTROLS  BUY     2 OF 8
                         ch = s16(trade_side ? "SELL            " : "BUY             ", cr - 7'd17);
                         fg = trade_side ? K_RED : K_GREEN;
@@ -742,27 +750,35 @@ module vga_cells (
             endcase
         end
         else if (ctl && on_result && row >= 5'd17 && row <= 5'd26 && right) begin
-            fg = K_GREY;                                      // the result: FILLED / PLACED / REJECTED, BTNC CONTINUE
-            case (row)
-                5'd17: begin
-                    if (cr <= 7'd16) ch = s16(" STOCK          ", cr);
-                    else begin ch = ticker_ch(s, cr - ((s == 2'd2) ? 7'd30 : 7'd31)); fg = K_YELLOW; end
-                end
-                5'd18: begin
-                    if (screen_state == `UI_ORDER_RESULT) ch = s64(" SENDING THE ORDER...                                           ", cr);
-                    else if (cr <= 7'd16) ch = s16(" YOUR ORDER     ", cr);
-                    else if (cr >= 7'd24) begin
-                        ch = s16(!trade_result_success ? " REJECTED       " : trade_result_placed ? "   PLACED       " : "   FILLED       ", cr - 7'd24);
-                        fg = !trade_result_success ? K_RED : trade_result_placed ? K_CYAN : K_GREEN;
+            // as on the right OLED: a coloured band with FILLED / PLACED / REJECTED,
+            // the order (or why it was rejected) under it, and a C : CONTINUE button
+            fg = K_GREY;
+            if (screen_state == `UI_ORDER_RESULT) begin
+                if (row == 5'd19 && cr >= 7'd10 && cr <= 7'd23) begin ch = s16("PLEASE WAIT...  ", cr - 7'd10); fg = K_CYAN; end
+            end
+            else case (row)
+                5'd18, 5'd19, 5'd20: if (cr >= 7'd2 && cr <= 7'd31) begin
+                    bg = !trade_result_success ? K_RED : trade_result_placed ? K_CYAN : K_GREEN;
+                    fg = K_BLACK;
+                    if (row == 5'd19) begin
+                        if (!trade_result_success)    begin if (cr >= 7'd13 && cr <= 7'd20) ch = s16("REJECTED        ", cr - 7'd13); end
+                        else if (trade_result_placed) begin if (cr >= 7'd14 && cr <= 7'd19) ch = s16("PLACED          ", cr - 7'd14); end
+                        else                          begin if (cr >= 7'd14 && cr <= 7'd19) ch = s16("FILLED          ", cr - 7'd14); end
                     end
                 end
-                5'd19: if (screen_state == `UI_TRADE_RESULT) begin
-                    if (!trade_result_success) begin if (cr >= 7'd1 && cr <= 7'd16) begin ch = reason_ch(trade_result_code, cr - 7'd1); fg = K_RED; end end
-                    else if (trade_result_placed) ch = s64(" WAITING IN PENDING ORDERS                                      ", cr);
+                5'd22: begin                                  //   BUY   12  MCD   /   NOT ENOUGH CASH
+                    if (!trade_result_success) begin
+                        if (cr >= 7'd9 && cr <= 7'd24) begin ch = reason_ch(trade_result_code, cr - 7'd9); fg = K_RED; end
+                    end
+                    else if (cr >= 7'd10 && cr <= 7'd13) begin ch = s16(trade_side ? "SELL            " : "BUY             ", cr - 7'd10); fg = trade_side ? K_RED : K_GREEN; end
+                    else if (cr >= 7'd15 && cr <= 7'd18) begin ch = num_char; fg = K_WHITE; end
+                    else if (cr >= 7'd20 && cr <= 7'd23) begin ch = ticker_ch(s, cr - 7'd20); fg = K_YELLOW; end
                 end
-                5'd23: if (screen_state == `UI_TRADE_RESULT) begin
-                    ch = s64(" BTNC        CONTINUE                                           ", cr);
-                    if (cr <= 7'd11) begin fg = K_BLACK; bg = K_YELLOW; end else fg = K_WHITE;
+                5'd23: if (trade_result_success && trade_result_placed && cr >= 7'd4 && cr <= 7'd28)
+                           ch = s64("WAITING IN PENDING ORDERS                                       ", cr - 7'd4);
+                5'd25: if (cr >= 7'd9 && cr <= 7'd24) begin  // the button
+                    ch = s16("  C : CONTINUE  ", cr - 7'd9);
+                    bg = K_YELLOW; fg = K_BLACK;
                 end
                 default: ;
             endcase
@@ -866,27 +882,31 @@ module vga_cells (
         // ------------------------------------------------------------ PENDING ORDERS (right, rows 17-25)
         else if (row == 5'd17 && right) begin
             fg = K_GREY;
-            if (pending != 4'd0) ch = s64(" STOCK  ORDER         QTY    PRICE                              ", cr);
+            if (orders_view)     ch = s64(" # STOCK ORDER         QTY    PRICE                              ", cr);
+            else if (pending != 4'd0) ch = s64(" STOCK  ORDER         QTY    PRICE                              ", cr);
         end
         else if (row >= 5'd18 && row <= 5'd25 && right) begin
-            if (!sl_ok) begin
-                if (row == 5'd18 && cr >= 7'd1) begin ch = s64("NO PENDING ORDERS                                               ", cr - 7'd1); fg = K_DGREY; end
+            if (orders_view && cr == 7'd1) begin ch = "1" + pn; fg = K_GREY; end   // slot number, as on the OLED
+            else if (!p_ok) begin
+                if (orders_view) begin if (cr == 7'd3) begin ch = "-"; fg = K_DGREY; end end
+                else if (row == 5'd18 && cr >= 7'd1) begin ch = s64("NO PENDING ORDERS                                               ", cr - 7'd1); fg = K_DGREY; end
             end
-            else if (cr >= 7'd1 && cr <= 7'd4) ch = ticker_ch(sl_stk, cr - 7'd1);
+            else if (orders_view ? (cr >= 7'd3 && cr <= 7'd6) : (cr >= 7'd1 && cr <= 7'd4))
+                ch = ticker_ch(sl_stk, cr - (orders_view ? 7'd3 : 7'd1));
             else if (cr >= 7'd8 && cr <= 7'd18) begin        // green for a buy, red for a sell
-                ch = s16(book_leg[sl] ? ((sl_typ == `OT_STP) ? "STOP-LOSS       " : "TAKE-PROFIT     ")
-                                      : book_side[sl] ? ((sl_typ == `OT_LMT) ? "SELL LIMIT      " : "SELL STOP       ")
-                                                      : ((sl_typ == `OT_LMT) ? "BUY LIMIT       " : "BUY STOP        "), cr - 7'd8);
-                fg = book_side[sl] ? K_RED : K_GREEN;
+                ch = s16(book_leg[psl] ? ((sl_typ == `OT_STP) ? "STOP-LOSS       " : "TAKE-PROFIT     ")
+                                       : book_side[psl] ? ((sl_typ == `OT_LMT) ? "SELL LIMIT      " : "SELL STOP       ")
+                                                        : ((sl_typ == `OT_LMT) ? "BUY LIMIT       " : "BUY STOP        "), cr - 7'd8);
+                fg = book_side[psl] ? K_RED : K_GREEN;
             end
             else if (cr >= 7'd21 && cr <= 7'd24) ch = num_char;
             else if (cr >= 7'd26 && cr <= 7'd33) ch = num_char;
-            if (sl_ok && orders_view && sl == orders_sel) begin bg = K_YELLOW; fg = K_BLACK; end   // to cancel
+            if (orders_view && pn == orders_sel) begin bg = K_YELLOW; fg = K_BLACK; end   // the order to cancel
         end
 
         else if (row == 5'd26 && right && orders_view) begin  // sw14: the buttons work the list on the left OLED
             fg = K_GREY;
-            ch = s64(" BTNU / BTND  CHOOSE   BTNC  CANCEL                             ", cr);
+            ch = s64(" BTNU/BTND  CHOOSE    BTNC  CANCEL                              ", cr);
         end
 
         // ------------------------------------------------------------ LEADERBOARD (left, rows 21-26)

@@ -702,3 +702,14 @@ cursor with a hint; quantity digits with the one being changed lit; sw14's cance
 PENDING ORDERS (`orders_sel` out of `B_order_top.v`). Bot panel: picture at the left (`vga_screen.v`
 draws the bot's box from the title picture, 3x), values and two lines of strategy at the right.
 Tests updated for the new panels (`tb_vga_controls`, `tb_vga_botview`). All 35 testbenches pass.
+
+## 2026-11-04: monitor result panel like the OLED; sw14 cancel list on the monitor
+
+**Asked for:** make the monitor's result (FILLED / PLACED / REJECTED, continue) look like the
+OLED's; show the cancel-order page on the monitor with sw14 up.
+
+**Done by the AI:** `vga_cells.v`: ORDER RESULT panel with a coloured band (FILLED green, PLACED cyan,
+REJECTED red), BUY 12 MCD or the reason under it, and a yellow C : CONTINUE button; with sw14 up
+the panel is ORDERS - CANCEL listing book slots 1-8 in order (empty ones as "-") as on the left
+OLED, so the cancel cursor's row is always lit. `tb_vga_controls` updated (it also still checked
+the stock page's buttons on row 23, which Tricia's b67b411 moved to row 24).

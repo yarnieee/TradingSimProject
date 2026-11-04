@@ -750,22 +750,14 @@ module vga_cells (
             endcase
         end
         else if (ctl && on_result && row >= 5'd17 && row <= 5'd26 && right) begin
-            // as on the right OLED: a coloured band with FILLED / PLACED / REJECTED,
+            // as on the right OLED: FILLED / PLACED / REJECTED big (drawn by vga_screen),
             // the order (or why it was rejected) under it, and a C : CONTINUE button
             fg = K_GREY;
             if (screen_state == `UI_ORDER_RESULT) begin
                 if (row == 5'd19 && cr >= 7'd10 && cr <= 7'd23) begin ch = s16("PLEASE WAIT...  ", cr - 7'd10); fg = K_CYAN; end
             end
             else case (row)
-                5'd18, 5'd19, 5'd20: if (cr >= 7'd2 && cr <= 7'd31) begin
-                    bg = !trade_result_success ? K_RED : trade_result_placed ? K_CYAN : K_GREEN;
-                    fg = K_BLACK;
-                    if (row == 5'd19) begin
-                        if (!trade_result_success)    begin if (cr >= 7'd13 && cr <= 7'd20) ch = s16("REJECTED        ", cr - 7'd13); end
-                        else if (trade_result_placed) begin if (cr >= 7'd14 && cr <= 7'd19) ch = s16("PLACED          ", cr - 7'd14); end
-                        else                          begin if (cr >= 7'd14 && cr <= 7'd19) ch = s16("FILLED          ", cr - 7'd14); end
-                    end
-                end
+                // rows 18-20: FILLED / PLACED / REJECTED in big letters (vga_screen)
                 5'd22: begin                                  //   BUY   12  MCD   /   NOT ENOUGH CASH
                     if (!trade_result_success) begin
                         if (cr >= 7'd9 && cr <= 7'd24) begin ch = reason_ch(trade_result_code, cr - 7'd9); fg = K_RED; end

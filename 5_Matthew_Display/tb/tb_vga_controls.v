@@ -183,7 +183,7 @@ module tb_vga_controls;
         // ---- after the order: back to the list
         screen_state = `UI_TRADE_RESULT;     // the result and BTNC CONTINUE (monitor-only play)
         right_text(5'd16); check(txt[8*34:8*18+1] == " ORDER RESULT   ", "result screen: the result panel");
-        right_text(5'd19); check(txt[8*21:8*13+1] == "REJECTED", "result screen: REJECTED on its band");
+        right_text(5'd19); check(txt == {34{8'h20}}, "result screen: rows 18-20 left to the big word (vga_screen)");
         right_text(5'd25); check(txt[8*25:8*9+1] == "  C : CONTINUE  ", "result screen: the C : CONTINUE button");
         screen_state = `UI_SPECIFIC;         // the stock page: BUY / SELL / BACK on the monitor
         right_text(5'd24); check(txt[8*34:8*3+1] == " BTNL/BTNR   BUY   SELL   BACK ", "stock page: BUY / SELL / BACK");

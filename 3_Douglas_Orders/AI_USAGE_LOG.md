@@ -713,3 +713,12 @@ REJECTED red), BUY 12 MCD or the reason under it, and a yellow C : CONTINUE butt
 the panel is ORDERS - CANCEL listing book slots 1-8 in order (empty ones as "-") as on the left
 OLED, so the cancel cursor's row is always lit. `tb_vga_controls` updated (it also still checked
 the stock page's buttons on row 23, which Tricia's b67b411 moved to row 24).
+
+## 2026-11-04: the result screen's word big on the monitor
+
+**Asked for:** not the coloured band: FILLED in green in big letters (as on the OLED).
+
+**Done by the AI:** `vga_screen.v` draws FILLED (green) / PLACED (cyan) / REJECTED (red) in the 5x7
+font with 8 x 8 pixel dots, centred in the right panel (rows 18-20), from a second font_renderer;
+`vga_cells.v` leaves those rows empty. A one-frame simulation shows the word's dots on line 460 at
+x 814..1093. `tb_vga_controls` updated.

@@ -151,6 +151,12 @@ module vga_screen #(
     reg  [1:0] bv_p;
     always @(posedge clk)  bv_c <= oled_bot_view;
     always @(posedge pclk) bv_p <= {bv_p[0], bv_c};
+    // the result screen's big word: 0 none, 1 FILLED, 2 PLACED, 3 REJECTED
+    reg  [1:0] bw_c, bw_p0, bw_p;
+    always @(posedge clk)
+        bw_c <= (screen_state != `UI_TRADE_RESULT || orders_view || oled_bot_view) ? 2'd0 :
+                !trade_result_success ? 2'd3 : trade_result_placed ? 2'd2 : 2'd1;
+    always @(posedge pclk) begin bw_p0 <= bw_c; bw_p <= bw_p0; end
     reg  [2:0] bs_c, bs_p0, bs_p;                // the chosen bot (changes rarely)
     always @(posedge clk)  bs_c <= bot_sel;
     always @(posedge pclk) begin bs_p0 <= bs_c; bs_p <= bs_p0; end
@@ -367,6 +373,33 @@ module vga_screen #(
         end
     end
 
+    // ------------------------------------------------------------ result screen: the big word
+    // FILLED (green) / PLACED (cyan) / REJECTED (red) in the 5 x 7 font, each dot
+    // 8 x 8 pixels, letters 48 pixels apart, centred in the right panel at y 440..495
+    // (rows 18-20, as the right OLED shows it big)
+    wire [10:0] BW_X0 = (bw_p == 2'd3) ? 11'd766 : 11'd814;     // 8 or 6 letters
+    wire [10:0] BW_W  = (bw_p == 2'd3) ? 11'd384 : 11'd288;
+    reg  [5:0]  wx;                              // pixel inside the letter, 0..47
+    reg  [3:0]  wl;                              // letter
+    initial begin wx = 6'd0; wl = 4'd0; end
+    always @(posedge pclk) begin
+        if (h == 11'd1649) begin wx <= 6'd0; wl <= 4'd0; end
+        else if (h >= BW_X0) begin
+            if (wx == 6'd47) begin wx <= 6'd0; wl <= wl + 4'd1; end
+            else wx <= wx + 6'd1;
+        end
+    end
+    function [7:0] bw_ch;                        // letter n of the word
+        input [1:0] w;
+        input [3:0] n;
+        reg [63:0] t;
+        begin
+            t = (w == 2'd3) ? "REJECTED" : (w == 2'd2) ? "PLACED  " : "FILLED  ";
+            bw_ch = (n > 4'd7) ? " " : t[63 - 8*n -: 8];
+        end
+    endfunction
+    wire [9:0]  bw_y = v - 10'd440;
+
     // ------------------------------------------------------------ pixel pipeline
     // stage 1: RAM address, the pixel's position, its chart day
     reg  [10:0] s1_h;
@@ -375,7 +408,9 @@ module vga_screen #(
     reg  [3:0]  s1_bp;
     reg         s1_vis, s1_hs, s1_vs;
     reg  [15:0] art_addr;
-    reg         s1_art, s1_btn, s1_bimg;
+    reg         s1_art, s1_btn, s1_bimg, s1_big;
+    reg  [7:0]  s1_bch;
+    reg  [2:0]  s1_bgx, s1_bgy;
     wire [10:0] bx = h - 11'd18;               // chart x: day = bx / 16
     always @(posedge pclk) begin
         rd_addr <= {cy, cx};
@@ -385,6 +420,10 @@ module vga_screen #(
                     (v >= BY0) && (v < BY0 + 10'd138) &&
                     (gx >= 6'd3) && (gx < 6'd59) && (gy >= 6'd3) && (gy < 6'd37);
         s1_btn   <= (ty >= TITLE_BTN_ROW);
+        s1_big   <= (bw_p != 2'd0) && (h >= BW_X0) && (h < BW_X0 + BW_W) && (v >= 10'd440) && (v < 10'd496);
+        s1_bch   <= bw_ch(bw_p, wl);
+        s1_bgx   <= (wx[5:3] > 3'd4) ? 3'd7 : wx[5:3];          // the 6th dot column is the gap
+        s1_bgy   <= bw_y[5:3];
         s1_art  <= (h < 11'd1280) && (v < 10'd720);
         s1_h    <= h;
         s1_v    <= v;
@@ -405,12 +444,17 @@ module vga_screen #(
     reg  [7:0]  p_hc, p_hp;
     reg         p_vis, p_hs, p_vs;
     reg  [3:0]  p_tpx;
-    reg         p_art, p_btn, p_bimg;
+    reg         p_art, p_btn, p_bimg, p_big;
+    reg  [1:0]  p_bw;
+    wire        big_dot;
+    font_renderer big_font (.char_code(s1_bch), .glyph_x(s1_bgx), .glyph_y(s1_bgy), .pixel_on(big_dot));
     always @(posedge pclk) begin
         p_tpx   <= title_pic[art_addr];
         p_art   <= s1_art && ti_p[1];
         p_btn   <= s1_btn;
         p_bimg  <= s1_bimg;
+        p_big   <= s1_big && big_dot;
+        p_bw    <= bw_p;
         p_h <= s1_h; p_v <= s1_v; p_px <= s1_px; p_ly <= s1_ly; p_bn <= s1_bn; p_bp <= s1_bp;
         p_hc <= h_tab[s1_bn];
         p_hp <= h_tab[(s1_bn == 5'd0) ? 5'd0 : s1_bn - 5'd1];
@@ -451,6 +495,7 @@ module vga_screen #(
         s2_text <= glyph ? rgb(rd_data[15:12]) : rgb(rd_data[11:8]);
         s2_gfx_on <= 1'b1;
         if (p_art)                                  s2_gfx <= title_rgb((p_btn && !t_blink) ? 4'h0 : p_tpx);
+        else if (p_big)                             s2_gfx <= (p_bw == 2'd3) ? 12'hF44 : (p_bw == 2'd2) ? 12'h0FF : 12'h0F0;
         else if (p_bimg && p_tpx != 4'h0 && p_tpx != 4'h1 && p_tpx != 4'h5)
                                                     s2_gfx <= title_rgb(p_tpx);
         else if (in_bar)                            s2_gfx <= bar_on ? bar_rgb : 12'h222;

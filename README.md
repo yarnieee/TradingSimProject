@@ -21,17 +21,17 @@ C Tricia, D Matthew). Still to rename by its owner: `A_top` to `A_market_top`.
 
 ## Open in Vivado
 
-`main` is the team's tested copy. Work goes into a branch first (for example
-`branch-team-integration`, `branch-douglas-sound`) and is merged into `main` once its tests pass.
+This is `branch-team-integration`: the team's working copy, ahead of `main` (merged into `main`
+once it is checked on the board).
 
-1. Clone `main` to a short path with no spaces:
+1. Clone this branch to a short path with no spaces:
    ```
-   git clone https://github.com/yarnieee/TradingSimProject.git C:/EE2026/TradingSimProject
+   git clone -b branch-team-integration https://github.com/yarnieee/TradingSimProject.git C:/EE2026/TradingSimProject
    ```
    Already have a clone? In it:
    ```
    git fetch --prune
-   git checkout main
+   git checkout branch-team-integration
    git pull
    ```
 2. Open Vivado 2025.2 and type in the Tcl Console:
@@ -64,20 +64,6 @@ Each test prints `PASS` or `FAIL`.
 | sw[13] | up = no sound |
 | sw[14] | up = your pending orders on the left OLED: BTNU / BTND choose one, BTNC cancels it (the game buttons do nothing) |
 | sw[15] | view: down = you (the game), up = the bots (BTNL / BTNR choose which bot; the game buttons do nothing) |
-
-**VGA monitor** (plug a monitor into the Basys3 VGA port): shows everything at once in widescreen
-1280 x 720 (fills a 24" monitor), updated live: the four stocks with their 30-day change in $ and %, your net worth, cash, profit/loss, return and largest
-drawdown, the selected stock's 30-day chart with your stop-loss / take-profit levels, your holdings,
-every pending order, a leaderboard of you and the 5 bots in place order (net worth, return), the order you
-are making, what the buttons do on the current screen, and what the switches are set to.
-The progress bar along the top is green, turns yellow at 60 days left and red at 10.
-
-Screens: the right OLED shows the game, the left OLED your order ticket (and title artwork on the
-title screen; the monitor shows its own Bull vs Bear title screen with the five bots and a blinking
-PRESS BTNC TO START, `5_Matthew_Display/title_art_vga.mem`). While you make an order, the monitor's
-right panel shows TRADE CONTROLS (the order, the buttons, the switches, and whether it can be sent)
-instead of PENDING ORDERS. The 7-seg shows the quantity being set; LEDs flash on a fill (led 15) or a
-reject (led 14) and show pending orders (led 11-8).
 
 **Sound** (a Pmod AMP2 with a speaker in the top row of the JXADC port; a small speaker or
 piezo between JXADC pin 1 and GND also works; sw[13] up mutes):

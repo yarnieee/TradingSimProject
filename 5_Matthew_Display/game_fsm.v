@@ -89,34 +89,27 @@ module game_fsm (
             next_state = `UI_GAME_END;
         end else case (screen_state)
             `UI_TITLE: begin
+                // straight to the market, cursor on the first stock (the portfolio
+                // is on sw13 for the right OLED, and always on the monitor)
                 if (btnC) begin
-                    next_state = `UI_PORTFOLIO;
-                    next_portfolio_cursor = 0;
+                    next_state = `UI_STOCKS;
+                    next_stocks_cursor = 2;
+                    next_selected_stock = 0;
                 end
             end
 
             `UI_PORTFOLIO: begin
-                if (btnR) next_portfolio_cursor = 1;
-                if (btnL) next_portfolio_cursor = 0;
-
+                // not entered any more (the portfolio is on sw13); kept so the
+                // state still exists: BTNC goes to the market
                 if (btnC) begin
-                    if (portfolio_cursor == 0) begin
-                        // Portfolio is already the active state.
-                        next_state = `UI_PORTFOLIO;
-                    end else begin
-                        next_state = `UI_STOCKS;
-                        next_stocks_cursor = 1;
-                    end
+                    next_state = `UI_STOCKS;
+                    next_stocks_cursor = selected_stock + 3'd2;
                 end
             end
 
             `UI_STOCKS: begin
-                // 0=Portfolio, 1=Stocks, 2=AMD, 3=AVGO, 4=NVDA, 5=GME.
-                if (btnL && (stocks_cursor == 1))
-                    next_stocks_cursor = 0;
-                if (btnR && (stocks_cursor == 0))
-                    next_stocks_cursor = 1;
-
+                // 2=AMD, 3=MCD, 4=NVDA, 5=GME: U / D move between the four stocks
+                // only (no HOME / MARKET tabs any more; 0 and 1 are not used)
                 if (btnD) begin
                     case (stocks_cursor)
                         1: next_stocks_cursor = 2;
@@ -129,7 +122,6 @@ module game_fsm (
 
                 if (btnU) begin
                     case (stocks_cursor)
-                        2: next_stocks_cursor = 1;
                         3: next_stocks_cursor = 2;
                         4: next_stocks_cursor = 3;
                         5: next_stocks_cursor = 4;
@@ -143,11 +135,7 @@ module game_fsm (
                     next_selected_stock = next_stocks_cursor - 2;
 
                 if (btnC) begin
-                    if (stocks_cursor == 0) begin
-                        next_state = `UI_PORTFOLIO;
-                        next_portfolio_cursor = 0;
-                    end else if ((stocks_cursor >= 2) &&
-                                 (stocks_cursor <= 5)) begin
+                    if ((stocks_cursor >= 2) && (stocks_cursor <= 5)) begin
                         next_state = `UI_SPECIFIC;
                         next_specific_cursor = 0;
                         next_selected_stock = stocks_cursor - 2;
@@ -156,10 +144,8 @@ module game_fsm (
             end
 
             `UI_SPECIFIC: begin
-                // 0=Buy, 1=Sell, 2=Back, 3=Portfolio, 4=Stocks.
-                // Action buttons are on one row; U enters the top navigation.
-                if (btnU && (specific_cursor <= 2))
-                    next_specific_cursor = 3;
+                // 0=Buy, 1=Sell, 2=Back (to the market). The top navigation
+                // (3, 4) is not used any more: U does nothing here.
                 if (btnR) begin
                     if (specific_cursor == 0)
                         next_specific_cursor = 1;
@@ -193,11 +179,7 @@ module game_fsm (
                             next_state = `UI_STOCKS;
                             next_stocks_cursor = selected_stock + 3'd2;
                         end
-                        3: begin
-                            next_state = `UI_PORTFOLIO;
-                            next_portfolio_cursor = 0;
-                        end
-                        4: begin
+                        3, 4: begin
                             next_state = `UI_STOCKS;
                             next_stocks_cursor = selected_stock + 3'd2;
                         end
@@ -336,9 +318,9 @@ module game_fsm (
             end
 
             `UI_TRADE_RESULT: begin
-                if (btnC) begin
-                    next_state = `UI_PORTFOLIO;
-                    next_portfolio_cursor = 0;
+                if (btnC) begin                     // back to the market, on the same stock
+                    next_state = `UI_STOCKS;
+                    next_stocks_cursor = selected_stock + 3'd2;
                     next_quantity = 0;
                 end
             end

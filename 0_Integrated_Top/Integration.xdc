@@ -19,8 +19,10 @@ set_property -dict { PACKAGE_PIN W13   IOSTANDARD LVCMOS33 } [get_ports {order_s
 set_property -dict { PACKAGE_PIN R2    IOSTANDARD LVCMOS33 } [get_ports view_sw]
 ## Pending orders on the left OLED (cancel): sw[14] (top port orders_sw)
 set_property -dict { PACKAGE_PIN T1    IOSTANDARD LVCMOS33 } [get_ports orders_sw]
-## Mute: sw[13] (top port mute_sw)
-set_property -dict { PACKAGE_PIN U1    IOSTANDARD LVCMOS33 } [get_ports mute_sw]
+## Portfolio on the right OLED: sw[13] (top port home_sw)
+set_property -dict { PACKAGE_PIN U1    IOSTANDARD LVCMOS33 } [get_ports home_sw]
+## Mute: sw[12] (top port mute_sw)
+set_property -dict { PACKAGE_PIN W2    IOSTANDARD LVCMOS33 } [get_ports mute_sw]
 
 ## LEDs
 set_property -dict { PACKAGE_PIN U16   IOSTANDARD LVCMOS33 } [get_ports {led[0]}]

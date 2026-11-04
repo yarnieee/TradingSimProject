@@ -9,7 +9,7 @@
 // others white on dark grey. The three-button bar on row 6 always uses
 // cells 0-4, 6-10 and 12-15, matching menu_selection 0, 1, 2.
 //
-//   header (row 0):  HOME / MARKET tabs, or the screen title; days left at the right
+//   header (row 0):  MARKET (PORTFOLIO with sw13 up), or the screen title; days left at the right
 //   PORTFOLIO        NET, CASH, then one row per stock: shares and profit/loss
 //   STOCKS           one row per stock: price and an up/down arrow (30-day trend)
 //   SPECIFIC         price, 30-day change, shares held; chart on rows 3-5
@@ -198,10 +198,6 @@ module text_layer (
     wire [15:0] side_col = sell ? RED : GREEN;
     wire        tabs     = (screen_state == `UI_PORTFOLIO) || (screen_state == `UI_STOCKS) ||
                            (screen_state == `UI_SPECIFIC);
-    // which tab the cursor is on (3 = none): HOME 0, MARKET 1
-    wire [1:0]  tab_sel  = (screen_state == `UI_SPECIFIC) ?
-                               ((menu_selection == 4'd3) ? 2'd0 : (menu_selection == 4'd4) ? 2'd1 : 2'd3) :
-                               ((menu_selection == 4'd0) ? 2'd0 : (menu_selection == 4'd1) ? 2'd1 : 2'd3);
     wire [3:0]  stock_row_sel = menu_selection - 4'd1;   // STOCKS: menu 2..5 = rows 1..4
 
     // which field this cell shows, and how it is laid out
@@ -302,16 +298,10 @@ module text_layer (
                 if (over && col >= 4'd11) begin ch = str_ch("FINAL           ", col - 4'd11); fg = YELLOW; end
                 else if (col <= 4'd10)    ch = bot_name(bot_sel) >> (8 * (10 - col));
             end else if (tabs) begin
-                // HOME (cells 0-3) and MARKET (5-10): the cursor's tab in yellow
-                if (col <= 4'd3 || (col >= 4'd5 && col <= 4'd10)) begin
-                    ch = (col <= 4'd3) ? str_ch("HOME            ", col) : str_ch("MARKET          ", col - 4'd5);
-                    if ((col <= 4'd3) ? (tab_sel == 2'd0) : (tab_sel == 2'd1)) begin
-                        bg = YELLOW; fg = BLACK;
-                    end else if ((col <= 4'd3) == (screen_state == `UI_PORTFOLIO)) begin
-                        fg = WHITE;             // the tab you are on
-                    end else begin
-                        fg = GREY;
-                    end
+                // one title, no tabs: PORTFOLIO (sw13 up) or MARKET (cells 0-10)
+                if (col <= 4'd10) begin
+                    ch = str_ch((screen_state == `UI_PORTFOLIO) ? "PORTFOLIO       " : "MARKET          ", col);
+                    fg = WHITE;
                 end
             end else begin
                 case (screen_state)

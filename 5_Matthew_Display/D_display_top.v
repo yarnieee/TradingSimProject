@@ -46,6 +46,7 @@ module D_display_top #(
     // bot (sw1 shows it)
     input  wire        bot_view,
     input  wire        orders_view,       // sw14: the buttons work the left OLED's ORDERS list instead
+    input  wire        home_view,         // sw13: the right OLED shows the portfolio (HOME)
     output wire [4:0]  btn_pulse,         // debounced presses, bits per BTN_* (for that list)
     input  wire        bot_active,        // 0 until the bot's strategy exists: "NO BOT YET"
     output reg  [2:0]  bot_sel,           // the bot the bot view shows (its numbers come in on bot_*)
@@ -413,10 +414,15 @@ module D_display_top #(
     );
 
 
+    // sw13 up: the right OLED draws the portfolio screen while the game goes on
+    // (not on the title or game-over screens, which keep their own pictures)
+    wire [3:0] oled_state_R = (home_view && screen_state != `UI_TITLE && screen_state != `UI_GAME_END)
+                              ? `UI_PORTFOLIO : screen_state;
+
     OLED_Renderer oled_renderer_R (
         .clk(clk),
         .pixel_index(pixel_index_R),
-        .screen_state(screen_state),
+        .screen_state(oled_state_R),
         .selected_stock(selected_stock),
         .menu_selection(menu_selection),
         .quantity_cursor(quantity_cursor),

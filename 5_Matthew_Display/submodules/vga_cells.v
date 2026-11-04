@@ -722,7 +722,7 @@ module vga_cells (
                     if (cr <= 7'd16) ch = s16(" PROFIT/LOSS    ", cr);
                     else begin ch = num_char; fg = num_zero ? K_WHITE : num_neg ? K_RED : K_GREEN; end
                 end
-                5'd23: begin                                  //  BTNL/BTNR   BUY    SELL   BACK
+                5'd24: begin                                  //  BTNL/BTNR   BUY    SELL   BACK
                     if (cr <= 7'd11) begin ch = s16(" BTNL/BTNR      ", cr); fg = K_WHITE; end
                     else if (cr >= 7'd12 && cr <= 7'd16) begin
                         ch = s16(" BUY            ", cr - 7'd12);
@@ -735,17 +735,6 @@ module vga_cells (
                     else if (cr >= 7'd25 && cr <= 7'd30) begin
                         ch = s16(" BACK           ", cr - 7'd25);
                         fg = (menu_selection == 4'd2) ? K_BLACK : K_WHITE; bg = (menu_selection == 4'd2) ? K_YELLOW : K_DGREY;
-                    end
-                end
-                5'd24: begin                                  //  BTNU        HOME   MARKET
-                    if (cr <= 7'd11) begin ch = s16(" BTNU           ", cr); fg = K_WHITE; end
-                    else if (cr >= 7'd12 && cr <= 7'd17) begin
-                        ch = s16(" HOME           ", cr - 7'd12);
-                        fg = (menu_selection == 4'd3) ? K_BLACK : K_WHITE; bg = (menu_selection == 4'd3) ? K_YELLOW : K_DGREY;
-                    end
-                    else if (cr >= 7'd19 && cr <= 7'd26) begin
-                        ch = s16(" MARKET         ", cr - 7'd19);
-                        fg = (menu_selection == 4'd4) ? K_BLACK : K_WHITE; bg = (menu_selection == 4'd4) ? K_YELLOW : K_DGREY;
                     end
                 end
                 5'd25: begin ch = s64(" BTNC        SELECT                                             ", cr); if (cr <= 7'd11) fg = K_WHITE; end

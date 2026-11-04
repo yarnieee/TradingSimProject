@@ -27,9 +27,10 @@
 //                 choose the bot, the game buttons are ignored
 //   sw[14] (orders_sw) up: the buttons work the left OLED's ORDERS list: BTNU / BTND
 //                 choose a pending order, BTNC cancels it (the game buttons are ignored)
-//   sw[13] (mute_sw) up: no sound
-//   buttons       Matthew's game FSM (title > portfolio > stocks > stock > buy/sell
-//                 > quantity > review > result)
+//   sw[13] (home_sw) up: the right OLED shows your portfolio (HOME); the game goes on
+//   sw[12] (mute_sw) up: no sound
+//   buttons       Matthew's game FSM (title > market > stock > buy/sell
+//                 > quantity > review > result > market)
 //   JB (right)    Matthew's game screens
 //   JA (left)     Douglas's order ticket (title artwork on the title screen)
 //   VGA           the whole game on a monitor (1280 x 720): prices, portfolio, chart, orders,
@@ -51,7 +52,8 @@ module Integration_Top #(
     input  wire [5:0]  order_sw,        // sw[7:2]: order type, SL/TP, trigger distance
     input  wire        view_sw,         // sw[15]: show the bot
     input  wire        orders_sw,       // sw[14]: the buttons work the left OLED's ORDERS list (cancel)
-    input  wire        mute_sw,         // sw[13]: no sound
+    input  wire        home_sw,         // sw[13]: the right OLED shows your portfolio
+    input  wire        mute_sw,         // sw[12]: no sound
     input  wire        btnU,
     input  wire        btnD,
     input  wire        btnL,
@@ -174,7 +176,7 @@ module Integration_Top #(
     wire signed [31:0] view_upnl3 = show_ma ? bot_upnl3 : squad_upnl[127:96];
     // switches, synchronised to clk
     reg  [5:0]  osw_s0, osw;
-    reg         view_s0, bot_view, ords_s0, ords_sw, mute_s0, mute;
+    reg         view_s0, bot_view, ords_s0, ords_sw, mute_s0, mute, home_s0, home_s;
     always @(posedge clk) begin
         osw_s0   <= order_sw;
         osw      <= osw_s0;
@@ -184,6 +186,8 @@ module Integration_Top #(
         ords_sw  <= ords_s0;
         mute_s0  <= mute_sw;
         mute     <= mute_s0;
+        home_s0  <= home_sw;
+        home_s   <= home_s0;
     end
     // sw14 up (not in the bot view, not on the title): the buttons go to the
     // left OLED's ORDERS list, U / D choose a pending order, C cancels it
@@ -199,7 +203,7 @@ module Integration_Top #(
     ) matthew_display (
         .clk(clk), .rst(sys_reset),
         .btnU(btnU), .btnD(btnD), .btnL(btnL), .btnR(btnR), .btnC(btnC),
-        .orders_view(orders_view), .btn_pulse(d_btn_pulse),
+        .orders_view(orders_view), .home_view(home_s), .btn_pulse(d_btn_pulse),
         .final_day_reached(final_day_reached),
         .time_remaining(time_remaining),
         .order_fill(fill), .order_reject(reject), .order_reject_code(reject_code),

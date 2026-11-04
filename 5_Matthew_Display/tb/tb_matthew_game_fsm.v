@@ -73,54 +73,46 @@ module tb_matthew_game_fsm;
         press(BU); press(BL);
         check(screen_state == TITLE, "title ignores U and L");
         press(BC);
-        check(screen_state == PORTFOLIO, "title --C--> portfolio");
-
-        press(BC);
-        check(screen_state == PORTFOLIO, "portfolio: C on the default item stays");
-        press(BR); press(BC);
-        check(screen_state == STOCKS, "portfolio --R, C--> stocks");
-
-        press(BL); press(BC);
-        check(screen_state == PORTFOLIO, "stocks: L selects back, C returns to portfolio");
-        press(BR); press(BC);
-        press(BD);
-        check(screen_state == STOCKS && selected_stock == 0, "stocks: the cursor on AMD selects it (the charts follow)");
-        press(BD); press(BD);
-        check(selected_stock == 2, "stocks: D, D moves the selection to NVDA");
-        press(BD); press(BD);
-        check(selected_stock == 3, "stocks: GME, and D past the last ticker keeps it");
-        press(BU); press(BU); press(BU); press(BU);
-        check(selected_stock == 0 && menu_selection == 4'd1, "stocks: U back to the header keeps the last ticker (AMD)");
-        press(BD); press(BC);
-        check(screen_state == SPECIFIC && selected_stock == 0,
-              "stocks --D, C--> AMD screen with stock code 0");
-
-        press(BU); press(BR); press(BC);
+        check(screen_state == STOCKS && menu_selection == 4'd2 && selected_stock == 0,
+              "title --C--> market, cursor on AMD");
+        press(BL); press(BR); press(BU);
         check(screen_state == STOCKS && menu_selection == 4'd2,
-              "specific: returning to stocks preserves the AMD cursor");
+              "market: L, R and U at the top do nothing (no HOME / MARKET tabs)");
+        press(BD); press(BD);
+        check(selected_stock == 2, "market: D, D moves the selection to NVDA (the charts follow)");
+        press(BD); press(BD);
+        check(selected_stock == 3 && menu_selection == 4'd5, "market: GME, and D past the last ticker keeps it");
+        presses(BU, 4);
+        check(selected_stock == 0 && menu_selection == 4'd2, "market: U back to AMD and stops there");
+        press(BC);
+        check(screen_state == SPECIFIC && selected_stock == 0, "market --C--> AMD screen with stock code 0");
+        press(BU);
+        check(screen_state == SPECIFIC && menu_selection == 4'd0, "specific: U does nothing (no top navigation)");
+
+        press(BR); press(BR); press(BC);
+        check(screen_state == STOCKS && menu_selection == 4'd2,
+              "specific: BACK returns to the market with the AMD cursor");
         press(BD); press(BC);
         check(screen_state == SPECIFIC && selected_stock == 1,
-              "stocks --D, C--> AVGO screen with stock code 1");
-
-        press(BU); press(BR); press(BC);
+              "market --D, C--> MCD screen with stock code 1");
+        press(BR); press(BR); press(BC);
         check(screen_state == STOCKS && menu_selection == 4'd3,
-              "AVGO returns to the stock list with its cursor preserved");
+              "MCD returns to the market with its cursor preserved");
         press(BD); press(BC);
         check(screen_state == SPECIFIC && selected_stock == 2,
-              "stocks --D, C--> NVDA screen with stock code 2");
-
-        press(BU); press(BR); press(BC);
+              "market --D, C--> NVDA screen with stock code 2");
+        press(BR); press(BR); press(BC);
         check(screen_state == STOCKS && menu_selection == 4'd4,
-              "NVDA returns to the stock list with its cursor preserved");
+              "NVDA returns to the market with its cursor preserved");
         press(BD); press(BC);
         check(screen_state == SPECIFIC && selected_stock == 3,
-              "stocks --D, C--> GME screen with stock code 3");
-
-        press(BU); press(BC);
-        check(screen_state == PORTFOLIO, "specific: U selects back-to-portfolio");
+              "market --D, C--> GME screen with stock code 3");
+        press(BR); press(BR); press(BC);
+        check(screen_state == STOCKS && menu_selection == 4'd5,
+              "GME returns to the market with its cursor preserved");
 
         // buy path with the quantity editor
-        press(BR); press(BC); press(BD); press(BC);    // stocks, stock 0
+        presses(BU, 3); press(BC);                    // market: back up to AMD, open it
         press(BC);
         check(screen_state == BUY, "specific --C--> buy screen (default item)");
         press(BR); press(BC);
@@ -164,10 +156,11 @@ module tb_matthew_game_fsm;
         @(negedge clk);
         check(screen_state == TRADE_RESULT, "order fill --> trade result");
         press(BC);
-        check(screen_state == PORTFOLIO && quantity == 0, "trade result --C--> portfolio and reset quantity");
+        check(screen_state == STOCKS && quantity == 0 && menu_selection == 4'd2,
+              "trade result --C--> market (same stock), quantity reset");
 
         // sell path
-        press(BR); press(BC); press(BD); press(BC);    // stocks, stock 0
+        press(BC);                                    // market on AMD --C--> the AMD screen
         press(BR); press(BC);
         check(screen_state == SELL && trade_side == 1'b1,
               "specific --R, C--> sell screen with sell side latched");
@@ -188,7 +181,7 @@ module tb_matthew_game_fsm;
         // The final-day pulse is accepted from an active screen and the
         // game-end screen remains terminal even if a button is pressed.
         press(BC);
-        check(screen_state == PORTFOLIO, "restart reaches portfolio before final-day test");
+        check(screen_state == STOCKS, "restart reaches the market before final-day test");
         final_day_reached = 1;
         @(negedge clk);
         final_day_reached = 0;

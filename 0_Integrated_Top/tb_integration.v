@@ -16,13 +16,14 @@ module tb_integration;
     reg  [5:0] order_sw = 6'd0;     // sw[7:2]: type, SL/TP, trigger distance
     reg  view_sw = 0;               // sw[15]: bot view
     reg  orders_sw = 0;             // sw[14]: the ORDERS list on the left OLED
+    reg  home_sw = 0;               // sw[13]: the portfolio on the right OLED
     wire [7:0]  JA, JB, seg;
     wire [15:0] led;
     wire [3:0]  an;
 
     localparam DAY = 4000;
     Integration_Top #(.DAY_MAX_COUNT(DAY), .DEBOUNCE_CTR(32'd50), .SOUND_SAMPLE_SHIFT(4)) dut (
-        .clk(clk), .rst(rst), .order_sw(order_sw), .view_sw(view_sw), .orders_sw(orders_sw), .mute_sw(1'b0),
+        .clk(clk), .rst(rst), .order_sw(order_sw), .view_sw(view_sw), .orders_sw(orders_sw), .home_sw(home_sw), .mute_sw(1'b0),
         .btnU(btnU), .btnD(btnD), .btnL(btnL), .btnR(btnR), .btnC(btnC),
         .JA(JA), .JB(JB), .led(led), .an(an), .seg(seg)
     );
@@ -133,15 +134,15 @@ module tb_integration;
     endtask
     localparam U = 0, D = 1, L = 2, R = 3, C = 4;
 
-    // place an order through Matthew's screens, starting from PORTFOLIO
+    // place an order through Matthew's screens, starting from the market list
     task trade;
         input integer stock;   // 0=AMD, 1=MCD
         input         sell;
         input integer qty;     // 0..9 (ones digit only, enough here)
         integer k;
         begin
-            press(R); press(C);                         // portfolio -> stocks (Stocks selected)
-            for (k = 0; k <= stock; k = k + 1) press(D); // Stocks -> selected stock
+            press(U); press(U); press(U);               // market: the cursor to AMD (stops there)
+            for (k = 0; k < stock; k = k + 1) press(D);  // AMD -> the stock to trade
             press(C);                                   // -> specific
             if (sell) press(R);                         // sell instead of buy
             press(C);                                   // -> buy / sell screen
@@ -169,8 +170,19 @@ module tb_integration;
         check(n_tick == 0 && dut.trading_day_count == 0 && !dut.amd_ready,
               "the market does not start on the title screen");
         press(C);
-        check(dut.screen_state == S_PORTFOLIO, "Matthew: title -> portfolio");
+        check(dut.screen_state == S_STOCKS && dut.matthew_display.menu_selection == 4'd2 &&
+              dut.matthew_display.selected_stock == 3'd0, "Matthew: title -> market, on AMD");
         check(dut.time_remaining == 120, "the game starts with all its days");
+        press(L); press(R); press(U);
+        check(dut.screen_state == S_STOCKS && dut.matthew_display.menu_selection == 4'd2,
+              "market: no HOME / MARKET tabs (L, R and U at the top do nothing)");
+        home_sw = 1; repeat (5) @(posedge clk);
+        check(dut.matthew_display.oled_state_R == S_PORTFOLIO && dut.screen_state == S_STOCKS,
+              "sw13 up: the right OLED shows the portfolio, the game stays on the market");
+        press(D);
+        check(dut.matthew_display.menu_selection == 4'd3, "sw13 up: the buttons still work the game");
+        press(U); home_sw = 0; repeat (5) @(posedge clk);
+        check(dut.matthew_display.oled_state_R == S_STOCKS, "sw13 down: the right OLED shows the market again");
         wait (dut.amd_ready && dut.mcd_ready && dut.stock2_ready && dut.stock3_ready);
         seed1 = dut.yian_market.startup_random_seed;
         repeat (DAY + 100) @(posedge clk);              // one day ticks over
@@ -205,7 +217,7 @@ module tb_integration;
         check(last_px == dut.douglas_orders.u_exec.u_spread.ask || last_px == ((p0 > 16'd65530) ? 16'hFFFF : p0 + 16'd5),
               "Douglas: filled at the ask (price + 5 c, saturating)");
         check(dut.screen_state == S_TRADE_RESULT, "Matthew: on the trade-result screen");
-        press(C);                                       // trade result -> portfolio
+        press(C);                                       // trade result -> market
 
         // ---------------- sell 2 MCD with none held: rejected by B, never reaches C
         f0 = n_fill; r0 = n_rej; o0 = n_ord_req;
@@ -233,7 +245,7 @@ module tb_integration;
               "Tricia: ledger invariant holds");
 
         // ---------------- limit buy 2 AMD 5% below the market, SL/TP 5%, set on the switches
-        press(C);                                       // trade result -> portfolio
+        press(C);                                       // trade result -> market
         order_sw = {2'b10, 2'b10, 2'b01};               // sw[7:6] 5%, sw[5:4] SL/TP 5%, sw[3:2] LMT
         o0 = n_ord_req; f0 = n_fill;
         trade(0, 0, 2);
@@ -260,7 +272,7 @@ module tb_integration;
               "sw14 up: BTNU / BTND move the cursor, BTNL / BTNR do nothing");
         press(C);
         check(dut.pending_count == 4'd0, "sw14 up: BTNC cancels the chosen pending order");
-        check(dut.screen_state == S_PORTFOLIO && dut.matthew_display.menu_selection == m0,
+        check(dut.screen_state == S_STOCKS && dut.matthew_display.menu_selection == m0,
               "sw14 up: the game ignores the buttons");
         orders_sw = 0;
         repeat (5) @(posedge clk);
@@ -280,7 +292,7 @@ module tb_integration;
         check(dut.matthew_display.pixel_data_L == dut.matthew_display.bot_log_pixel,
               "sw15 up: left OLED shows the bot's trades");
         press(R); press(C);
-        check(dut.screen_state == S_PORTFOLIO, "sw15 up: buttons are ignored");
+        check(dut.screen_state == S_STOCKS, "sw15 up: buttons are ignored");
         check(dut.bot_sel == 3'd1, "sw15 up: BTNR chooses the next bot (OVERNIGHT)");
         press(L); press(L);
         check(dut.bot_sel == 3'd4, "sw15 up: BTNL goes back, round to the last bot (SL / TP)");
@@ -292,8 +304,8 @@ module tb_integration;
         repeat (5) @(posedge clk);
         check(dut.matthew_display.pixel_data_L == dut.ticket_pixel,
               "sw15 down: left OLED back to the order ticket");
-        press(R); press(C);
-        check(dut.screen_state == S_STOCKS, "sw15 down: buttons work again");
+        press(C);
+        check(dut.screen_state == S_SPECIFIC, "sw15 down: buttons work again");
 
         // ---------------- the four bot_squad bots
         check(n_squad > 0 && n_close > 0, "bot_squad's bots trade at the opens and closes");

@@ -722,3 +722,9 @@ the stock page's buttons on row 23, which Tricia's b67b411 moved to row 24).
 font with 8 x 8 pixel dots, centred in the right panel (rows 18-20), from a second font_renderer;
 `vga_cells.v` leaves those rows empty. A one-frame simulation shows the word's dots on line 460 at
 x 814..1093. `tb_vga_controls` updated.
+
+## 2026-11-04: NEW on both notification rows
+
+**Asked for:** the monitor's bottom banner showed NEW on the top row only; put it on both rows.
+
+**Done by the AI:** `vga_cells.v` shows NEW on rows 28 and 29; `tb_vga_botview` updated.

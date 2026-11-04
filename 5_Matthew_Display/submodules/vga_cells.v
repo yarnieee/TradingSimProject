@@ -921,7 +921,7 @@ module vga_cells (
                 if (row == 5'd28 && col >= 7'd5 && col <= 7'd68)
                     ch = s64("NO BOT TRADES YET  (THEY TRADE AT THE OPEN AND THE CLOSE)       ", col - 7'd5);
             end
-            else if (col >= 7'd1 && col <= 7'd3) begin if (row == 5'd28) begin ch = s16("NEW             ", col - 7'd1); fg = K_YELLOW; end end
+            else if (col >= 7'd1 && col <= 7'd3) begin ch = s16("NEW             ", col - 7'd1); fg = K_YELLOW; end
             else if (col >= 7'd5 && col <= 7'd7)   ch = s16("DAY             ", col - 7'd5);
             else if (col >= 7'd9 && col <= 7'd11)  begin ch = num_char; fg = K_WHITE; end
             else if (col >= 7'd14 && col <= 7'd24) begin ch = bot_name(f_bot + 3'd1) >> (8 * (7'd24 - col)); fg = K_WHITE; end

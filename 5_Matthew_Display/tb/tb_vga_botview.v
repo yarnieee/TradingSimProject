@@ -72,7 +72,7 @@ module tb_vga_botview;
               "row 28: the newest trade");
         at(5'd28, 7'd26); check(fg == K_GREEN && bg == K_NAVY, "row 28: BUYS green, the newest on a highlighted bar");
         text(5'd29, 1, 66);
-        check(txt[8*66:1] == "    DAY  44  AVG DOWN    SELLS GME  AT  $12.34  TOOK ITS 5% PROFIT",
+        check(txt[8*66:1] == "NEW DAY  44  AVG DOWN    SELLS GME  AT  $12.34  TOOK ITS 5% PROFIT",
               "row 29: the one before");
         at(5'd29, 7'd26); check(fg == K_RED && bg == K_ROW, "row 29: SELLS red, a darker bar");
         text(5'd27, 1, 69); check(txt == {69{8'h20}}, "row 27: an empty gap above them");

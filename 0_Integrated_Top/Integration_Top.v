@@ -194,6 +194,8 @@ module Integration_Top #(
     wire        orders_view = ords_sw && !bot_view && (screen_state != `UI_TITLE);
     wire [4:0]  d_btn_pulse;
     wire [2:0]  reject_code;
+    wire        order_ok;                   // Matthew's check of the order on screen (for the sound)
+    wire [2:0]  order_code;
     wire [15:0] ticket_pixel;
     wire [6:0]  xL;
     wire [5:0]  yL;
@@ -241,7 +243,8 @@ module Integration_Top #(
         .book_type(book_type), .book_qty(book_qty), .book_trig(book_trig), .book_leg(book_leg), .orders_sel(orders_sel),
         .game_state(game_state),
         .vga_r(vgaRed), .vga_g(vgaGreen), .vga_b(vgaBlue), .vga_hs(Hsync), .vga_vs(Vsync),
-        .JA(JA), .JB(JB), .an(an), .seg(seg)
+        .JA(JA), .JB(JB), .an(an), .seg(seg),
+        .order_ok(order_ok), .order_code(order_code)
     );
 
     // ================================================================ order settings from the switches
@@ -509,6 +512,7 @@ module Integration_Top #(
     B_sound_top #(.SAMPLE_SHIFT(SOUND_SAMPLE_SHIFT)) douglas_sound (
         .clk(clk), .rst(sys_reset), .mute(mute),
         .btn_pulse(d_btn_pulse), .screen_state(screen_state),
+        .order_ok(order_ok), .order_code(order_code), .qty_zero(quantity == 14'd0),
         .ord_req(ord_req), .fill(fill),
         .aud_pwm(aud_pwm), .aud_gain(aud_gain), .aud_sd_n(aud_sd_n),
         .now_playing(sound_now)

@@ -36,6 +36,7 @@ module sound_synth #(
     //   5      WOOSH   noise swell, 335 ms
     //   6      BELL    1568 Hz + 4328 Hz (x 2.76, a bell's overtone), rings 1.2 s
     //   7-10   GAME END  C5, E5, G5, then C6 + E6 held
+    //   11     ERROR   110 Hz square + 117 Hz (a low buzzer, rough beat), one held "EHHH", 300 ms
     localparam integer SEGW = 16 + 16 + 3 + 8 + 4 + 8 + 4 + 16;
     function [SEGW-1:0] seg;
         input [3:0] n;
@@ -53,6 +54,7 @@ module sound_synth #(
                 4'd8:  seg = {16'd885,  16'd1770, 3'b100, 8'd180, 4'd13, 8'd80,  4'd12, 16'd5859};
                 4'd9:  seg = {16'd1052, 16'd2104, 3'b100, 8'd180, 4'd13, 8'd80,  4'd12, 16'd5859};
                 4'd10: seg = {16'd1405, 16'd1770, 3'b101, 8'd200, 4'd15, 8'd120, 4'd15, 16'd39062};
+                4'd11: seg = {16'd148,  16'd157,  3'b101, 8'd230, 4'd15, 8'd120, 4'd15, 16'd14648};
                 default: seg = {16'd0, 16'd0, 3'b001, 8'd0, 4'd0, 8'd0, 4'd0, 16'd1};
             endcase
         end

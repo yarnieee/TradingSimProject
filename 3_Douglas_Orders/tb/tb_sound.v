@@ -17,6 +17,7 @@ module tb_sound;
     wire [2:0] now;
     B_sound_top #(.SAMPLE_SHIFT(4)) dut (
         .clk(clk), .rst(rst), .mute(mute), .btn_pulse(btn), .screen_state(screen),
+        .order_ok(1'b1), .order_code(3'd0), .qty_zero(1'b0),     // no error buzz in this test
         .ord_req(ord_req), .fill(fill), .aud_pwm(pwm), .aud_gain(gain), .aud_sd_n(sd_n),
         .now_playing(now)
     );

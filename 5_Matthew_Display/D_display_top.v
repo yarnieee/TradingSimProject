@@ -134,7 +134,10 @@ module D_display_top #(
     output wire [7:0]  JA,
     output wire [7:0]  JB,
     output wire [3:0]  an,
-    output wire [7:0]  seg
+    output wire [7:0]  seg,
+    // the order check below, for the sound (an error buzz on a bad quantity)
+    output wire        order_ok,
+    output wire [2:0]  order_code
 );
     // ================================================================ buttons
     wire btnU_db, btnD_db, btnL_db, btnR_db, btnC_db;
@@ -176,6 +179,8 @@ module D_display_top #(
     wire       trade_side;
     reg        order_valid;
     reg  [2:0] validation_code;
+    assign order_ok   = order_valid;
+    assign order_code = validation_code;
     reg        trade_result_placed;     // the result was a LMT/STP order placed in the book
 
     // game_fsm sees only the order just sent: its fill or reject, or it being placed

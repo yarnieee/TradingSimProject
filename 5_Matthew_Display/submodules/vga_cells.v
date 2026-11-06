@@ -335,6 +335,8 @@ module vga_cells (
     wire ctl_menu = (screen_state == `UI_BUY_STOCK) || (screen_state == `UI_SELL_STOCK);
     // a limit buy / stop sell waits below the price, a limit sell / stop buy above it
     wire below = ((order_type == `OT_LMT) && !trade_side) || ((order_type == `OT_STP) && trade_side);
+    // a buy with SL/TP on (sells never have it): the ORDER line says so
+    wire sltp_on = !trade_side && (order_brk != `BRK_OFF);
     wire left  = (col >= 7'd1)  && (col <= 7'd34);
     wire right = (col >= 7'd36) && (col <= 7'd69);
     wire [6:0] cl = col - 7'd1;                           // column inside the left panel, 0..33
@@ -794,10 +796,18 @@ module vga_cells (
                     else begin ch = num_char; fg = K_WHITE; end
                 end
                 5'd19: begin                                  //  ORDER          LIMIT  5%  BELOW
+                    // with SL/TP on:                              ORDER         MARKET + SL/TP
+                    //                                             ORDER      LMT+SL/TP 5%  BLW
                     fg = K_WHITE;
                     if (cr <= 7'd16) begin ch = s16(" ORDER          ", cr); fg = K_GREY; end
                     else if (order_type == `OT_MKT) begin
-                        if (cr >= 7'd28) ch = type_word(order_type, cr - 7'd28);
+                        if (sltp_on) begin if (cr >= 7'd20) ch = s16("MARKET + SL/TP  ", cr - 7'd20); end
+                        else if (cr >= 7'd28) ch = type_word(order_type, cr - 7'd28);
+                    end
+                    else if (sltp_on) begin
+                        if (cr <= 7'd25)                     ch = s16((order_type == `OT_LMT) ? "LMT+SL/TP       " : "STP+SL/TP       ", cr - 7'd17);
+                        else if (cr >= 7'd27 && cr <= 7'd29) ch = pct_word(order_dist, 1'b1, cr - 7'd27);
+                        else if (cr >= 7'd31)                ch = s16(below ? "BLW             " : "ABV             ", cr - 7'd31);
                     end
                     else if (cr >= 7'd18 && cr <= 7'd23) ch = type_word(order_type, cr - 7'd18);
                     else if (cr >= 7'd25 && cr <= 7'd27) ch = pct_word(order_dist, 1'b1, cr - 7'd25);
